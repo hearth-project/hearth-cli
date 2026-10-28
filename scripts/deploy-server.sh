@@ -15,6 +15,7 @@
 #   --version vX.Y.Z     release to install (default: latest)             [HEARTH_VERSION]
 #   --tls-cert F --tls-key F   your own certificate instead of a self-signed one
 #   --source             build from source (needs Go 1.26+) instead of downloading a release
+# Behind a proxy, export https_proxy first (curl uses it).
 set -eu
 
 REPO=hearth-project/hearth-cli
@@ -54,14 +55,17 @@ fetch_release() {
   if [ "$VERSION" = latest ]; then base="https://github.com/$REPO/releases/latest/download"
   else base="https://github.com/$REPO/releases/download/$VERSION"; fi
   tmp=$(mktemp -d)
-  curl -fsSL -o "$tmp/SHA256SUMS" "$base/SHA256SUMS" || { rm -r "$tmp"; return 1; }
+  curl -fsSL --retry 2 -o "$tmp/SHA256SUMS" "$base/SHA256SUMS" || { rm -r "$tmp"; return 1; }
   for p in linux-amd64 linux-arm64 darwin-amd64 darwin-arm64; do
     say "downloading hearth-$p"
-    curl -fsSL -o "$tmp/hearth-$p" "$base/hearth-$p" || { rm -r "$tmp"; return 1; }
+    curl -fsSL --retry 2 -o "$tmp/hearth-$p" "$base/hearth-$p" || { rm -r "$tmp"; return 1; }
   done
   (cd "$tmp" && sha -c SHA256SUMS) >/dev/null || { echo "checksum mismatch" >&2; rm -r "$tmp"; exit 1; }
-  v=$(curl -fsSLI -o /dev/null -w '%{url_effective}' "$base/SHA256SUMS" | sed -n 's#.*/download/v\{0,1\}\([^/]*\)/SHA256SUMS#\1#p')
-  echo "${v:-$VERSION}" > "$tmp/VERSION"
+  v=$VERSION
+  if [ "$v" = latest ]; then  # .../releases/latest redirects to .../releases/tag/vX.Y.Z
+    v=$(curl -fsSLI -o /dev/null -w '%{url_effective}' "https://github.com/$REPO/releases/latest" | sed -n 's#.*/tag/##p')
+  fi
+  echo "${v#v}" > "$tmp/VERSION"
   cp "$tmp"/hearth-* "$tmp/SHA256SUMS" "$tmp/VERSION" "$DIST/"
   rm -r "$tmp"
 }
