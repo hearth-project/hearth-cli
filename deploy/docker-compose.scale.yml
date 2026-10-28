@@ -1,0 +1,47 @@
+# Shared backends: PostgreSQL for metadata, S3-compatible storage (MinIO
+# here; AWS S3, BOS, OSS, COS or Ceph work the same) for blobs. Any number
+# of hearth replicas can run behind a load balancer.
+#   docker compose -f deploy/docker-compose.scale.yml up -d --scale hearth=2
+# Change every password below before use.
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: hearth
+      POSTGRES_PASSWORD: change-me-pg
+      POSTGRES_DB: hearth
+    volumes: ["pg-data:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hearth"]
+      interval: 5s
+  minio:
+    image: minio/minio
+    restart: unless-stopped
+    command: server /data
+    environment:
+      MINIO_ROOT_USER: hearth
+      MINIO_ROOT_PASSWORD: change-me-minio
+    volumes: ["minio-data:/data"]
+  minio-init:
+    image: minio/mc
+    depends_on: [minio]
+    entrypoint: >
+      sh -c "until mc alias set m http://minio:9000 hearth change-me-minio; do sleep 1; done;
+             mc mb --ignore-existing m/hearth"
+  hearth:
+    build: ..
+    image: hearth:latest
+    restart: unless-stopped
+    depends_on:
+      postgres: {condition: service_healthy}
+      minio-init: {condition: service_completed_successfully}
+    ports: ["8787"]
+    environment:
+      HEARTH_DB: postgres://hearth:change-me-pg@postgres:5432/hearth?sslmode=disable
+      HEARTH_BLOBS: s3://hearth/hearth?endpoint=http://minio:9000&path_style=1
+      HEARTH_S3_ACCESS_KEY: hearth
+      HEARTH_S3_SECRET_KEY: change-me-minio
+volumes:
+  pg-data:
+  minio-data:

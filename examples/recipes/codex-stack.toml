@@ -1,0 +1,56 @@
+# Codex CLI + codex-mixin (a model gateway for Codex): the restore flow for every
+# user of this server. Hearth does not install anything itself: the agent
+# (hearth skill) goes through these steps with the user, following
+# `hearth docs env` (the guide and the server's notes, site files/client-env.md),
+# and marks each one done with `hearth recipe done <key>`.
+name = "codex-stack"
+description = "Codex CLI and codex-mixin (a model gateway for Codex); the agent installs them with the user"
+when = { os = "linux" }
+
+[[step]]
+type = "manual"
+name = "codex"
+text = "Codex CLI 0.163.0 (needs Node >= 22; many container images ship v18: install Node 24 into ~/.hearth/opt and a wrapper ~/.local/bin/codex). Guide: hearth docs env, sections 2-3 and your organisation's notes"
+done_when = 'PATH="$HOME/.local/bin:$PATH" codex --version | grep -q "codex-cli"'
+
+[[step]]
+type = "manual"
+name = "codex-mixin"
+text = "codex-mixin 0.7.3 into ~/.local/bin (GitHub release for `uname -m`, sha256 checked). Guide: hearth docs env, section 5"
+done_when = 'PATH="$HOME/.local/bin:$PATH" codex-mixin --version'
+
+# With a backup of another machine no QR-code login is needed.
+[[step]]
+type = "run"
+name = "codex-mixin-import"
+when_secret = "codex-mixin-config"
+unless = 'PATH="$HOME/.local/bin:$PATH" codex-mixin doctor --no-tui | grep -q "doctor: ok"'
+run = 'PATH="$HOME/.local/bin:$PATH"; t=$(mktemp) && hearth secret get codex-mixin-config > "$t" && codex-mixin config import --no-tui "$t" && codex-mixin config apply --no-tui && codex-mixin service restart --no-tui; r=$?; rm -f "$t"; exit $r'
+
+[[step]]
+type = "manual"
+name = "codex-mixin-setup"
+unless_secret = "codex-mixin-config"
+tty = true
+text = "First machine only: the user runs in their own terminal: codex-mixin setup --preset <provider> --key \"$(hearth secret get PROVIDER_KEY)\" --codex-mode custom (finish the provider login); then the model settings of your organisation's notes; then: hearth save --yes"
+done_when = 'PATH="$HOME/.local/bin:$PATH" codex-mixin doctor --no-tui | grep -q "doctor: ok"'
+
+# Keep the backup fresh while the machine is alive (contains the key; stored encrypted).
+[[step]]
+type = "capture"
+run = 'PATH="$HOME/.local/bin:$PATH"; t=$(mktemp) && codex-mixin config export --no-tui "$t" >/dev/null && cat "$t"; r=$?; rm -f "$t"; exit $r'
+secret = "codex-mixin-config"
+every = "6h"
+
+[[step]]
+type = "check"
+name = "gateway"
+run = 'PATH="$HOME/.local/bin:$PATH" codex-mixin service status --no-tui'
+expect = '(?m)^gateway: running'
+
+[[step]]
+type = "check"
+name = "codex reaches the gateway"
+run = 'cd /tmp && PATH="$HOME/.local/bin:$PATH" codex exec --skip-git-repo-check "reply with the word ok"'
+expect = "(?i)\\bok\\b"
+optional = true                        # calls the model

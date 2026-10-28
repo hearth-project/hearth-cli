@@ -1,0 +1,20 @@
+# Private ssh config used via `ssh -F` (GIT_SSH_COMMAND / sshx); the shared
+# /root/.ssh/config is ignored entirely, including any global Port.
+Host git.example.com
+  HostName git.example.com
+  Port 8235
+  User <you>
+  IdentityFile ~/.hearth/ssh/id_rsa.work
+  IdentitiesOnly yes
+
+Host github.com
+  HostName ssh.github.com
+  Port 443
+  User git
+  IdentityFile ~/.hearth/ssh/id_ed25519_github
+  IdentitiesOnly yes
+  # If 443 is blocked too:
+  # ProxyCommand nc -X connect -x proxy.example.com:8188 %h %p
+
+Host *
+  StrictHostKeyChecking accept-new

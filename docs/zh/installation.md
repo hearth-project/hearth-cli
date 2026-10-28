@@ -1,0 +1,129 @@
+# 安装指南
+
+[English](../en/installation.md) · [返回 README](../../README.zh-CN.md)
+
+Hearth 客户端是一个静态二进制，支持 Linux（x86_64、ARM64）和 macOS（Apple Silicon、Intel）。Windows 暂不支持，可在 WSL 中按 Linux 方式安装。
+
+下文的 `<server>` 是你们部署的 Hearth 服务器地址，例如 `https://hearth.example.com:8787`。服务器首页 `https://<server>/` 会列出该服务器的完整安装命令和下载链接。
+
+## 一键安装（推荐）
+
+```bash
+# 已有账号：安装、登录、恢复这台机器、启动后台同步
+curl -fsSL https://<server>/install.sh | sh
+
+# 新账号：开放注册的服务器
+curl -fsSL https://<server>/install.sh | sh -s -- --new
+
+# 新账号：邀请制服务器（邀请码由管理员 `hearth server invite` 生成）
+curl -fsSL https://<server>/install.sh | sh -s -- --invite inv-xxxx
+
+# 只安装，不登录（之后在 agent 里说「用 hearth」，或手动执行 hearth setup）
+curl -fsSL https://<server>/install.sh | sh -s -- --install-only
+```
+
+服务器注册方式可用 `curl -fsS https://<server>/v1/info` 查看：`open`（任何能访问服务器的人可注册）、`invite`（需要邀请码）、`closed`（不接受新账号）。
+
+### 自签证书的服务器
+
+内网服务器常用自签证书，安装命令带公钥 pin：
+
+```bash
+curl -fsSL -k https://<server>/install.sh | sh
+```
+
+`-k` 只用于第一次下载安装脚本：脚本里带着服务器证书，之后 hearth 与服务器的所有通信都只信任这一份证书（首次使用即信任）。需要第一次下载也校验时，服务器加 `--pin-install`，安装命令会带上 `--pinnedpubkey`。安装脚本会把服务器证书保存为 `~/.hearth/ca.pem`，之后 hearth 与服务器的通信都用它校验。
+
+### 安装脚本做了什么
+
+1. 用 `uname` 判断系统和架构，下载对应安装包并校验 SHA-256。
+2. 安装到 `~/.local/bin/hearth`（`HEARTH_BIN_DIR` 可改）。
+3. 把该目录写入 `~/.bashrc`、`~/.profile`（以及已存在的 `~/.zshrc`、`~/.bash_profile`），只写一次；PATH 中已有可写目录（如以 root 运行时的 `/usr/local/bin`）时，再建一个软链接，当前终端也能直接用。
+4. 从服务器获取组织默认配置（站点配方、登录 token 位置等，不需要登录），给本机已有的 Codex、Claude Code、Comate 安装 `hearth` skill。
+5. 除非指定 `--install-only`，运行 `hearth setup`：在终端读取主密码（不回显），登录或注册，恢复最近 10 条会话（`--sessions N` 改条数，0 为全部）、skills、凭证和安装步骤，启动后台同步。
+
+### 安装选项
+
+| 变量 / 参数 | 作用 |
+| --- | --- |
+| `--install-only` | 只安装，不运行 `setup` |
+| `--email`、`--new`、`--invite <码>` | 传给 `hearth setup` |
+| `HEARTH_BIN_DIR=<目录>` | 安装目录，默认 `~/.local/bin` |
+| `HEARTH_HOME=<目录>` | 客户端状态目录，默认 `~/.hearth`（或工作区下的 `.hearth`） |
+| `HEARTH_NO_SKILLS=1` | 不安装 `hearth` skill |
+| `HEARTH_NO_PATH=1` | 不修改 shell 启动文件、不建软链接 |
+
+变量写在 `sh` 前面，例如 `curl … | HEARTH_NO_SKILLS=1 sh -s -- --install-only`。
+
+## 多人共用一个 Linux 账号
+
+共享机器上（多人都用 `root` 等同一账号），每个人必须有自己的工作目录，Hearth 的状态和会话都放在里面：
+
+```bash
+mkdir -p /root/workspace/<你的名字> && cd /root/workspace/<你的名字>
+curl -fsSL https://<server>/install.sh | sh -s -- --install-only
+hearth init .
+hearth setup --server https://<server> --email you@example.com
+```
+
+之后在该目录下运行的 hearth 命令都使用 `<工作目录>/.hearth`，只上传你自己的会话。
+
+## 手动安装
+
+不能用管道执行脚本时：
+
+```bash
+mkdir -p ~/.local/bin ~/.hearth
+BIN=hearth-$(uname -s | tr A-Z a-z)-$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
+curl -fsSL -o ~/.local/bin/hearth https://<server>/download/$BIN && chmod +x ~/.local/bin/hearth
+curl -fsSL -o ~/.hearth/ca.pem https://<server>/ca.pem      # 仅自签证书的服务器（命令同样加 -k）
+curl -fsSL https://<server>/v1/dist                         # 对照 SHA-256：sha256sum ~/.local/bin/hearth
+export PATH="$HOME/.local/bin:$PATH"                        # 并写入 ~/.bashrc
+hearth onboard install-skill                                # 给本机 agent 装 skill
+hearth setup --server https://<server> --email you@example.com
+```
+
+| 平台 | 安装包 |
+| --- | --- |
+| Linux x86_64 | `https://<server>/download/hearth-linux-amd64` |
+| Linux ARM64 | `https://<server>/download/hearth-linux-arm64` |
+| macOS Apple Silicon | `https://<server>/download/hearth-darwin-arm64` |
+| macOS Intel | `https://<server>/download/hearth-darwin-amd64` |
+
+离线机器：在能访问服务器的机器上下载安装包和 `ca.pem`，拷贝过去后按上面的步骤放置。离线机器仍需能访问服务器才能同步。
+
+## 从源码构建
+
+```bash
+git clone https://github.com/hearth-project/hearth-cli hearth && cd hearth
+go build -o ~/.local/bin/hearth ./cmd/hearth          # Go 1.26+
+scripts/build-dist.sh ./dist                           # 4 个平台的安装包
+```
+
+## 升级
+
+```bash
+hearth self-update
+```
+
+一般不需要手动执行：后台同步进程每 30 分钟（启动后 5 分钟先查一次）检查服务器上的安装包，有新版本就下载、校验 SHA-256、原地替换，用新版本重启自己，并更新本机 agent 里的 `hearth` skill。服务器管理员发布新安装包后，在线的客户端半小时内会自动跟上。
+
+`hearth self-update` 立即执行同样的更新。其他控制：
+
+```bash
+hearth self-update --auto status   # 当前版本、是否自动更新
+hearth self-update --auto off      # 本机关闭自动更新（on 重新打开）
+```
+
+服务器端用 `hearth server --no-client-auto-update` 可以让所有客户端都不自动更新（手动 `self-update` 仍可用）。
+
+## 卸载
+
+```bash
+hearth daemon stop                      # 先停止后台同步（会先上传未同步的内容）
+rm ~/.local/bin/hearth                  # 以及 /usr/local/bin/hearth（若安装脚本建了软链接）
+rm -r ~/.codex/skills/hearth ~/.claude/skills/hearth ~/.comate/skills/hearth
+rm -r ~/.hearth                         # 本机状态和缓存的密钥；工作区模式下是 <工作目录>/.hearth
+```
+
+最后删除 `~/.bashrc`、`~/.profile` 等文件中带 `added by the hearth installer` 注释的一行。服务器上的数据不会因此删除；需要删除账号请联系管理员（`hearth server admin delete-user`）。

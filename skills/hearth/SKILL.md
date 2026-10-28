@@ -1,0 +1,208 @@
+---
+name: hearth
+description: Hearth - back up and restore coding-agent state across machines. Checks by itself whether Hearth is installed and logged in on this machine; if not, installs it and guides the user through login and restoring this machine; if it is, helps with daily use - find and restore conversations from other machines (Codex, Claude Code, Comate; into the open Codex Desktop window too), choose what is uploaded per agent (sessions, memory, workspace files, credentials), import Claude Code conversations into Codex, record this machine's setup, restore this machine's software environment step by step with the user (agent CLIs, gateways, from the user's recorded restore flow), check sync. Use when the user mentions Hearth, a new or changed machine ("换机器了", "恢复环境", "恢复这台机器的环境", "配置 hearth", "set up this machine"), old conversations ("恢复会话", "找回聊天记录", "上一台机器的对话", "拉一下远程会话"), what gets uploaded ("不要上传 claude 的会话", "备份 ssh"), or importing Claude Code sessions into Codex.
+---
+
+# Hearth
+
+Hearth keeps this user's agent conversations, memory, skills, credentials and setup steps end-to-end encrypted on a server their team hosts, and restores them on any machine. Run the commands yourself and talk to the user in their language. Ask everything you need in one message, with your recommended answers filled in.
+
+## Rules
+
+- Never ask for, read, type or store the master password or the recovery key. Commands that need the password run in the user's own terminal. Do not set `HEARTH_PASSWORD` yourself.
+- Never print secret contents (`auth.json`, SSH keys, tokens); refer to them by name.
+- Show commands from the user's synced recipes before running them and get a yes; installs and logins follow **D. Restore this machine's environment**.
+- Only restore or change what the user asked for; ask before bulk actions (`--all`, turning categories off).
+
+## 0. Check the state first (always)
+
+```bash
+command -v hearth && hearth onboard status --json
+```
+
+- `hearth` not found → **A. Install**.
+- `logged_in` is false → **B. Log in and restore this machine**.
+- logged in → **C. Daily use**. If `next` lists open items (daemon not running, environment steps to do, things to learn), mention them in one line and offer to fix them; `recipes` in `next` → **D**.
+
+Re-run `hearth onboard status --json` after each step; it is cheap and is the source of truth.
+
+## A. Install
+
+Ask the user for the install command their admin gave them (it looks like `curl -fsSL [-k] https://<server>/install.sh | sh -s -- …`), or only the server URL if the server has a normal HTTPS certificate. Install without logging in so you keep control:
+
+```bash
+curl -fsSL <same curl options> https://<server>/install.sh | sh -s -- --install-only
+export PATH="$HOME/.local/bin:$PATH"
+hearth onboard status --json
+```
+
+Keep the curl options exactly as given (a self-signed server's command has `-k`, sometimes `--pinnedpubkey`). If curl fails with a certificate error, ask the admin for the full command. Then continue with B.
+
+## B. Log in and restore this machine
+
+1. Collect in one message (skip what `onboard status` already knows):
+   - server URL only if `onboard status` has none (the installer remembers it); account email only if `onboard status` shows no `email` (it is detected from this machine's identity). Ask for an invite code only if `registration` is `invite`; open servers create a missing account during setup.
+   - workspace: where this person keeps their work on this machine (propose the current repo's parent or `$HOME/work`; required if several people share the Unix account).
+   - which agents to integrate (default: the installed ones among codex, claude, comate).
+   - team (optional): an invite code from a colleague to join their team, or a name to create a new team; skip if they work alone. Pass it as `--team <code-or-name>` to setup (setup also asks in the terminal when the user has no team).
+2. You run:
+
+   ```bash
+   mkdir -p <workspace> && hearth init <workspace> && cd <workspace>
+   hearth agents enable codex      # / claude / comate; disable the unwanted ones
+   ```
+
+3. The user runs exactly one command in their own terminal (it prompts for the password; it must not go through the chat):
+
+   ```bash
+   cd <workspace> && hearth setup        # the `command` of the login step in onboard status; it adds --server / --email only when they are unknown
+   cd <workspace> && hearth setup --invite <code>   # new account on an invite-only server
+   ```
+
+   Tell them: a new account prints a recovery key once; keep it offline (password manager), never paste it into the chat. `setup` restores the 10 most recently active conversations (`--sessions N`, 0 = all), skills and credentials, and starts background sync. It also copies the skills and agents this machine already has into the library (`--no-import` to skip; items that look like they hold a credential stay out and are listed), asks for the email when no identity is found, and offers in the terminal the conversations left on machines still online (usually the machine they are moving from). It ends with a `done:` line (conversations, library size, credential files) and the next steps. Setup installs no software: agent CLIs, gateways and services come in **D**. Wait until they say it finished.
+4. Finish, following `next` in `onboard status`:
+   - skill search MCP: `setup` registers it with Codex and Claude Code automatically; if it is missing (agent installed later) run `hearth lib mcp-install`;
+   - skills live once in the library (`hearth lib skills-dir` shows it); move them with `hearth lib skills-dir '<path>'` (e.g. `${WORKSPACE}/.agents/skills`) — it moves the files, rewrites the agent links and saves `skills.dir` in `<library>/config.toml`, which syncs to other machines;
+   - this machine's software: **D. Restore this machine's environment**;
+   - `hearth daemon start` if the daemon is not running.
+5. Upload choices, asked once: show `hearth backup status`. Everything is uploaded by default (every agent's sessions and memory, workspace files, credentials). Ask whether to turn anything off (see C).
+6. Record this machine's setup so the next one needs nothing: see **Learn** in C.
+7. Report in a few lines: account, server, workspace, agents, conversations restored, what was learned, anything pending. Then tell the user what they can ask from now on (the examples at the top of C).
+
+## D. Restore this machine's environment
+
+Setup restored data and credentials; the software (Node, Codex CLI, Claude Code, codex-mixin, services) is set up by you, with the user, from the restore flow the user's machines recorded on the server. Hearth does not install it by itself.
+
+1. Read the flow and the guide:
+
+   ```bash
+   hearth recipe plan --json   # this machine's steps in order: type, do, commands, check, interactive, status, key
+   hearth docs env             # how to install and check each tool, where the latest versions are, plus the organisation's notes from the server
+   uname -sm                   # pick packages by architecture (x86_64 / aarch64 / Darwin)
+   ```
+
+2. Show the user the steps still `todo` as a short numbered list (what, how, how it is checked) and ask once which to do now (recommend all).
+3. For each step, in order:
+   - run its `check` first; if it already passes, `hearth recipe done <key>` and move on;
+   - `manual` steps: do what `do` says, using the guide (download the build for this architecture, verify the checksum, install into the user's directories, never replace system packages); `interactive: true` (a QR-code or browser login) the user runs in their own terminal; wait for them;
+   - `run` / `tool` / `service` / `check` steps: run the `commands` yourself after the yes (or `hearth recipe run <key>`, which runs it with Hearth's installer and marks it done);
+   - run the `check` again; when it passes, `hearth recipe done <key>`; when it fails, read the error, fix it (a proxy or mirror from the organisation's notes, another architecture's package), never mark a failing step done.
+4. When this machine needed something the flow does not say (another proxy, an extra package, a different directory, a step for ARM or Mac), record it so the next machine gets it: `propose_setup_step` (MCP) or `hearth learn --here-step '$ <command>'` (only machines like this) / `--step` (every machine); the user reviews it in `hearth recipe proposals`.
+5. Finish with the guide's final check (section 7) and report what was installed, what was skipped and anything left for the user. `hearth recipe plan` should say `nothing left to do`.
+
+## C. Daily use (logged in)
+
+Settings — skills location/resident list, enabled agents, upload selection, tool versions, MCP servers, scanned workspaces — all live in one synced file: `hearth config` shows it, `hearth config --edit` opens it, `hearth lib skills-dir <path>` changes the skills location. Never hand the user a pile of separate files.
+
+When the user only invoked the skill without a concrete request, give a short overview in their language with examples they can say, e.g. "恢复上一台机器的会话", "找一下压测相关的对话", "不要上传 Claude 的会话", "把 Claude 的会话导入 Codex", "记录这台机器的配置", "建个团队共享 skills", and show the newest few conversations (`hearth session list -n 5`).
+
+### Find and restore conversations
+
+Listed newest activity first; the index (title, rounds, last update, machine, size, status) is separate from the content, so listing is fast and downloads nothing.
+
+```bash
+hearth session list                       # newest 20 + total; -n 0 = all
+hearth session find <words>               # title, path, working directory, machine
+hearth session list --host <machine> --status active --json
+hearth session list --files                # also backed-up files and memory notes
+hearth session show <id>
+hearth session restore <id> [<id> ...]    # any unique id prefix
+hearth restore -i                         # the user picks from a numbered list in their own terminal
+hearth restore --last 20                  # the newest N
+```
+
+- Show a short table (id prefix, agent, title, rounds, updated, machine) and restore what the user picks; the default bulk restore is the newest 10 of machines that are offline, ask before `--all`.
+- `●` after a machine name: that machine is still online (working on it), so the default restore leaves its conversations there. Restoring one by id works; `--include-online` takes all of them. Mention it when the user expected a conversation that was left out.
+- A Codex thread spread over several files is restored as one conversation, with any fork parent it needs.
+- Codex Desktop running: the restored thread appears in the open window at once (as a copy; the original is archived so a restart does not show it twice). Otherwise Codex lists it when it starts; if the user cannot find it, tell them to search for the title.
+- `expired`: deleted in the agent or unused for long; bulk restore skips it, restoring it by id brings it back.
+- `session is leased by another device`: another machine is writing it; `hearth session take <id>` if that machine is gone.
+
+### Choose what is uploaded
+
+`[backup.categories]` in `library/config.toml` (Hearth home, synced) lists everything uploadable — codex/claude/comate sessions and memory, workspace, credentials — each true/false; `include` adds paths, `exclude` skips paths. All other settings (skills dir/resident, agents, tools, MCP, workspaces) are sections of the same file — `hearth config` shows it.
+
+```bash
+hearth backup status                       # what this machine uploads, per category
+hearth backup disable claude               # nothing of Claude Code
+hearth backup disable claude.sessions      # Claude Code memory yes, conversations no
+hearth backup enable codex.memory
+hearth backup disable credentials          # never offer or upload SSH keys / logins
+hearth backup add ~/.gitconfig '${WORKSPACE}/notes/'
+hearth backup exclude '~/.ssh/id_*_old'
+hearth backup show | edit
+```
+
+Categories: `@<agent>`, `@<agent>.sessions`, `@<agent>.memory` (codex, claude, comate and agents added later), `@workspace`, `@credentials`. Turning something off stops future uploads; data already on the server stays (`hearth session rm <id>`, `hearth secret rm <name>`).
+
+### Learn this machine's setup
+
+The background sync records new findings by itself (every 20 min and at the end of setup): skills / agents found in the agents, env vars, CLI versions, MCP servers, workspace files, and credentials when `[learn] auto_credentials` is on (setup asks once; `hearth learn --auto-credentials=true|false`). Shell lines (the user's own part of `~/.bashrc` / `~/.zshrc`, `~/.bash_aliases`) are kept encrypted and sourced on new machines (`hearth shell show|save|restore`, `[shell] sync = false` to stop). What is left for the user: items whose copy here differs from the stored one, and credentials while not automatic; `hearth status` counts them (`next` step `learn`). Only those need the steps below.
+
+```bash
+hearth learn --list --json                 # (in the user's own terminal, plain `hearth learn` shows one checklist with proposals; Enter saves)
+```
+
+Show the `new` and `changed` findings as a compact table with a recommendation each: `all` (every machine: SSH keys, git identity, agent logins, CLIs), `here` (only machines like this, e.g. `per_machine: true`, GPU setup), `never`, or skip. Ask "anything else you always do on a new machine?". Then one call:
+
+```bash
+hearth learn --accept id1,id2 --here id3 --never id4 --step '$ pip install -U uv' --step 'log in to the VPN'
+```
+
+### Teams: share skills and agents
+
+A team shares skills and agents among its members; a team's owner can also let another team use them (read-only). Teams the user is in (or can read) are skill sources automatically: the skill-search MCP finds their skills, no setup per machine.
+
+```bash
+hearth team list                                   # teams, role, how many skills/agents each shares
+hearth team create <name>                          # the user becomes owner
+hearth team invite <name> [--role member|maintainer] [--days 7] [--uses N]   # prints a code; give it to colleagues
+hearth team join <code>                            # or on a new machine: hearth setup --team <code>
+hearth team share <name> <skill|agent> ...         # publish from the user's library (secret scan first; maintainers)
+hearth team packages <name>                        # what a team shares
+hearth team share-with <name> <other-team> [--off] # owners: let another team use this team's items
+hearth lib link <team>:<skill>                     # keep a team skill in every agent (otherwise found on demand)
+hearth team use-top [--dry-run]                    # keep each team's most used items in every agent now (automatic)
+hearth team leave <name>
+```
+
+- Automatic sharing: the user's 5 most used skills and 5 most used agents of their own library (all machines, last 30 days) are shared with every team where they are maintainer or owner, and republished when they change (the daemon, every 20 min; `hearth team share-top [--dry-run]` now). Tell the user when they join or create a team; `[teams] share_top = 0` turns it off, `share_exclude` keeps items private. Items blocked by the secret scan are not shared.
+- Team items get invoked: each team's 20 most used skills and 20 most used agents (by its members, last 30 days) are linked automatically on every machine of a member, so they sit in the agents' own skill and agent lists like the user's own (`[teams] use_top`, `use_exclude`; unlinking one keeps it out). The user's own copy of the same name wins. The other team skills are found by the `hearth` MCP tools `search_skills` / `list_skills` and loaded by `get_skill`, and their use counts toward the team ranking. If the user asks why a team skill was not used: check `hearth team use-top --dry-run` and that skill search is registered (`hearth status`, "skill search on").
+- Invite codes default to `maintainer` (can share); use `--role member` for use-only. Ask before sharing private skills; the secret scan blocks obvious credentials (`--allow-secrets` only after the user checked).
+
+### Organisation defaults
+
+The server may publish recipes for everyone (internal tool setup flows, proxies, SSO token locations) and notes for the guide (`hearth docs env` prints them): `hearth site status` lists them, `hearth recipe plan` merges them with the user's own recipes (you go through them in D), `hearth site disable <recipe>` opts the user out.
+
+### Agents
+
+```bash
+hearth agent list                                   # what each integration supports
+hearth agents import codex --from claude [file|id]   # Claude Code -> Codex threads (Codex's own importer)
+hearth agents enable|disable <agent>                # which agents this account integrates
+hearth agents pull <agent>                          # restore an agent setup skipped here (not used recently): skills, newest conversations; its CLI: D
+```
+
+| | Codex | Claude Code | Comate |
+|---|---|---|---|
+| sync, index, restore conversations and memory | yes | yes | yes |
+| paths rewritten between machines | yes | yes | no |
+| skills / agents / instructions rendered | yes | yes | skills only |
+| shown in the open app after restore | Desktop | no | no |
+| deletion in the app expires the server copy | yes | no | no |
+| import other agents' sessions | from Claude Code | no | no |
+
+### Status and problems
+
+```bash
+hearth recipe plan        # what this machine still needs to set up (D); hearth recipe done <key> when a step is done
+hearth learn --later      # stop the "not recorded yet" reminder for 30 days
+hearth status        # one screen: login, background sync (last check, last upload, last error), storage, agents, library, next steps
+hearth status --json # the same for you, with the daemon heartbeat
+```
+
+- Background sync: sessions every 60 s, library every 20 min; `hearth daemon start` if it is not running.
+- `certificate signed by unknown authority`: self-signed server and no copy of its certificate here; re-run the admin's install command with `--install-only` or pass `--ca-cert <file>` to `hearth setup`.
+- `403 account disabled` / `507 quota`: only the server admin can fix it.
+- Sessions that ran outside the workspace are not uploaded on shared accounts: `hearth session scope` (add only the user's own directories).
+- New version on the server: the daemon installs it by itself within 30 minutes; right away: `hearth self-update` (also refreshes this skill). `hearth self-update --auto off|on|status` controls the automatic update on this machine.

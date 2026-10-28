@@ -1,0 +1,22 @@
+name: release
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.26.x"     # latest patch release (go.mod pins the toolchain too)
+          check-latest: true
+      - run: go test -count=1 ./...
+      - name: build
+        run: scripts/build-dist.sh dist "${GITHUB_REF_NAME#v}"
+      - name: publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/hearth-* dist/SHA256SUMS --generate-notes --title "$GITHUB_REF_NAME"

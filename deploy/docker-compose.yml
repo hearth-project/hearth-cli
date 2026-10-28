@@ -1,0 +1,17 @@
+# Smallest deployment: one container, SQLite + blob files in a volume.
+#   docker compose -f deploy/docker-compose.yml up -d
+#   docker compose -f deploy/docker-compose.yml exec hearth hearth server invite
+# Put an HTTPS reverse proxy in front, or run `hearth server gencert` into
+# the volume and set HEARTH_PUBLIC_URL to enable /install.sh.
+services:
+  hearth:
+    build: ..
+    image: hearth:latest
+    restart: unless-stopped
+    ports: ["8787:8787"]
+    volumes: ["hearth-data:/data"]
+    environment:
+      HEARTH_REGISTRATION: invite
+      # HEARTH_PUBLIC_URL: https://hearth.example.com
+volumes:
+  hearth-data:

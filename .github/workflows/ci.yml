@@ -1,0 +1,56 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+concurrency:                       # a newer push replaces a running check of the same branch
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.26.x"     # latest patch release (go.mod pins the toolchain too)
+          check-latest: true
+      - name: gofmt
+        run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
+      - run: go vet ./...
+      - name: test (SQLite + local blobs)
+        run: go test -race -count=1 ./...
+      - name: test (PostgreSQL + S3)
+        env:
+          HEARTH_TEST_POSTGRES: postgres://postgres:postgres@127.0.0.1:5432/postgres?sslmode=disable
+          HEARTH_TEST_S3: fake
+        run: go test -race -count=1 ./internal/server/... ./internal/client/...
+      - name: cross-compile
+        run: scripts/build-dist.sh dist ci
+      - name: CLI reference is up to date
+        run: |
+          go run ./cmd/hearth docs cli > /tmp/cli.md
+          diff -u docs/cli.md /tmp/cli.md
+
+  vulncheck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.26.x"     # latest patch release (go.mod pins the toolchain too)
+          check-latest: true
+      - name: govulncheck (known vulnerabilities in code paths we call)
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...

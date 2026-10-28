@@ -1,0 +1,48 @@
+# Company git / GitHub SSH identities without touching the shared /root/.ssh/config
+# Store the keys once:
+#   hearth secret set id_rsa.work --file ~/.ssh/id_rsa.<you>
+#   hearth secret set id_ed25519_github --file ~/.ssh/id_ed25519_github
+# and copy examples/files/ssh_config to ~/.hearth/library/files/ssh_config.
+name = "ssh-identities"
+description = "company git and GitHub SSH keys, private ssh config, sshx alias"
+
+[[step]]
+type = "file"
+secret = "id_rsa.work"
+# Some tools hard-code ~/.ssh/<key>, so the key is also placed there.
+to = ["~/.hearth/ssh/id_rsa.work", "~/.ssh/id_rsa.work"]
+
+[[step]]
+type = "file"
+secret = "id_ed25519_github"
+to = ["~/.hearth/ssh/id_ed25519_github"]
+
+[[step]]
+type = "file"
+library = "files/ssh_config"
+to = ["~/.hearth/ssh/config"]
+mode = "0600"
+policy = "warn"
+
+[[step]]
+type = "env"
+scope = ["~/workspace"]                # only shells inside these directories
+set = { GIT_SSH_COMMAND = "ssh -F ~/.hearth/ssh/config" }
+alias = { sshx = "ssh -F ~/.hearth/ssh/config", scpx = "scp -F ~/.hearth/ssh/config" }
+
+[[step]]
+type = "check"
+name = "git resolves to port 8235"
+run = "ssh -F ~/.hearth/ssh/config -G git.example.com"
+expect = "(?m)^port 8235$"
+
+[[step]]
+type = "check"
+name = "github goes through ssh.github.com:443"
+run = "ssh -F ~/.hearth/ssh/config -G github.com"
+expect = "(?m)^hostname ssh.github.com$"
+
+[[step]]
+type = "manual"
+text = "Register the public keys once: your git server's SSH key settings, and https://github.com/settings/keys"
+done_when = "ssh -F ~/.hearth/ssh/config -o BatchMode=yes -T git@github.com 2>&1 | grep -q 'successfully authenticated'"

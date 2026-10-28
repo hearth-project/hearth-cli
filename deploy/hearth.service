@@ -1,0 +1,26 @@
+# systemd unit for a single-machine server (SQLite + blob files).
+#   useradd --system --home /var/lib/hearth hearth
+#   install -m 755 hearth /usr/local/bin/ && cp hearth.service /etc/systemd/system/
+#   systemctl enable --now hearth
+[Unit]
+Description=hearth server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=hearth
+StateDirectory=hearth
+Environment=HEARTH_DATA=/var/lib/hearth
+Environment=HEARTH_ADDR=127.0.0.1:8787
+# For PostgreSQL / S3 put HEARTH_DB, HEARTH_BLOBS and the S3 keys in:
+EnvironmentFile=-/etc/hearth/server.env
+ExecStart=/usr/local/bin/hearth server
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
