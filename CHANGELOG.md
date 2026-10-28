@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased (first public version)
+## 0.1.0 — 2026-10-29 (first public version)
 
 - README in English by default (`README.md`; Chinese: `README.zh-CN.md`), reorganised around a quick start with separate one-command server and client deployment. New `scripts/deploy-server.sh`: installs the latest release (or builds from source), creates a self-signed certificate, starts the supervised server and prints the client install command; re-running upgrades.
 
