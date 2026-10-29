@@ -120,15 +120,19 @@ func (s *store) touchToken(hash []byte, did string, now, ttl int64) error {
 }
 
 type deviceRow struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	Status    string `json:"status"`
-	LastSeen  int64  `json:"last_seen"`
-	OfflineAt int64  `json:"-"`
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Status      string `json:"status"`
+	LastSeen    int64  `json:"last_seen"`
+	OfflineAt   int64  `json:"-"`
+	LastIP      string `json:"last_ip"`
+	MachineJSON string `json:"machine_json"`
+	HealthJSON  string `json:"health_json"`
+	HealthAt    int64  `json:"health_at"`
 }
 
 func (s *store) listDevices(userID int64) ([]deviceRow, error) {
-	rows, err := s.rdb.Query(`SELECT id,name,status,last_seen,offline_at FROM devices WHERE user_id = ? ORDER BY created_at`, userID)
+	rows, err := s.rdb.Query(`SELECT id,name,status,last_seen,offline_at,last_ip,machine_json,health_json,health_at FROM devices WHERE user_id = ? ORDER BY created_at`, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -136,7 +140,7 @@ func (s *store) listDevices(userID int64) ([]deviceRow, error) {
 	var out []deviceRow
 	for rows.Next() {
 		var d deviceRow
-		if err := rows.Scan(&d.ID, &d.Name, &d.Status, &d.LastSeen, &d.OfflineAt); err != nil {
+		if err := rows.Scan(&d.ID, &d.Name, &d.Status, &d.LastSeen, &d.OfflineAt, &d.LastIP, &d.MachineJSON, &d.HealthJSON, &d.HealthAt); err != nil {
 			return nil, err
 		}
 		out = append(out, d)

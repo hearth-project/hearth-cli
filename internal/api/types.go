@@ -127,13 +127,24 @@ func IdentityLoginMessage(email string, ts int64) string {
 }
 
 type Device struct {
-	ID       string `json:"id"`
-	Name     string `json:"name"`
-	Status   string `json:"status"`
-	LastSeen int64  `json:"last_seen"`
+	ID       string         `json:"id"`
+	Name     string         `json:"name"`
+	Status   string         `json:"status"`
+	LastSeen int64          `json:"last_seen"`
+	LastIP   string         `json:"last_ip,omitempty"`
+	Machine  map[string]any `json:"machine,omitempty"`
+	Health   map[string]any `json:"health,omitempty"`
+	HealthAt int64          `json:"health_at,omitempty"`
 	// Online: the device talked to the server in the last few minutes (its
 	// daemon heartbeats every minute) and did not sign off since.
 	Online bool `json:"online"`
+}
+
+// DeviceHeartbeat carries a machine/agent self-check. It is deliberately
+// small and non-secret; the server only indexes it for discovery and status.
+type DeviceHeartbeat struct {
+	Machine map[string]any `json:"machine,omitempty"`
+	Health  map[string]any `json:"health,omitempty"`
 }
 
 type PutSessionRequest struct {

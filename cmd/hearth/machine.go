@@ -9,6 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/hearth-project/hearth-cli/internal/api"
 	"github.com/hearth-project/hearth-cli/internal/client"
 	"github.com/hearth-project/hearth-cli/internal/machine"
 	"github.com/hearth-project/hearth-cli/internal/paths"
@@ -109,7 +110,76 @@ func machineCmd() *cobra.Command {
 	add.Flags().StringVar(&workspace, "workspace", "", "working directory on these machines, e.g. /mnt/ssd/$USER/work")
 	add.Flags().StringVar(&desc, "description", "", "description")
 	add.Flags().BoolVar(&here, "here", false, "match machines like this one (by GPU model, else OS and architecture)")
-	c.AddCommand(add,
+	list := &cobra.Command{Use: "list", Short: "List your machines, architecture and agent readiness", RunE: func(*cobra.Command, []string) error {
+		e, err := engine()
+		if err != nil {
+			return err
+		}
+		ds, err := e.API.Devices()
+		if err != nil {
+			return err
+		}
+		t := &table{}
+		t.add("MACHINE", "STATE", "FACTS", "AGENTS", "RESTORE")
+		for _, d := range ds {
+			state := "offline"
+			if d.Status != "active" {
+				state = d.Status
+			} else if d.Online {
+				state = "online"
+			}
+			facts, _ := d.Machine["facts"].(map[string]any)
+			fact := "unknown"
+			if facts != nil {
+				fact = fmt.Sprintf("%v/%v", facts["os"], facts["arch"])
+				if g, ok := facts["gpu"].(string); ok && g != "" {
+					fact += " " + g
+				}
+			}
+			ag := "unknown"
+			restore := "hearth ssh " + d.ID[:minInt(8, len(d.ID))]
+			if h, ok := d.Health["status"].(string); ok {
+				ag = h
+			}
+			if !d.Online {
+				restore = "offline"
+			}
+			t.add(d.Name, state, fact, ag, restore)
+		}
+		t.fit()
+		t.print()
+		return nil
+	}}
+	inspect := &cobra.Command{Use: "inspect <machine>", Short: "Show a machine's public health report", Args: cobra.ExactArgs(1), RunE: func(_ *cobra.Command, a []string) error {
+		e, err := engine()
+		if err != nil {
+			return err
+		}
+		ds, err := e.API.Devices()
+		if err != nil {
+			return err
+		}
+		var fallback *api.Device
+		for i := range ds {
+			d := &ds[i]
+			if d.Name == a[0] || d.ID == a[0] || strings.HasPrefix(d.ID, a[0]) {
+				if d.Status == "active" {
+					fallback = d
+					break
+				}
+				if fallback == nil {
+					fallback = d
+				}
+			}
+		}
+		if fallback != nil {
+			b, _ := json.MarshalIndent(fallback, "", "  ")
+			fmt.Println(string(b))
+			return nil
+		}
+		return fmt.Errorf("no machine %q", a[0])
+	}}
+	c.AddCommand(list, inspect, add,
 		&cobra.Command{Use: "rm <name>", Short: "Remove a profile", Args: cobra.ExactArgs(1), RunE: func(_ *cobra.Command, a []string) error {
 			home := client.Home()
 			m, err := client.Machine(home)
@@ -164,3 +234,10 @@ func matchString(m map[string]string) string {
 }
 
 func jsonMarshalIndent(v any) ([]byte, error) { return json.MarshalIndent(v, "", "  ") }
+
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}

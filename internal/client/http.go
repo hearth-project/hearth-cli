@@ -297,8 +297,13 @@ func (a *API) Devices() ([]api.Device, error) {
 }
 
 // Heartbeat tells the server this device is online (the daemon, every scan).
-func (a *API) Heartbeat() error {
-	_, err := a.do("POST", "/v1/devices/self/heartbeat", struct{}{}, nil, nil, nil)
+func (a *API) Heartbeat() error { return a.HeartbeatReport(nil, nil) }
+
+// HeartbeatReport publishes non-secret machine and agent readiness data so
+// another logged-in machine can discover and restore this one. It is bounded
+// and never includes credentials, sessions or file contents.
+func (a *API) HeartbeatReport(machine, health map[string]any) error {
+	_, err := a.do("POST", "/v1/devices/self/heartbeat", api.DeviceHeartbeat{Machine: machine, Health: health}, nil, nil, nil)
 	return err
 }
 

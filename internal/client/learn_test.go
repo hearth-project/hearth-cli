@@ -267,3 +267,36 @@ func TestCodexMixinStepsParse(t *testing.T) {
 		}
 	}
 }
+
+// On an account several people share, only this user's Comate login is
+// offered; the others' login files are theirs.
+func TestLearnOnlyOwnComateLogin(t *testing.T) {
+	en := newEnv(t)
+	a := en.machine("a")
+	home, _ := learnEnv(t)
+	dir := filepath.Join(home, ".comate/login-user")
+	os.MkdirAll(dir, 0o700)
+	for _, n := range []string{"dev", "colleague"} {
+		os.WriteFile(filepath.Join(dir, n), []byte("Bearer-x"), 0o600)
+	}
+	ids := findingIDs(a.Discover())
+	if _, ok := ids["token:~/.comate/login-user/dev"]; !ok {
+		t.Fatal("own Comate login not offered")
+	}
+	if _, ok := ids["token:~/.comate/login-user/colleague"]; ok {
+		t.Fatal("another person's Comate login offered")
+	}
+}
+
+func TestDropOthersComateLogins(t *testing.T) {
+	r := &recipe.Recipe{Name: LearnedRecipe, Steps: []recipe.Step{
+		{Type: "file", Name: "token:~/.comate/login-user/dev"},
+		{Type: "file", Name: "token:~/.comate/login-user/colleague"},
+		{Type: "file", Name: "gh-hosts"}}}
+	if !dropOthersComateLogins(r, "dev@example.com") || len(r.Steps) != 2 || r.Steps[1].Name != "gh-hosts" {
+		t.Fatalf("%+v", r.Steps)
+	}
+	if dropOthersComateLogins(r, "dev@example.com") {
+		t.Fatal("second run changed it")
+	}
+}
