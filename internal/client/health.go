@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/hearth-project/hearth-cli/internal/proxyenv"
 )
 
 // HealthReport is the small, non-secret status a machine publishes with its
@@ -190,7 +192,9 @@ func cachedMixinDoctor(bin string) (*bool, string) {
 func mixinDoctor(bin string) (ok bool, detail string, known bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, bin, "doctor", "--no-tui").CombinedOutput()
+	cmd := exec.CommandContext(ctx, bin, "doctor", "--no-tui")
+	cmd.Env = proxyenv.Env(nil) // its local gateway must not go through the proxy
+	out, err := cmd.CombinedOutput()
 	if ctx.Err() != nil {
 		return false, "", false // slow provider: no verdict rather than a false alarm
 	}

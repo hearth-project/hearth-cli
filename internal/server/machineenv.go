@@ -50,6 +50,7 @@ type reportedHealth struct {
 		OK                  *bool
 		Detail              string
 	} `json:"tools"`
+	Client     string   `json:"client"` // Hearth build that made the report (newer than the stored one right after an update)
 	RecipeTodo int      `json:"recipe_todo"`
 	TodoSteps  []string `json:"todo_steps"`
 	CheckedAt  int64    `json:"checked_at"`
@@ -101,6 +102,9 @@ func (s *Server) machineEnv(healthJSON, clientVersion string) *MachineEnv {
 	}
 	if h.RecipeTodo > 0 {
 		add(EnvProblem{Level: "warn", Code: "steps", Behind: h.RecipeTodo, Steps: h.TodoSteps})
+	}
+	if h.Client != "" {
+		clientVersion = h.Client
 	}
 	if served := s.servedVersion(); served != "" && clientVersion != "" && clientVersion < served && !strings.HasSuffix(clientVersion, "-dev") {
 		add(EnvProblem{Level: "warn", Code: "hearth", Tool: "hearth", Have: clientVersion, Latest: served})
