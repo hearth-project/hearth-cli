@@ -205,7 +205,7 @@ Every conversation of the user's machines and agents has a small card (what was 
 A machine becomes visible after its Hearth daemon sends its first heartbeat. The heartbeat includes only public readiness data: OS/architecture/GPU, active profile/workspace, Hearth version, installed agent versions and MCP readiness, and pending restore steps. It never includes credentials, session content or file contents.
 
 ```bash
-hearth machine list                 # all logged-in machines, health and architecture
+hearth machine list                 # all logged-in machines, architecture and environment check (missing / outdated tools, failed checks, steps left)
 hearth machine inspect <machine>    # full public health report
 hearth ssh <machine> -- hearth onboard status --json
 hearth ssh <machine> -- hearth recipe plan --json

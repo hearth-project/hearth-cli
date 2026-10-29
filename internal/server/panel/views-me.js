@@ -3,17 +3,28 @@
 
 function deviceRows(ds, mine) {
   if (!ds.length) return empty(t("No machines yet. Install Hearth on a machine and run hearth setup."), "💻");
-  return wrap(h("table", {}, h("thead", {}, h("tr", {}, ["Machine", "IP", "Status", "Version", "Conversations", "Last seen", "Created", ""].map(function (k) { return h("th", {}, t(k)); }))),
-    h("tbody", {}, ds.map(function (d) {
-      var st = d.status !== "active" ? badge(t(d.status), "bad") : d.online ? h("span", { class: "dev" }, h("span", { class: "dot" }), t("online")) : h("span", { class: "dev muted" }, h("span", { class: "dot off" }), t("offline"));
-      return h("tr", {}, h("td", {}, h("b", {}, d.name), h("div", { class: "muted mono" }, d.id)), h("td", { class: "mono" }, d.ip || "-"), h("td", {}, st),
-        h("td", { class: "mono" }, d.version || (d.status === "active" && d.online ? h("span", { class: "badge warn", title: t(OLD_CLIENT_HINT) }, t("old version: run hearth self-update there")) : h("span", { class: "muted" }, "-"))),
-        h("td", {}, d.sessions ? h("span", {}, d.sessions, h("div", { class: "muted small" }, t("newest") + " " + ago(d.last_active))) : h("span", { class: "muted" }, "0")),
-        h("td", {}, ago(d.last_seen)), h("td", {}, when(d.created_at)),
-        h("td", {}, mine && d.status === "active" ? h("button", { class: "sm bad", onclick: function () {
-          if (confirm(t("Log this machine out? It must run hearth setup again.") + "\n" + d.name)) act(me("DELETE", "/devices/" + encodeURIComponent(d.id)));
-        } }, t("Log out")) : null));
-    }))));
+  var cols = ["Machine", "IP", "Status", "Environment", "Version", "Conversations", "Last seen", "Created", ""];
+  var body = h("tbody", {});
+  ds.forEach(function (d) {
+    var st = d.status !== "active" ? badge(t(d.status), "bad") : d.online ? h("span", { class: "dev" }, h("span", { class: "dot" }), t("online")) : h("span", { class: "dev muted" }, h("span", { class: "dot off" }), t("offline"));
+    var detail = null;
+    var toggle = function () {
+      if (detail) { detail.remove(); detail = null; return; }
+      detail = h("tr", { class: "sub" }, h("td", { colspan: cols.length }, envDetail(d)));
+      row.after(detail);
+    };
+    var row = h("tr", {}, h("td", {}, h("b", {}, d.name), h("div", { class: "muted mono" }, d.id), d.facts ? h("div", { class: "muted facts" }, factsLine(d.facts)) : null),
+      h("td", { class: "mono" }, d.ip || "-"), h("td", {}, st),
+      h("td", {}, d.status === "active" ? envPill(d, toggle) : h("span", { class: "muted" }, "-")),
+      h("td", { class: "mono" }, d.version || (d.status === "active" && d.online ? h("span", { class: "badge warn", title: t(OLD_CLIENT_HINT) }, t("old version: run hearth self-update there")) : h("span", { class: "muted" }, "-"))),
+      h("td", {}, d.sessions ? h("span", {}, d.sessions, h("div", { class: "muted small" }, t("newest") + " " + ago(d.last_active))) : h("span", { class: "muted" }, "0")),
+      h("td", {}, ago(d.last_seen)), h("td", {}, when(d.created_at)),
+      h("td", {}, mine && d.status === "active" ? h("button", { class: "sm bad", onclick: function () {
+        if (confirm(t("Log this machine out? It must run hearth setup again.") + "\n" + d.name)) act(me("DELETE", "/devices/" + encodeURIComponent(d.id)));
+      } }, t("Log out")) : null));
+    add(body, row);
+  });
+  return wrap(h("table", {}, h("thead", {}, h("tr", {}, cols.map(function (k) { return h("th", {}, t(k)); }))), body));
 }
 
 view("home", "Overview", function () {
@@ -56,7 +67,10 @@ view("home", "Overview", function () {
 view("machines", "Machines", function () {
   return Promise.all([me("GET", "/devices"), me("GET", "")]).then(function (r) {
     var ds = r[0], o = r[1];
-    return [card(t("Machines") + " (" + ds.length + ")", deviceRows(ds, true),
+    var bad = ds.filter(function (d) { return d.status === "active" && d.env && (d.env.status === "error" || d.env.status === "warn"); });
+    var notice = bad.length ? h("div", { class: "notice warnbox" }, h("span", { class: "edot", style: "background:var(--bad)" }),
+      (LANG === "zh" ? bad.length + " 台机器的环境与标准环境不一致：点击“环境”一列查看缺少什么、如何修复。" : bad.length + " machine(s) differ from the standard setup: click the Environment column to see what is missing and how to fix it.")) : null;
+    return [notice, card(t("Machines") + " (" + ds.length + ")", deviceRows(ds, true),
       h("span", { class: "muted small" }, t("Online = background sync reported in the last 15 minutes."))),
       o.install ? card(t("Add a machine"), [h("p", { class: "muted small" }, t("Run on the new machine, in a terminal. It installs Hearth, signs in and restores your setup:")), cmdLine(o.install)]) : null];
   });

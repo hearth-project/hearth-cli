@@ -54,7 +54,7 @@ func serverCmd() *cobra.Command {
 	var sto storage
 	var addr, tlsCert, tlsKey, registration, publicURL, distDir, quota, siteDir string
 	var identityBroker, identityBrokerKey string
-	var siteAuth, noAutoUpdate, pinInstall bool
+	var siteAuth, noAutoUpdate, pinInstall, noVersionCheck bool
 	var expireDays, graceDays int
 	var gcInterval time.Duration
 	c := &cobra.Command{
@@ -90,6 +90,7 @@ func serverCmd() *cobra.Command {
 			cfg.GCInterval = gcInterval
 			cfg.Dist = dist
 			cfg.SiteDir, cfg.SiteAuth = siteDir, siteAuth
+			cfg.VersionCheck = !noVersionCheck
 			cfg.IdentityBrokerURL, cfg.IdentityBrokerKey = identityBroker, identityBrokerKey
 			q, err := parseQuota(quota)
 			if err != nil {
@@ -163,6 +164,7 @@ func serverCmd() *cobra.Command {
 	c.Flags().StringVar(&siteDir, "site", os.Getenv("HEARTH_SITE"), "organisation defaults for every user: recipes/, files/, learn.json (default <data>/site) [$HEARTH_SITE]")
 	c.Flags().StringVar(&identityBroker, "identity-broker", os.Getenv("HEARTH_IDENTITY_BROKER_URL"), "platform identity broker for passwordless login, e.g. https://identity.example.com [$HEARTH_IDENTITY_BROKER_URL]")
 	c.Flags().StringVar(&identityBrokerKey, "identity-broker-key", os.Getenv("HEARTH_IDENTITY_BROKER_KEY"), "system key used to sign identity-broker requests [$HEARTH_IDENTITY_BROKER_KEY]")
+	c.Flags().BoolVar(&noVersionCheck, "no-version-check", os.Getenv("HEARTH_NO_VERSION_CHECK") == "1", "do not look up the latest Codex CLI / Claude Code / codex-mixin releases (npm registry, GitHub; every 6 hours, through $HTTPS_PROXY; $HEARTH_NPM_REGISTRY for a mirror) for the machines' environment check [$HEARTH_NO_VERSION_CHECK=1]")
 	c.Flags().BoolVar(&siteAuth, "site-auth", os.Getenv("HEARTH_SITE_AUTH") == "1", "serve the site defaults only to logged-in users (default: anyone who can reach the server, so the installer gets them before login) [$HEARTH_SITE_AUTH=1]")
 	c.Flags().BoolVar(&pinInstall, "pin-install", os.Getenv("HEARTH_PIN_INSTALL") == "1", "self-signed certificate: put --pinnedpubkey in the install one-liner, so even the first download is verified (default: plain -k; the installer then pins the certificate) [$HEARTH_PIN_INSTALL=1]")
 	c.Flags().BoolVar(&noAutoUpdate, "no-client-auto-update", os.Getenv("HEARTH_NO_CLIENT_AUTO_UPDATE") == "1", "client daemons do not install new builds by themselves (hearth self-update still works) [$HEARTH_NO_CLIENT_AUTO_UPDATE=1]")
