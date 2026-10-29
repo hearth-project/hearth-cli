@@ -151,6 +151,7 @@ Hearth 搬运工作现场，现在也开始带上记忆：任何 agent 都能想
 | **学习你的环境** | 后台同步会自动记录新的 skills、工具、环境变量和 MCP 配置；你同意后凭证也自动记录。不同类型的机器（H800、GB200、Mac……）可以有各自的步骤。 |
 | **由 agent 恢复软件环境** | Hearth 自己不装软件。`hearth recipe plan` 列出这台机器的步骤和每步的检查命令，`hearth` skill 按 [客户端软件环境指南](docs/zh/client-env.md) 带你逐步完成。 |
 | **上传内容自己选** | 按 agent 和类别（`@codex.sessions`、`!@claude.sessions`）、凭证、额外路径和排除规则，都写在一个跟随账号的 `config.toml` 里。 |
+| **远程机器就绪检查** | 每台在线 Hearth 客户端只上报非敏感状态：系统、架构、GPU/机器 profile、工作目录、Hearth 版本、agent 版本、MCP 状态和待完成的恢复步骤。在另一台已登录机器上运行 `hearth machine list` 就能看到目标是否正常；用户说“恢复 Codex 环境”后，`hearth` skill 会按目标架构选择 profile，通过 SSH 在目标机执行对应恢复流程。 |
 | **机器之间 SSH** | 登录过的 Linux 机器默认接受你自己设备的 SSH：设备公钥写进 `~/.ssh/authorized_keys` 里的一个标记块，系统 sshd 只开公钥认证、只监听主网卡（端口 8022；已有 sshd 在这个端口就直接用）。`hearth ssh <机器>`、用你平时的 key `ssh -p 8022`，或 `hearth ssh config` 给 VS Code / Cursor Remote-SSH 用。吊销设备后它的 key 在所有机器上失效。 |
 | **团队** | 邀请码、角色、团队之间共享。每个成员最常用的 skills 和 agents 自动共享，每个团队最常用的自动常驻到成员的 agent 里。 |
 | **服务端** | 默认 SQLite + 本地目录，多实例可用 PostgreSQL + S3。自带守护进程、日志轮转、配额、备份、迁移。Web 控制台：普通用户看自己的机器、skills、团队、设置；管理员有数据面板、用户、注册审批、邀请码、审计日志。 |

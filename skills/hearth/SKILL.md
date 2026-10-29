@@ -200,6 +200,19 @@ Every conversation of the user's machines and agents has a small card (what was 
 - When the user says "remember …" / "记住……", or agrees to a habit you noticed (they corrected you twice the same way), call `remember` with one self-contained sentence; `scope` = the repository root when it only holds there. Never store credentials.
 - CLI: `hearth recall <words>` (`--show <id>`), `hearth memory remember|forget|list|index|status`, `hearth memory hooks on|off`. Codex asks once to trust a new hook: tell the user to choose "Trust all and continue". `[memory] enabled = false` turns it all off.
 
+### Discover and restore a newly online machine
+
+A machine becomes visible after its Hearth daemon sends its first heartbeat. The heartbeat includes only public readiness data: OS/architecture/GPU, active profile/workspace, Hearth version, installed agent versions and MCP readiness, and pending restore steps. It never includes credentials, session content or file contents.
+
+```bash
+hearth machine list                 # all logged-in machines, health and architecture
+hearth machine inspect <machine>    # full public health report
+hearth ssh <machine> -- hearth onboard status --json
+hearth ssh <machine> -- hearth recipe plan --json
+```
+
+When the user says “恢复这台机器的 Codex 环境” or “恢复 Claude Code 环境”, first use `hearth machine list` and inspect the target. Choose its matching profile from OS, architecture, GPU and labels; then use the target's SSH connection to run the restore flow there. On the target, show the pending recipe steps and follow **D. Restore this machine's environment** in order, checking each step and recording it with `hearth recipe done <key>`. Use `hearth agents enable <agent>` and `hearth agents pull <agent>` only for the requested agent. Finish with `hearth onboard status --json` and `hearth machine inspect <machine>`; the target should report `ready`, or clearly list the remaining issue.
+
 ### SSH between the user's machines
 
 Logged-in Linux machines accept SSH from the user's own devices by default: the keys of their active devices (each device's Hearth key and its `~/.ssh/id_*.pub`) go into a marked block of `~/.ssh/authorized_keys`, and the daemon keeps the system sshd running the usual GPU-container way (public keys only, main interface, port 8022; an sshd already listening there is used as it is).

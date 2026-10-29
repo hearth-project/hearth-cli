@@ -282,6 +282,8 @@ func daemonCmd() *cobra.Command {
 				log.Printf("ssh key: %v", err)
 			}
 			var lastSSH string
+			var lastHealth time.Time
+			var health client.HealthReport
 			// Memory hooks follow the setting (and a moved binary).
 			if res, err := client.SyncMemoryHooks(e.Home, client.MemoryHooksOn(e.Home)); err == nil {
 				for _, r := range res {
@@ -352,6 +354,16 @@ func daemonCmd() *cobra.Command {
 					if _, _, err := writeSSHConfig(e, false); err != nil {
 						log.Printf("ssh config: %v", err)
 					}
+				}
+				// Publish this machine's architecture and agent readiness so another
+				// logged-in machine can choose the right restore flow.
+				if time.Since(lastHealth) >= 5*time.Minute || lastHealth.IsZero() {
+					health = e.MachineHealth()
+					lastHealth = time.Now()
+				}
+				h := health
+				if err := e.API.HeartbeatReport(map[string]any{"facts": h.Machine, "profiles": h.Profiles, "workspace": h.Workspace}, map[string]any{"status": h.Status, "client": h.Client, "agents": h.Agents, "recipe_todo": h.RecipeTodo, "recipe_manual": h.RecipeManual, "issues": h.Issues, "checked_at": h.CheckedAt}); err != nil {
+					log.Printf("health heartbeat: %v", err)
 				}
 				// Online for the other machines: their default restore leaves
 				// out the conversations this machine is working on.

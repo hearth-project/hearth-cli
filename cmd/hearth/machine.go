@@ -109,7 +109,63 @@ func machineCmd() *cobra.Command {
 	add.Flags().StringVar(&workspace, "workspace", "", "working directory on these machines, e.g. /mnt/ssd/$USER/work")
 	add.Flags().StringVar(&desc, "description", "", "description")
 	add.Flags().BoolVar(&here, "here", false, "match machines like this one (by GPU model, else OS and architecture)")
-	c.AddCommand(add,
+	list := &cobra.Command{Use: "list", Short: "List your machines, architecture and agent readiness", RunE: func(*cobra.Command, []string) error {
+		e, err := engine()
+		if err != nil {
+			return err
+		}
+		ds, err := e.API.Devices()
+		if err != nil {
+			return err
+		}
+		t := &table{}
+		t.add("MACHINE", "STATE", "FACTS", "AGENTS", "RESTORE")
+		for _, d := range ds {
+			state := "offline"
+			if d.Online {
+				state = "online"
+			}
+			facts, _ := d.Machine["facts"].(map[string]any)
+			fact := "unknown"
+			if facts != nil {
+				fact = fmt.Sprintf("%v/%v", facts["os"], facts["arch"])
+				if g, ok := facts["gpu"].(string); ok && g != "" {
+					fact += " " + g
+				}
+			}
+			ag := "unknown"
+			restore := "hearth ssh " + d.ID[:minInt(8, len(d.ID))]
+			if h, ok := d.Health["status"].(string); ok {
+				ag = h
+			}
+			if !d.Online {
+				restore = "offline"
+			}
+			t.add(d.Name, state, fact, ag, restore)
+		}
+		t.fit()
+		t.print()
+		return nil
+	}}
+	inspect := &cobra.Command{Use: "inspect <machine>", Short: "Show a machine's public health report", Args: cobra.ExactArgs(1), RunE: func(_ *cobra.Command, a []string) error {
+		e, err := engine()
+		if err != nil {
+			return err
+		}
+		ds, err := e.API.Devices()
+		if err != nil {
+			return err
+		}
+		for _, d := range ds {
+			if d.Name == a[0] || d.ID == a[0] || strings.HasPrefix(d.ID, a[0]) {
+				b, _ := json.MarshalIndent(d, "", "  ")
+				fmt.Println(string(b))
+				return nil
+			}
+		}
+		return fmt.Errorf("no machine %q", a[0])
+	}}
+	c.AddCommand(list, inspect, add,
 		&cobra.Command{Use: "rm <name>", Short: "Remove a profile", Args: cobra.ExactArgs(1), RunE: func(_ *cobra.Command, a []string) error {
 			home := client.Home()
 			m, err := client.Machine(home)
@@ -164,3 +220,10 @@ func matchString(m map[string]string) string {
 }
 
 func jsonMarshalIndent(v any) ([]byte, error) { return json.MarshalIndent(v, "", "  ") }
+
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}

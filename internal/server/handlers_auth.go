@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -60,6 +61,19 @@ func (s *Server) routes() {
 	m.HandleFunc("DELETE /v1/devices/{id}", s.authed(s.handleRevokeDevice))
 	// The heartbeat answers how many console changes wait for this user.
 	m.HandleFunc("POST /v1/devices/self/heartbeat", s.authed(func(w http.ResponseWriter, r *http.Request) {
+		var hb api.DeviceHeartbeat
+		_ = json.NewDecoder(io.LimitReader(r.Body, 256<<10)).Decode(&hb)
+		machine, _ := json.Marshal(hb.Machine)
+		health, _ := json.Marshal(hb.Health)
+		if len(machine) > 64<<10 {
+			machine = []byte("{}")
+		}
+		if len(health) > 64<<10 {
+			health = []byte("{}")
+		}
+		if hb.Machine != nil || hb.Health != nil {
+			_, _ = s.st.db.Exec(`UPDATE devices SET machine_json=?, health_json=?, health_at=? WHERE id=?`, machine, health, s.now(), deviceOf(r))
+		}
 		writeJSON(w, http.StatusOK, map[string]int{"intents": s.countIntents(userOf(r))})
 	}))
 	m.HandleFunc("GET /v1/intents", s.authed(s.handleListIntents))
@@ -275,7 +289,10 @@ func (s *Server) handleListDevices(w http.ResponseWriter, r *http.Request) {
 	now := s.now()
 	for _, d := range ds {
 		online := d.Status == "active" && d.LastSeen >= now-int64(onlineWindow.Seconds()) && d.OfflineAt == 0
-		out = append(out, api.Device{ID: d.ID, Name: d.Name, Status: d.Status, LastSeen: d.LastSeen, Online: online})
+		var machine, health map[string]any
+		_ = json.Unmarshal([]byte(d.MachineJSON), &machine)
+		_ = json.Unmarshal([]byte(d.HealthJSON), &health)
+		out = append(out, api.Device{ID: d.ID, Name: d.Name, Status: d.Status, LastSeen: d.LastSeen, LastIP: d.LastIP, Online: online, Machine: machine, Health: health, HealthAt: d.HealthAt})
 	}
 	writeJSON(w, http.StatusOK, out)
 }

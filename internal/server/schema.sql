@@ -24,7 +24,10 @@ CREATE TABLE IF NOT EXISTS devices (
   name       TEXT NOT NULL,
   status     TEXT NOT NULL DEFAULT 'active',
   created_at INTEGER NOT NULL,
-  last_seen  INTEGER NOT NULL
+  last_seen  INTEGER NOT NULL,
+  machine_json TEXT NOT NULL DEFAULT '{}',
+  health_json TEXT NOT NULL DEFAULT '{}',
+  health_at INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS tokens (
