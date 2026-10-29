@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 
 	"github.com/hearth-project/hearth-cli/internal/paths"
@@ -38,6 +39,30 @@ type ShellFile struct {
 	Whole  bool   // the whole file is the user's (no distribution default)
 }
 
+func shellOffHere(home string) string { return filepath.Join(home, "shell-off-here") }
+
+// shellDisabledHere: the user took Hearth's lines out of this machine's rc
+// files (hearth shell uninstall, or commented out the block's line), so
+// nothing puts them back until hearth shell restore.
+func shellDisabledHere(home string) bool {
+	if _, err := os.Stat(shellOffHere(home)); err == nil {
+		return true
+	}
+	for _, f := range ShellFiles(home) {
+		b, err := os.ReadFile(paths.Expand(f.Hook))
+		if err != nil {
+			continue
+		}
+		hook := f.hookPath(home)
+		for _, l := range strings.Split(string(b), "\n") {
+			if t := strings.TrimSpace(l); strings.HasPrefix(t, "#") && strings.Contains(t, hook) && strings.Contains(t, ". ") {
+				return true // the block's source line commented out by hand
+			}
+		}
+	}
+	return false
+}
+
 // ShellOn reports whether [shell] sync is on (default true).
 func ShellOn(home string) bool {
 	c, err := UserConfig(home)
@@ -64,6 +89,11 @@ func ShellFiles(home string) []ShellFile {
 			f.Hook = "~/.bashrc"
 		}
 		f.Whole = base == "bash_aliases" || base == "aliases"
+		if runtime.GOOS != "linux" {
+			// Kept per operating system: lines of a Linux rc (paths under
+			// /root, JAVA_HOME of a cluster image, HOME itself) break a Mac.
+			f.Secret += "." + runtime.GOOS
+		}
 		out = append(out, f)
 	}
 	return out
@@ -339,7 +369,7 @@ func (e *Engine) SaveShell() ([]ShellSaved, error) {
 		own := f.OwnShell()
 		snip := ""
 		if b, err := os.ReadFile(f.snippetPath(e.Home)); err == nil {
-			snip = string(b)
+			snip = withoutDerived(string(b))
 		}
 		prev := st.Files[f.Secret]
 		if sha(own) == prev.Own && sha(snip) == prev.Snippet {
@@ -435,6 +465,79 @@ func guardTool(l string) string {
 	return m[1] + "command -v " + m[2] + " >/dev/null 2>&1 && " + strings.TrimLeft(l, " \t") + " # hearth: guarded, " + m[2] + " was not installed here"
 }
 
+// identityVarRE matches assignments of variables that belong to the
+// machine and account (an rc line "export HOME=/root" from a Linux box
+// makes ~ point to /root on a Mac).
+var identityVarRE = regexp.MustCompile(`^(\s*)(export\s+)?(HOME|USER|LOGNAME|SHELL|PWD|OLDPWD|HOSTNAME|TMPDIR)=`)
+
+var varRefRE = regexp.MustCompile(`^\$\{?[A-Za-z_][A-Za-z0-9_]*\}?$`)
+
+var assignRE = regexp.MustCompile(`^(\s*)(export\s+)?([A-Za-z_][A-Za-z0-9_]*)=(\S*)\s*$`)
+
+// guardPaths handles assignments naming absolute paths that do not exist
+// here (JAVA_HOME=/opt/cluster/jdk, PATH=/root/.tool/bin:$PATH): list
+// variables lose the missing entries (or the line, when nothing of this
+// machine is left); others are set only if the path exists when the shell
+// starts. ok is false when the line is left as it is.
+func guardPaths(l string) (string, bool) {
+	m := assignRE.FindStringSubmatch(l)
+	if m == nil || strings.ContainsAny(m[4], "`;&|*") || strings.Contains(m[4], "$(") {
+		return "", false
+	}
+	val, q := m[4], ""
+	if len(val) >= 2 && (val[0] == '"' || val[0] == '\'') && val[len(val)-1] == val[0] {
+		val, q = val[1:len(val)-1], val[:1]
+	}
+	if strings.ContainsAny(val, "\"'") {
+		return "", false
+	}
+	h, _ := os.UserHomeDir()
+	parts := strings.Split(val, ":")
+	var keep, missing []string
+	for _, p := range parts {
+		x := p
+		for _, pre := range []string{"${HOME}", "$HOME", "~"} {
+			if strings.HasPrefix(x, pre) && h != "" {
+				x = h + x[len(pre):]
+				break
+			}
+		}
+		if strings.HasPrefix(x, "/") && !strings.Contains(x, "$") {
+			if _, err := os.Stat(x); err != nil {
+				missing = append(missing, p)
+				continue
+			}
+		}
+		keep = append(keep, p)
+	}
+	if len(missing) == 0 {
+		return "", false
+	}
+	note := " # hearth: not on this machine: " + strings.Join(missing, ", ")
+	if len(parts) > 1 { // a list: PATH, LD_LIBRARY_PATH, PYTHONPATH, ...
+		onlyRefs := true
+		for _, p := range keep {
+			if !varRefRE.MatchString(p) {
+				onlyRefs = false // something of this machine besides $PATH itself
+			}
+		}
+		if onlyRefs {
+			return m[1] + ":" + note + ": " + strings.TrimSpace(l), true
+		}
+		return m[1] + m[2] + m[3] + "=" + q + strings.Join(keep, ":") + q + note, true
+	}
+	return m[1] + "[ -e " + shQuote(missing[0]) + " ] && " + strings.TrimLeft(l, " \t") + note, true
+}
+
+func shQuote(p string) string {
+	for _, pre := range []string{"${HOME}", "$HOME", "~"} {
+		if rest, ok := strings.CutPrefix(p, pre); ok {
+			return "\"$HOME\"'" + strings.ReplaceAll(rest, "'", `'"'"'`) + "'"
+		}
+	}
+	return "'" + strings.ReplaceAll(p, "'", `'"'"'`) + "'"
+}
+
 // neutralize replaces lines that source a file missing on this machine
 // with a no-op (":" keeps if / fi bodies valid), and guards calls of tools
 // that are not installed here.
@@ -442,7 +545,15 @@ func neutralize(s string) (string, []string) {
 	var missing []string
 	lines := strings.Split(s, "\n")
 	for i, l := range lines {
+		if m := identityVarRE.FindStringSubmatch(l); m != nil {
+			lines[i] = m[1] + ": # hearth: " + m[3] + " is this machine's own, not restored: " + strings.TrimSpace(l)
+			continue
+		}
 		if g := guardTool(l); g != "" {
+			lines[i] = g
+			continue
+		}
+		if g, ok := guardPaths(l); ok {
 			lines[i] = g
 			continue
 		}
@@ -475,7 +586,7 @@ type ShellRestored struct {
 // (paragraphs this machine's rc already has left out) and sources it from
 // the rc file. The rc file itself only gets the managed block.
 func (e *Engine) RestoreShell() ([]ShellRestored, error) {
-	if !ShellOn(e.Home) {
+	if !ShellOn(e.Home) || shellDisabledHere(e.Home) {
 		return nil, nil
 	}
 	all, err := e.Secrets()
@@ -492,6 +603,14 @@ func (e *Engine) RestoreShell() ([]ShellRestored, error) {
 	shared := ws != "" && ws != h
 	var out []ShellRestored
 	for _, f := range ShellFiles(e.Home) {
+		if base, _, cut := strings.Cut(f.Secret, "."); cut {
+			// Older versions sourced the Linux lines here too: take them out.
+			legacy := ShellFile{Path: f.Path, Secret: base, Hook: f.Hook}
+			if changed, _ := recipe.UninstallRC(paths.Expand(f.Hook), legacy.hookPath(e.Home)); changed {
+				_ = os.Remove(legacy.hookPath(e.Home))
+				_ = os.Remove(legacy.snippetPath(e.Home))
+			}
+		}
 		v, ok := stored[f.Secret]
 		if !ok {
 			continue
@@ -530,10 +649,129 @@ func (e *Engine) RestoreShell() ([]ShellRestored, error) {
 		if _, err := recipe.InstallRC(hook, f.hookPath(e.Home)); err != nil {
 			return out, err
 		}
-		st.Files[f.Secret] = shellFileState{Own: sha(f.OwnShell()), Snippet: sha(body), OwnParas: paraHashes(f.OwnShell()), SnippetParas: paraHashes(body)}
+		st.Files[f.Secret] = shellFileState{Own: sha(f.OwnShell()), Snippet: sha(withoutDerived(body)), OwnParas: paraHashes(f.OwnShell()), SnippetParas: paraHashes(withoutDerived(body))}
 		out = append(out, r)
 	}
 	return out, saveJSON(shellStatePath(e.Home), st)
+}
+
+// withoutDerived drops the paragraphs Hearth changed for this machine
+// (marked "# hearth:"), so a snippet edited here never uploads them in
+// place of the originals.
+func withoutDerived(s string) string {
+	var keep []string
+	for _, p := range paragraphs(s) {
+		if !strings.Contains(p, "# hearth:") {
+			keep = append(keep, p)
+		}
+	}
+	if len(keep) == 0 {
+		return ""
+	}
+	return strings.Join(keep, "\n\n") + "\n"
+}
+
+// RefreshShell applies the current guards to the snippets restored here
+// (by older versions too) and, off Linux, removes the Linux lines older
+// versions sourced. The daemon runs it; no download, no rc change otherwise.
+func (e *Engine) RefreshShell() (int, error) {
+	if shellDisabledHere(e.Home) {
+		return 0, nil
+	}
+	st := loadShellState(e.Home)
+	n := 0
+	for _, f := range ShellFiles(e.Home) {
+		if base, _, cut := strings.Cut(f.Secret, "."); cut {
+			legacy := ShellFile{Path: f.Path, Secret: base, Hook: f.Hook}
+			if changed, _ := recipe.UninstallRC(paths.Expand(f.Hook), legacy.hookPath(e.Home)); changed {
+				_ = os.Remove(legacy.hookPath(e.Home))
+				_ = os.Remove(legacy.snippetPath(e.Home))
+				n++
+			}
+		}
+		b, err := os.ReadFile(f.snippetPath(e.Home))
+		if err != nil {
+			continue
+		}
+		text, _ := neutralize(string(b))
+		if text == string(b) {
+			continue
+		}
+		if err := writeFileAtomic(f.snippetPath(e.Home), []byte(text), 0o600); err != nil {
+			return n, err
+		}
+		prev := st.Files[f.Secret]
+		prev.Snippet, prev.SnippetParas = sha(withoutDerived(text)), paraHashes(withoutDerived(text))
+		st.Files[f.Secret] = prev
+		n++
+	}
+	if n == 0 {
+		return 0, nil
+	}
+	return n, saveJSON(shellStatePath(e.Home), st)
+}
+
+// UninstallShell takes Hearth's lines out of this machine's rc files: the
+// managed blocks and the restored snippets (the stored copy stays; turn
+// syncing off with [shell] sync = false).
+func (e *Engine) UninstallShell() ([]string, error) {
+	var done []string
+	if err := os.WriteFile(shellOffHere(e.Home), []byte("hearth shell uninstall: rc lines are not restored here until hearth shell restore\n"), 0o600); err != nil {
+		return nil, err
+	}
+	for _, f := range ShellFiles(e.Home) {
+		cands := []ShellFile{f}
+		if base, _, cut := strings.Cut(f.Secret, "."); cut {
+			cands = append(cands, ShellFile{Path: f.Path, Secret: base, Hook: f.Hook})
+		}
+		for _, c := range cands {
+			changed, err := recipe.UninstallRC(paths.Expand(c.Hook), c.hookPath(e.Home))
+			if err != nil {
+				return done, err
+			}
+			_ = os.Remove(c.hookPath(e.Home))
+			_ = os.Remove(c.snippetPath(e.Home))
+			if changed {
+				done = append(done, c.Hook)
+			}
+		}
+	}
+	return done, nil
+}
+
+// EnableShellHere undoes UninstallShell for this machine.
+func (e *Engine) EnableShellHere() { _ = os.Remove(shellOffHere(e.Home)) }
+
+// PreviewShell returns, per rc file, what RestoreShell would write here.
+func (e *Engine) PreviewShell() (map[string]string, error) {
+	all, err := e.Secrets()
+	if err != nil {
+		return nil, err
+	}
+	stored := map[string][]byte{}
+	for _, s := range all {
+		stored[s.Name] = s.Value
+	}
+	out := map[string]string{}
+	for _, f := range ShellFiles(e.Home) {
+		v, ok := stored[f.Secret]
+		if !ok {
+			continue
+		}
+		own := ""
+		if b, err := os.ReadFile(paths.Expand(f.Path)); err == nil {
+			own = stripHearth(string(b))
+		}
+		var keep []string
+		for _, p := range paragraphs(string(v)) {
+			if !strings.Contains(own, p) {
+				keep = append(keep, p)
+			}
+		}
+		text, _ := neutralize(strings.Join(keep, "\n\n"))
+		out[f.Path] = text
+	}
+	return out, nil
 }
 
 // shellHook sources the snippet; on a shared account only once the shell

@@ -49,6 +49,7 @@ Keep the curl options exactly as given (a self-signed server's command has `-k`,
 
    ```bash
    mkdir -p <workspace> && hearth init <workspace> && cd <workspace>
+   # already logged in without a workspace (~/.hearth) and it is this person's: hearth init --move-login <workspace>
    hearth agents enable codex      # / claude / comate; disable the unwanted ones
    ```
 
@@ -137,7 +138,7 @@ Categories: `@<agent>`, `@<agent>.sessions`, `@<agent>.memory` (codex, claude, c
 
 ### Learn this machine's setup
 
-The background sync records new findings by itself (every 20 min and at the end of setup): skills / agents found in the agents, env vars, CLI versions, MCP servers, workspace files, and credentials when `[learn] auto_credentials` is on (setup asks once; `hearth learn --auto-credentials=true|false`). Shell lines (the user's own part of `~/.bashrc` / `~/.zshrc`, `~/.bash_aliases`) are kept encrypted and sourced on new machines (`hearth shell show|save|restore`, `[shell] sync = false` to stop). What is left for the user: items whose copy here differs from the stored one, and credentials while not automatic; `hearth status` counts them (`next` step `learn`). Only those need the steps below.
+The background sync records new findings by itself (every 20 min and at the end of setup): skills / agents found in the agents, env vars, CLI versions, MCP servers, workspace files, and credentials when `[learn] auto_credentials` is on (setup asks once; `hearth learn --auto-credentials=true|false`). Shell lines (the user's own part of `~/.bashrc` / `~/.zshrc`, `~/.bash_aliases`) are kept encrypted per operating system (Linux lines never reach a Mac) and sourced on new machines; lines that set `HOME` / `USER` are never applied, and lines naming paths or tools this machine lacks are guarded. `hearth shell restore --dry-run` shows what would be written, `hearth shell uninstall` takes Hearth's lines out of this machine's rc files (they stay out until `hearth shell restore`), `[shell] sync = false` stops it everywhere. What is left for the user: items whose copy here differs from the stored one, and credentials while not automatic; `hearth status` counts them (`next` step `learn`). Only those need the steps below.
 
 ```bash
 hearth learn --list --json                 # (in the user's own terminal, plain `hearth learn` shows one checklist with proposals; Enter saves)
@@ -210,6 +211,8 @@ hearth machine inspect <machine>    # full public health report
 hearth ssh <machine> -- hearth onboard status --json
 hearth ssh <machine> -- hearth recipe plan --json
 ```
+
+Steps that need the user's own terminal (`interactive: true`: a QR-code login, a prompt) can run from here with a terminal: `hearth ssh -t <machine> -- '<command>'`; tell the user to run it in their own terminal, and wait. A step is done only when its check passes on the target (for codex-mixin: `codex-mixin doctor --no-tui` says `doctor: ok`, not just "imported").
 
 When the user says “恢复这台机器的 Codex 环境” or “恢复 Claude Code 环境”, first use `hearth machine list` and inspect the target. Choose its matching profile from OS, architecture, GPU and labels; then use the target's SSH connection to run the restore flow there. On the target, show the pending recipe steps and follow **D. Restore this machine's environment** in order, checking each step and recording it with `hearth recipe done <key>`. Use `hearth agents enable <agent>` and `hearth agents pull <agent>` only for the requested agent. Finish with `hearth onboard status --json`, `hearth machine check` (on the target: reports its environment at once instead of within 5 minutes) and `hearth machine inspect <machine>`; the target should report `ready`, or clearly list the remaining issue.
 

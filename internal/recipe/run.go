@@ -326,6 +326,16 @@ func approvalDetail(s Step) string {
 	return strings.Join(parts, "  ")
 }
 
+// needsWorkspace reports whether a command step refers to ${WORKSPACE}.
+func needsWorkspace(s Step) bool {
+	for _, c := range []string{s.Run, s.Unless, s.DoneWhen, s.Health, s.Start} {
+		if strings.Contains(c, "${WORKSPACE}") {
+			return true
+		}
+	}
+	return false
+}
+
 // sh runs a command with a timeout; stdin may carry a secret.
 func (r *runner) sh(cmdline string, stdin []byte) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), r.opt.Timeout)
@@ -385,6 +395,11 @@ func (r *runner) step(recipe string, s Step) (string, string) {
 			d += "  (needs an interactive terminal)"
 		}
 		return "pending", d
+	}
+	if needsWorkspace(s) && paths.Workspace() == "" {
+		// ${WORKSPACE} would be "" and the command would look at / (a
+		// "check" of /.ssh/config fails for no reason).
+		return "skipped", "uses ${WORKSPACE}; this machine has none (hearth init <dir>)"
 	}
 	if !r.approved(recipe, s) {
 		return "needs-approval", approvalDetail(s)

@@ -283,10 +283,10 @@ func (e *Engine) FindSSHEndpoint(ref string) (SSHEndpoint, error) {
 	}
 	var hits []SSHEndpoint
 	for _, ep := range eps {
-		if ep.Name == ref || ep.Address == ref || strings.HasPrefix(ep.DeviceID, ref) || shortName(ep.Name) == ref {
+		switch MachineMatches(ref, ep.Name, ep.DeviceID, ep.Address) {
+		case 2:
 			return ep, nil
-		}
-		if strings.Contains(strings.ToLower(ep.Name), strings.ToLower(ref)) {
+		case 1:
 			hits = append(hits, ep)
 		}
 	}

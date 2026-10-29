@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -93,10 +94,67 @@ func HTTPClient(home string) (*http.Client, error) {
 		}
 		pemData = append(append(pemData, b...), '\n')
 	}
+	useRememberedProxy(home)
 	if len(pemData) == 0 {
-		return &http.Client{Timeout: 60 * time.Second}, nil
+		return &http.Client{Timeout: 60 * time.Second, Transport: fastTransport()}, nil
 	}
 	return httpClientWithCA(pemData)
+}
+
+// fastTransport fails in seconds when the server cannot be reached at all
+// (no route, a proxy missing in this shell) instead of hanging for a minute.
+func fastTransport() *http.Transport {
+	tr := http.DefaultTransport.(*http.Transport).Clone()
+	tr.DialContext = (&net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second}).DialContext
+	tr.TLSHandshakeTimeout = 15 * time.Second
+	return tr
+}
+
+func netStatePath(home string) string { return filepath.Join(home, "net.json") }
+
+type netState struct {
+	HTTPSProxy string `json:"https_proxy,omitempty"`
+	HTTPProxy  string `json:"http_proxy,omitempty"`
+	NoProxy    string `json:"no_proxy,omitempty"`
+}
+
+func proxyFromEnv() netState {
+	get := func(k string) string {
+		if v := os.Getenv(k); v != "" {
+			return v
+		}
+		return os.Getenv(strings.ToUpper(k))
+	}
+	return netState{HTTPSProxy: get("https_proxy"), HTTPProxy: get("http_proxy"), NoProxy: get("no_proxy")}
+}
+
+// RememberProxy records the proxy this process reached the server with
+// (the daemon, started from a shell that has it), so commands run where
+// the proxy is not set (hearth ssh <machine> -- hearth ..., cron) use it.
+func RememberProxy(home string) {
+	cur := proxyFromEnv()
+	var old netState
+	_ = loadJSON(netStatePath(home), &old)
+	if cur != old {
+		_ = saveJSON(netStatePath(home), cur)
+	}
+}
+
+// useRememberedProxy sets the remembered proxy for this process when its
+// environment has none.
+func useRememberedProxy(home string) {
+	if p := proxyFromEnv(); p.HTTPSProxy != "" || p.HTTPProxy != "" {
+		return
+	}
+	var st netState
+	if loadJSON(netStatePath(home), &st) != nil {
+		return
+	}
+	for k, v := range map[string]string{"https_proxy": st.HTTPSProxy, "http_proxy": st.HTTPProxy, "no_proxy": st.NoProxy} {
+		if v != "" {
+			os.Setenv(k, v)
+		}
+	}
 }
 
 // adoptCA copies the CA this home relies on from elsewhere (default home,
@@ -124,7 +182,7 @@ func httpClientWithCA(pemData []byte) (*http.Client, error) {
 	if !pool.AppendCertsFromPEM(pemData) {
 		return nil, errors.New("CA file contains no PEM certificates")
 	}
-	tr := http.DefaultTransport.(*http.Transport).Clone()
+	tr := fastTransport()
 	tr.TLSClientConfig = &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12}
 	return &http.Client{Timeout: 60 * time.Second, Transport: tr}, nil
 }
@@ -441,6 +499,9 @@ func netError(server string, err error) error {
 		hint = "unknown host name; check the URL"
 	case strings.Contains(msg, "Client.Timeout") || strings.Contains(msg, "i/o timeout") || strings.Contains(msg, "deadline exceeded"):
 		hint = "timed out; check the network, VPN or proxy (HTTPS_PROXY / NO_PROXY)"
+		if p := proxyFromEnv(); p.HTTPSProxy == "" && p.HTTPProxy == "" {
+			hint = "timed out, and this shell has no proxy set; if this machine reaches the server through one, set https_proxy=http://<proxy>:<port> (the hearth daemon remembers it once it ran with it)"
+		}
 	case strings.Contains(msg, "network is unreachable") || strings.Contains(msg, "no route to host"):
 		hint = "the network has no route there; check VPN or proxy"
 	default:

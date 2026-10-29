@@ -129,3 +129,50 @@ func TestNeutralizeGuardsMissingTools(t *testing.T) {
 		t.Fatalf("other lines changed: %q", lines[2:])
 	}
 }
+
+func TestNeutralizeMachineSpecificLines(t *testing.T) {
+	h := t.TempDir()
+	t.Setenv("HOME", h)
+	os.MkdirAll(filepath.Join(h, "bin"), 0o755)
+	in := strings.Join([]string{
+		"export HOME='/root'",
+		"export JAVA_HOME=/no-such/cluster/jdk1.8.0_351",
+		"export PATH=/no-such/.BCloud/bin:$PATH",
+		"export PATH=$HOME/bin:/nope/bin:$PATH",
+		"export GIT_CONFIG_GLOBAL=~/bootstrap/vault/gitconfig",
+		"export EDITOR=vim",
+		"export PATH=$HOME/bin:$PATH",
+	}, "\n")
+	out, _ := neutralize(in)
+	l := strings.Split(out, "\n")
+	if !strings.HasPrefix(l[0], ": # hearth: HOME") {
+		t.Fatalf("HOME kept: %q", l[0])
+	}
+	if !strings.HasPrefix(l[1], "[ -e '/no-such/cluster/jdk1.8.0_351' ] && export JAVA_HOME=") {
+		t.Fatalf("JAVA_HOME not guarded: %q", l[1])
+	}
+	if !strings.HasPrefix(l[2], ": # hearth: not on this machine: /no-such/.BCloud/bin") {
+		t.Fatalf("PATH with only a missing dir kept: %q", l[2])
+	}
+	if !strings.HasPrefix(l[3], "export PATH=$HOME/bin:$PATH # hearth") {
+		t.Fatalf("missing dir not dropped: %q", l[3])
+	}
+	if !strings.HasPrefix(l[4], `[ -e "$HOME"'/bootstrap/vault/gitconfig' ] && export GIT_CONFIG_GLOBAL=`) {
+		t.Fatalf("GIT_CONFIG_GLOBAL not guarded: %q", l[4])
+	}
+	if l[5] != "export EDITOR=vim" || l[6] != "export PATH=$HOME/bin:$PATH" {
+		t.Fatalf("changed lines that work here: %q", l[5:])
+	}
+}
+
+func TestShellDisabledHereByCommentedBlock(t *testing.T) {
+	h := t.TempDir()
+	t.Setenv("HOME", h)
+	home := filepath.Join(h, ".hearth")
+	f := ShellFiles(home)[0]
+	rc := "# >>> hearth >>>\n# [ -f '" + f.hookPath(home) + "' ] && . '" + f.hookPath(home) + "'\n# <<< hearth <<<\n"
+	os.WriteFile(filepath.Join(h, ".bashrc"), []byte(rc), 0o644)
+	if !shellDisabledHere(home) {
+		t.Fatal("commented-out block not respected")
+	}
+}

@@ -95,6 +95,8 @@ t=$(mktemp) && hearth secret get codex-mixin-config > "$t" \
 ```
 
 - Codex 晚于 codex-mixin 安装时补一次：`codex-mixin agent connect codex --mode custom-only`。
+- **导入成功不等于可用**：导入后 `codex-mixin doctor --no-tui` 必须是 `doctor: ok`；provider degraded（`codex exec` 报 high demand）时这台机器要本人在终端重新登录：`codex-mixin setup ...`（从另一台机器：`hearth ssh -t <机器> -- ...`），再 `hearth save --yes`。
+- `api.github.com` 被限流（403 rate limit）时：版本从 `https://github.com/Edward-lyz/codex-mixin/releases.atom` 读，校验值从 release 页面读，或用已登录的 `gh api`。
 - 检查：`codex-mixin doctor --no-tui`（应为 `doctor: ok`）、`codex-mixin provider list --no-tui`（STATUS healthy）、`codex-mixin service status --no-tui`（gateway running）。
 
 ## 6. Comate 等其他 agent

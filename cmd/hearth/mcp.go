@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -269,7 +270,9 @@ func installSkillMCP(quiet bool) ([]string, error) {
 	}
 	agents := []ag{
 		{"codex", []string{"mcp", "add", "--env", env, "hearth", "--", exe, "mcp"}, []string{"mcp", "remove", "hearth"}},
-		{"claude", []string{"mcp", "add", "--scope", "user", "-e", env, "hearth", "--", exe, "mcp"}, []string{"mcp", "remove", "hearth", "--scope", "user"}},
+		// add-json: claude's -e takes several values and swallowed the
+		// server name after it ("Invalid environment variable format: hearth").
+		{"claude", []string{"mcp", "add-json", "--scope", "user", "hearth", claudeMCPJSON(exe)}, []string{"mcp", "remove", "hearth", "--scope", "user"}},
 	}
 	var done []string
 	for _, a := range agents {
@@ -289,7 +292,7 @@ func installSkillMCP(quiet bool) ([]string, error) {
 		out, err := exec.CommandContext(context.Background(), bin, a.add...).CombinedOutput()
 		if err != nil {
 			if !quiet {
-				fmt.Printf("%-6s failed: %v\n%s", a.name, err, out)
+				fmt.Printf("%-6s failed: %v\n%s  by hand: %s %s\n", a.name, err, out, a.name, shellJoin(a.add))
 			}
 			continue
 		}
@@ -362,4 +365,22 @@ func libUsageCmd() *cobra.Command {
 	prune.Flags().BoolVar(&dry, "dry-run", false, "only list what would be deleted")
 	c.AddCommand(prune)
 	return c
+}
+
+func claudeMCPJSON(exe string) string {
+	b, _ := json.Marshal(map[string]any{"type": "stdio", "command": exe, "args": []string{"mcp"}, "env": map[string]string{"HEARTH_HOME": client.Home()}})
+	return string(b)
+}
+
+// shellJoin quotes args for a command the user can paste.
+func shellJoin(args []string) string {
+	var out []string
+	for _, a := range args {
+		if a != "" && !strings.ContainsAny(a, " '\"{}$\\*?;&|<>()") {
+			out = append(out, a)
+			continue
+		}
+		out = append(out, "'"+strings.ReplaceAll(a, "'", `'"'"'`)+"'")
+	}
+	return strings.Join(out, " ")
 }

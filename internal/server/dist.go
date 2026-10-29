@@ -180,7 +180,7 @@ if [ "${HEARTH_NO_PATH:-}" != "1" ]; then
   case ":$PATH:" in
     *":$BIN_DIR:"*) linked="$BIN_DIR" ;;
     *)
-      for d in ${HEARTH_LINK_DIRS:-/usr/local/bin "$HOME/bin"}; do
+      for d in ${HEARTH_LINK_DIRS:-/usr/local/bin /opt/homebrew/bin "$HOME/bin"}; do
         case ":$PATH:" in *":$d:"*) ;; *) continue ;; esac
         if [ -d "$d" ] && [ -w "$d" ] && { [ ! -e "$d/hearth" ] || [ -L "$d/hearth" ]; }; then
           ln -sf "$BIN_DIR/hearth" "$d/hearth" && linked="$d" && echo "linked $d/hearth -> $BIN_DIR/hearth" && break

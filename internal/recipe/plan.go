@@ -98,6 +98,9 @@ func Plan(recipes []*Recipe, opt PlanOptions) []PlanStep {
 			if done[p.Key] && p.Status == "todo" {
 				p.Status = "done"
 			}
+			if p.Status == "todo" && needsWorkspace(s) && paths.Workspace() == "" {
+				p.Status, p.Why = "skipped", "uses ${WORKSPACE}; this machine has none (hearth init <dir>)"
+			}
 			// Commands run in the agent's shell, which does not know ${WORKSPACE}.
 			if ws := paths.Workspace(); ws != "" {
 				x := func(v string) string { return strings.ReplaceAll(v, "${WORKSPACE}", ws) }

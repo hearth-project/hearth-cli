@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/hearth-project/hearth-cli/internal/client"
@@ -98,6 +100,12 @@ func printSetupSummary(e *client.Engine, conversations, secretFiles int, envLeft
 		next = append(next, fmt.Sprintf("hearth learn: %d item(s) here need your choice (changed since recorded, or credentials); the rest is recorded automatically", n))
 	}
 	next = append(next, "hearth status: check everything")
+	if exe, err := os.Executable(); err == nil {
+		if p, err := exec.LookPath("hearth"); err != nil || filepath.Dir(p) != filepath.Dir(exe) {
+			// Installed in a directory this terminal's PATH does not have yet.
+			next = append([]string{fmt.Sprintf("this terminal does not find hearth yet: open a new terminal, or run  export PATH=\"%s:$PATH\"", filepath.Dir(exe))}, next...)
+		}
+	}
 	fmt.Println("next:")
 	for _, n := range next {
 		fmt.Println("  - " + n)

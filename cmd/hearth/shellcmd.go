@@ -46,14 +46,53 @@ func shellCmd() *cobra.Command {
 			}
 			return err
 		},
-	}, &cobra.Command{
-		Use:   "restore",
-		Short: "Write the stored lines as snippets in <hearth home>/shell and source them from the rc files (setup does this)",
+	}, restoreShellCmd(), &cobra.Command{
+		Use:   "uninstall",
+		Short: "Take Hearth's lines out of this machine's rc files (the stored copy stays; stop syncing: [shell] sync = false)",
 		RunE: func(*cobra.Command, []string) error {
 			e, err := engine()
 			if err != nil {
 				return err
 			}
+			done, err := e.UninstallShell()
+			for _, d := range done {
+				fmt.Println("removed Hearth's block from", d)
+			}
+			if err == nil && len(done) == 0 {
+				fmt.Println("no Hearth block in this machine's rc files")
+			} else if err == nil {
+				fmt.Println("open a new shell; hearth shell restore puts them back")
+			}
+			return err
+		},
+	})
+	return c
+}
+
+func restoreShellCmd() *cobra.Command {
+	var dry bool
+	c := &cobra.Command{
+		Use:   "restore",
+		Short: "Write the stored lines as snippets in <hearth home>/shell and source them from the rc files (setup does this; --dry-run shows them)",
+		RunE: func(*cobra.Command, []string) error {
+			e, err := engine()
+			if err != nil {
+				return err
+			}
+			if dry {
+				pv, err := e.PreviewShell()
+				if err != nil {
+					return err
+				}
+				if len(pv) == 0 {
+					fmt.Println("nothing stored for this operating system")
+				}
+				for f, text := range pv {
+					fmt.Printf("==> %s (lines marked \"# hearth:\" are adjusted to this machine)\n%s\n\n", f, text)
+				}
+				return nil
+			}
+			e.EnableShellHere() // asked for explicitly: also after hearth shell uninstall
 			rs, err := e.RestoreShell()
 			for _, r := range rs {
 				fmt.Printf("%s: %d paragraph(s), sourced from %s\n", r.File.Path, r.Paragraphs, r.Hooked)
@@ -68,6 +107,7 @@ func shellCmd() *cobra.Command {
 			}
 			return err
 		},
-	})
+	}
+	c.Flags().BoolVar(&dry, "dry-run", false, "print what would be written, change nothing")
 	return c
 }

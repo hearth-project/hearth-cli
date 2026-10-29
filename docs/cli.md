@@ -124,7 +124,7 @@ Generated from `hearth --help` by `hearth docs cli > docs/cli.md`; every command
 | [`hearth secret rm`](#hearth-secret-rm) | Delete a secret |
 | [`hearth secret exec`](#hearth-secret-exec) | Run a command with env-style secrets (UPPER_CASE names) in its environment |
 | [`hearth up`](#hearth-up) | After a container restart: start the sync daemon and recipe services |
-| [`hearth init`](#hearth-init) | Make a directory your hearth workspace (state in <dir>/.hearth) |
+| [`hearth init`](#hearth-init) | Make a directory your hearth workspace (state in <dir>/.hearth; --move-login brings the login of ~/.hearth) |
 | [`hearth daemon`](#hearth-daemon) | Continuously sync session files in the foreground (flushes on SIGTERM) |
 | [`hearth daemon start`](#hearth-daemon-start) | Start the daemon in the background |
 | [`hearth daemon stop`](#hearth-daemon-stop) | Stop the background daemon (it flushes first) |
@@ -203,7 +203,8 @@ Generated from `hearth --help` by `hearth docs cli > docs/cli.md`; every command
 | [`hearth shell`](#hearth-shell) | Your own lines of ~/.bashrc / ~/.zshrc / ~/.bash_aliases, kept encrypted for new machines ([shell] in config.toml) |
 | [`hearth shell show`](#hearth-shell-show) | Print what Hearth keeps of each rc file on this machine (your lines, without the distribution default and Hearth's blocks) |
 | [`hearth shell save`](#hearth-shell-save) | Upload the changed rc files now (the background sync does it every 20 min) |
-| [`hearth shell restore`](#hearth-shell-restore) | Write the stored lines as snippets in <hearth home>/shell and source them from the rc files (setup does this) |
+| [`hearth shell restore`](#hearth-shell-restore) | Write the stored lines as snippets in <hearth home>/shell and source them from the rc files (setup does this; --dry-run shows them) |
+| [`hearth shell uninstall`](#hearth-shell-uninstall) | Take Hearth's lines out of this machine's rc files (the stored copy stays; stop syncing: [shell] sync = false) |
 | [`hearth ssh`](#hearth-ssh) | SSH to your machines with Hearth managing the keys (no machine: list them) |
 | [`hearth ssh enable`](#hearth-ssh-enable) | Accept SSH on this machine (default on Linux) |
 | [`hearth ssh disable`](#hearth-ssh-disable) | Stop accepting SSH on this machine (--all: on every machine of the account) |
@@ -1284,7 +1285,10 @@ hearth machine
 List your machines, architecture and agent readiness
 
 ```text
-hearth machine list
+hearth machine list [flags]
+
+Flags:
+      --all   also revoked machines
 ```
 
 ## hearth machine inspect
@@ -1419,8 +1423,15 @@ Flags:
 
 On machines where several people share one Unix account, each person keeps their state, agent config dirs and credentials in their own workspace instead of the shared $HOME.
 
+A workspace has its own login. If this machine is already logged in without one (~/.hearth) and the
+workspace is yours, --move-login moves that login and its state there (the daemon restarts); otherwise
+log in inside the workspace with hearth setup.
+
 ```text
-hearth init [dir]
+hearth init [dir] [flags]
+
+Flags:
+      --move-login   move the login and state of ~/.hearth into this workspace
 ```
 
 ## hearth daemon
@@ -2209,10 +2220,21 @@ hearth shell save
 
 ## hearth shell restore
 
-Write the stored lines as snippets in <hearth home>/shell and source them from the rc files (setup does this)
+Write the stored lines as snippets in <hearth home>/shell and source them from the rc files (setup does this; --dry-run shows them)
 
 ```text
-hearth shell restore
+hearth shell restore [flags]
+
+Flags:
+      --dry-run   print what would be written, change nothing
+```
+
+## hearth shell uninstall
+
+Take Hearth's lines out of this machine's rc files (the stored copy stays; stop syncing: [shell] sync = false)
+
+```text
+hearth shell uninstall
 ```
 
 ## hearth ssh
@@ -2225,10 +2247,14 @@ there is used as it is). Revoking a device removes its keys everywhere within a 
 
   hearth ssh                 machines you can reach
   hearth ssh <machine>       log in (part of the name is enough)
+  hearth ssh -t <machine> -- <command>   run a command that needs a terminal (QR-code login)
   hearth ssh config          Host entries in ~/.ssh/config (VS Code / Cursor Remote-SSH, scp, rsync)
 
 ```text
-hearth ssh [machine] [-- command ...]
+hearth ssh [machine] [-- command ...] [flags]
+
+Flags:
+  -t, --tty   give the command a terminal (logins that show a QR code or ask questions): hearth ssh -t <machine> -- <command>
 ```
 
 ## hearth ssh enable
