@@ -7,7 +7,7 @@ window.I18N = {
     "All machines": "全部机器", "No machine is online right now.": "当前没有在线的机器。", "My top skills (30 days)": "我最常用的 skills（30 天）",
     "My top agents (30 days)": "我最常用的 agents（30 天）", "No usage yet": "暂无使用记录",
     "Conversations and credentials are end-to-end encrypted: this page cannot read their titles or contents.": "会话和凭证是端到端加密的：网页端看不到它们的标题和内容。",
-    "Online = background sync reported in the last 15 minutes.": "在线 = 后台同步最近 15 分钟内有上报。", "offline": "离线", "Log out": "下线",
+    "Online = background sync reported in the last 15 minutes.": "在线 = 后台同步最近 15 分钟内有上报。", "Environment": "环境", "offline": "离线", "Log out": "下线",
     "Log this machine out? It must run hearth setup again.": "让这台机器下线？之后需要在它上面重新执行 hearth setup。",
     "No machines yet. Install Hearth on a machine and run hearth setup.": "还没有机器。在机器上安装 Hearth 并执行 hearth setup。",
     "resident": "常驻", "Copy": "复制", "Copied": "已复制", "Copy failed": "复制失败", "Content": "内容", "Files": "文件", "Versions": "版本历史",

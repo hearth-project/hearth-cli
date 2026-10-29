@@ -292,7 +292,12 @@ func (s *Server) handleListDevices(w http.ResponseWriter, r *http.Request) {
 		var machine, health map[string]any
 		_ = json.Unmarshal([]byte(d.MachineJSON), &machine)
 		_ = json.Unmarshal([]byte(d.HealthJSON), &health)
-		out = append(out, api.Device{ID: d.ID, Name: d.Name, Status: d.Status, LastSeen: d.LastSeen, LastIP: d.LastIP, Online: online, Machine: machine, Health: health, HealthAt: d.HealthAt})
+		dev := api.Device{ID: d.ID, Name: d.Name, Status: d.Status, LastSeen: d.LastSeen, LastIP: d.LastIP, Online: online, Machine: machine, Health: health, HealthAt: d.HealthAt}
+		if d.Status == "active" {
+			b, _ := json.Marshal(s.machineEnv(d.HealthJSON, d.ClientVersion))
+			_ = json.Unmarshal(b, &dev.Env)
+		}
+		out = append(out, dev)
 	}
 	writeJSON(w, http.StatusOK, out)
 }

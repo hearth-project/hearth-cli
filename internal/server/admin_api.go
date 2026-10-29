@@ -1,6 +1,7 @@
 package server
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"sort"
@@ -196,6 +197,10 @@ type adminDevice struct {
 	// Conversations this device wrote last (count) and its newest activity.
 	Sessions   int64 `json:"sessions"`
 	LastActive int64 `json:"last_active,omitempty"`
+	// Env: the environment check from its latest health report.
+	Env *MachineEnv `json:"env,omitempty"`
+	// Facts: OS, architecture and GPU it reported.
+	Facts map[string]any `json:"facts,omitempty"`
 }
 
 func (s *Server) apiUserDevices(w http.ResponseWriter, r *http.Request, _ adminCtx) {
@@ -209,7 +214,7 @@ func (s *Server) apiUserDevices(w http.ResponseWriter, r *http.Request, _ adminC
 
 // writeDevices lists a user's devices, newest activity first.
 func (s *Server) writeDevices(w http.ResponseWriter, uid int64) {
-	rows, err := s.st.rdb.Query(`SELECT id,name,status,created_at,last_seen,client_version,last_ip,offline_at FROM devices WHERE user_id=? ORDER BY last_seen DESC`, uid)
+	rows, err := s.st.rdb.Query(`SELECT id,name,status,created_at,last_seen,client_version,last_ip,offline_at,machine_json,health_json FROM devices WHERE user_id=? ORDER BY last_seen DESC`, uid)
 	if err != nil {
 		s.writeStoreErr(w, err)
 		return
@@ -231,9 +236,19 @@ func (s *Server) writeDevices(w http.ResponseWriter, uid int64) {
 	for rows.Next() {
 		var d adminDevice
 		var off int64
-		if err := rows.Scan(&d.ID, &d.Name, &d.Status, &d.CreatedAt, &d.LastSeen, &d.Version, &d.IP, &off); err != nil {
+		var machineJSON, healthJSON string
+		if err := rows.Scan(&d.ID, &d.Name, &d.Status, &d.CreatedAt, &d.LastSeen, &d.Version, &d.IP, &off, &machineJSON, &healthJSON); err != nil {
 			s.writeStoreErr(w, err)
 			return
+		}
+		if d.Status == "active" {
+			d.Env = s.machineEnv(healthJSON, d.Version)
+			var m struct {
+				Facts map[string]any `json:"facts"`
+			}
+			if json.Unmarshal([]byte(machineJSON), &m) == nil {
+				d.Facts = m.Facts
+			}
 		}
 		d.Online = d.Status == "active" && d.LastSeen >= s.now()-int64(onlineWindow.Seconds()) && off == 0
 		d.Sessions, d.LastActive = per[d.ID].n, per[d.ID].last

@@ -1594,6 +1594,7 @@ Flags:
       --identity-broker string       platform identity broker for passwordless login, e.g. https://identity.example.com [$HEARTH_IDENTITY_BROKER_URL]
       --identity-broker-key string   system key used to sign identity-broker requests [$HEARTH_IDENTITY_BROKER_KEY]
       --no-client-auto-update        client daemons do not install new builds by themselves (hearth self-update still works) [$HEARTH_NO_CLIENT_AUTO_UPDATE=1]
+      --no-version-check             do not look up the latest Codex CLI / Claude Code / codex-mixin releases (npm registry, GitHub; every 6 hours, through $HTTPS_PROXY; $HEARTH_NPM_REGISTRY for a mirror) for the machines' environment check [$HEARTH_NO_VERSION_CHECK=1]
       --pin-install                  self-signed certificate: put --pinnedpubkey in the install one-liner, so even the first download is verified (default: plain -k; the installer then pins the certificate) [$HEARTH_PIN_INSTALL=1]
       --public-url string            URL clients use to reach this server; enables /install.sh [$HEARTH_PUBLIC_URL]
       --quota string                 default storage quota per user, e.g. 10GiB (per-user: hearth server admin quota) [$HEARTH_QUOTA] (default "unlimited")

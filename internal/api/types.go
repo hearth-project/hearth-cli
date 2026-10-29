@@ -135,6 +135,10 @@ type Device struct {
 	Machine  map[string]any `json:"machine,omitempty"`
 	Health   map[string]any `json:"health,omitempty"`
 	HealthAt int64          `json:"health_at,omitempty"`
+	// Env is the server's environment check of the machine: status (ok,
+	// warn, error, unknown) and problems (missing or outdated tools, failed
+	// checks, restore steps left).
+	Env map[string]any `json:"env,omitempty"`
 	// Online: the device talked to the server in the last few minutes (its
 	// daemon heartbeats every minute) and did not sign off since.
 	Online bool `json:"online"`

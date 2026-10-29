@@ -120,7 +120,7 @@ func machineCmd() *cobra.Command {
 			return err
 		}
 		t := &table{}
-		t.add("MACHINE", "STATE", "FACTS", "AGENTS", "RESTORE")
+		t.add("MACHINE", "STATE", "FACTS", "ENVIRONMENT", "CONNECT")
 		for _, d := range ds {
 			state := "offline"
 			if d.Status != "active" {
@@ -136,18 +136,19 @@ func machineCmd() *cobra.Command {
 					fact += " " + g
 				}
 			}
-			ag := "unknown"
+			ag := envSummary(d.Env)
 			restore := "hearth ssh " + d.ID[:minInt(8, len(d.ID))]
-			if h, ok := d.Health["status"].(string); ok {
-				ag = h
-			}
 			if !d.Online {
 				restore = "offline"
+			}
+			if d.Status != "active" {
+				ag, restore = "-", "-"
 			}
 			t.add(d.Name, state, fact, ag, restore)
 		}
 		t.fit()
 		t.print()
+		fmt.Println("details: hearth machine inspect <machine>; fix from here: ask your agent \"恢复 <machine> 的 Codex 环境\"")
 		return nil
 	}}
 	inspect := &cobra.Command{Use: "inspect <machine>", Short: "Show a machine's public health report", Args: cobra.ExactArgs(1), RunE: func(_ *cobra.Command, a []string) error {
@@ -240,4 +241,53 @@ func minInt(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// envSummary is the server's environment check in one cell.
+func envSummary(env map[string]any) string {
+	st, _ := env["status"].(string)
+	probs, _ := env["problems"].([]any)
+	switch st {
+	case "ok":
+		return "ok"
+	case "", "unknown":
+		return "not reported"
+	}
+	var first string
+	if len(probs) > 0 {
+		if p, ok := probs[0].(map[string]any); ok {
+			first = envProblemText(p)
+		}
+	}
+	if len(probs) > 1 {
+		return fmt.Sprintf("%d problems: %s, …", len(probs), first)
+	}
+	return first
+}
+
+func envProblemText(p map[string]any) string {
+	s := func(k string) string { v, _ := p[k].(string); return v }
+	n, _ := p["behind"].(float64)
+	tool := s("tool")
+	switch s("code") {
+	case "missing":
+		return tool + " not installed"
+	case "outdated":
+		more := ""
+		if m, _ := p["more"].(bool); m {
+			more = "≥"
+		}
+		return fmt.Sprintf("%s %s%d behind (%s → %s)", tool, more, int(n), s("have"), s("latest"))
+	case "doctor":
+		return tool + " check failed: " + s("detail")
+	case "integration":
+		return tool + " not connected to hearth"
+	case "node":
+		return "node too old for codex (" + s("have") + ")"
+	case "steps":
+		return fmt.Sprintf("%d restore step(s) left", int(n))
+	case "hearth":
+		return "hearth " + s("have") + " → " + s("latest")
+	}
+	return s("code")
 }

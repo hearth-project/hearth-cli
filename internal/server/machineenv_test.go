@@ -1,0 +1,55 @@
+package server
+
+import (
+	"testing"
+)
+
+func TestBehind(t *testing.T) {
+	rel := []string{"0.165.0", "0.164.0", "0.163.0", "0.162.1"}
+	if l, n, more := behind(rel, "codex-cli 0.163.0"); l != "0.165.0" || n != 2 || more {
+		t.Fatalf("%s %d %v", l, n, more)
+	}
+	if _, n, _ := behind(rel, "0.166.0-alpha"); n != 0 {
+		t.Fatalf("newer counted behind: %d", n)
+	}
+	if _, n, more := behind(rel, "0.100.0"); n != 4 || !more {
+		t.Fatalf("older than the list: %d %v", n, more)
+	}
+}
+
+func TestMachineEnv(t *testing.T) {
+	s := &Server{versions: newToolVersions()}
+	s.versions.set("codex", []string{"0.165.0", "0.164.0", "0.163.0"})
+	s.versions.set("codex-mixin", []string{"0.7.5", "0.7.4", "0.7.3"})
+	health := `{"checked_at":1,"agents":{"codex":{"enabled":true,"installed":true,"ready":true}},
+	 "tools":{"codex":{"expected":true,"installed":true,"version":"0.163.0"},
+	          "codex-mixin":{"expected":true,"installed":true,"version":"0.7.3","ok":false,"detail":"provider not logged in"},
+	          "claude":{"expected":true,"installed":false},"node":{"expected":false,"installed":true,"version":"24.4.1"}},
+	 "recipe_todo":2,"todo_steps":["codex-mixin-import","gateway"]}`
+	env := s.machineEnv(health, "")
+	if env.Status != "error" {
+		t.Fatalf("status %s", env.Status)
+	}
+	codes := map[string]EnvProblem{}
+	for _, p := range env.Problems {
+		codes[p.Code+":"+p.Tool] = p
+	}
+	if p := codes["outdated:codex"]; p.Behind != 2 || p.Latest != "0.165.0" {
+		t.Fatalf("codex outdated: %+v", p)
+	}
+	if p := codes["outdated:codex-mixin"]; p.Behind != 2 {
+		t.Fatalf("mixin outdated: %+v", p)
+	}
+	for _, k := range []string{"doctor:codex-mixin", "missing:claude", "steps:"} {
+		if _, ok := codes[k]; !ok {
+			t.Fatalf("missing %s in %+v", k, env.Problems)
+		}
+	}
+	if s.machineEnv("{}", "").Status != "unknown" {
+		t.Fatal("no report is unknown")
+	}
+	ok := s.machineEnv(`{"checked_at":1,"tools":{"codex":{"expected":true,"installed":true,"version":"0.165.0"}}}`, "")
+	if ok.Status != "ok" || len(ok.Problems) != 0 {
+		t.Fatalf("%+v", ok)
+	}
+}

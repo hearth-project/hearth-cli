@@ -153,3 +153,27 @@ pre.content{background:var(--bg);border:1px solid var(--line);border-radius:8px;
 label.check .nm{flex:1;font-weight:500}
 .loginform label.remember{flex-direction:row;align-items:center;gap:8px;font-weight:500}.loginform label.remember input{width:15px;height:15px;accent-color:var(--acc);padding:0}
 ol.rank li.clickable{cursor:pointer}
+/* machine environment check */
+.envpill{display:inline-flex;align-items:center;gap:7px;padding:3px 11px 3px 9px;border-radius:999px;font-size:12px;font-weight:600;border:1px solid transparent;background:var(--bg);color:var(--muted);white-space:nowrap}
+.envpill:hover{color:inherit;filter:brightness(.98)}
+.envpill.ok{background:var(--ok2);color:var(--ok)}.envpill.warn{background:var(--warn2);color:var(--warn)}.envpill.bad{background:var(--bad2);color:var(--bad)}
+.envpill.stale{opacity:.6}
+.edot{width:8px;height:8px;border-radius:50%;flex:none;background:var(--muted)}
+.envpill.ok .edot,.envlist li.ok .edot{background:var(--ok)}.envpill.warn .edot,.envlist li.warn .edot{background:var(--warn)}
+.envpill.bad .edot,.envlist li.error .edot{background:var(--bad)}
+.envpill.bad .edot{box-shadow:0 0 0 0 rgba(220,38,38,.5);animation:epulse 1.8s infinite}
+@keyframes epulse{0%{box-shadow:0 0 0 0 rgba(220,38,38,.45)}70%{box-shadow:0 0 0 6px rgba(220,38,38,0)}100%{box-shadow:0 0 0 0 rgba(220,38,38,0)}}
+.envhead{display:flex;flex-direction:column;gap:2px;padding-bottom:8px;margin-bottom:8px;border-bottom:1px solid var(--line)}
+.envlist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:7px}
+.envlist li{display:flex;gap:9px;align-items:flex-start;line-height:1.45}.envlist li .edot{margin-top:5px}
+.envlist.big li{padding:8px 10px;border-radius:8px;background:var(--card);border:1px solid var(--line)}
+.envlist.big li.error{border-color:rgba(220,38,38,.25)}
+.envok{display:flex;align-items:center;gap:8px;color:var(--ok);font-weight:500}.envok svg{width:16px;height:16px}
+code.fix{display:inline-block;margin-top:5px;padding:2px 8px;border-radius:6px;background:var(--bg);border:1px solid var(--line)}
+.envdetail{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:24px}
+.envdetail h4{font-size:11.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin:0 0 10px}
+.envtools th,.envtools td{padding:6px 10px}.envtools{background:var(--card);border:1px solid var(--line);border-radius:8px;border-collapse:separate;overflow:hidden}
+.envhow{margin-top:14px}
+.facts{margin-top:2px;font-size:11.5px}
+@media(max-width:1000px){.envdetail{grid-template-columns:1fr}}
+.notice.warnbox{background:var(--bad2);color:var(--bad)}

@@ -62,6 +62,10 @@ type Config struct {
 	// the request is signed with Key. Empty = identity login disabled.
 	IdentityBrokerURL string
 	IdentityBrokerKey string
+	// VersionCheck looks up the latest Codex CLI, Claude Code and
+	// codex-mixin releases (npm registry, GitHub) every few hours, so the
+	// console shows how far behind each machine is.
+	VersionCheck bool
 }
 
 // Server is an http.Handler backed by a metadata database (SQLite or
@@ -81,6 +85,7 @@ type Server struct {
 	// settings: runtime settings from the admin panel (settings.go).
 	settings settingsCache
 	activity *activity
+	versions *toolVersions
 	adminKey []byte // signs admin panel sessions
 	started  time.Time
 	// quotaFlag caches whether any account has its own quota.
@@ -142,19 +147,23 @@ func New(cfg Config) (*Server, error) {
 		return nil, err
 	}
 	s := &Server{cfg: cfg, st: st, secret: secret, limiter: newLimiter(cfg.AuthPerMin, time.Minute), dist: dist, auth: newAuthCache(), search: newSearchCache(), quota: newQuotaCache(),
-		activity: newActivity(), started: time.Now()}
+		activity: newActivity(), versions: newToolVersions(), started: time.Now()}
 	if s.adminKey, err = st.setting("admin_session_key", func() []byte { return crypto.RandomBytes(32) }); err != nil {
 		st.close()
 		return nil, err
 	}
 	s.routes()
 	go s.activityLoop()
+	if cfg.VersionCheck {
+		go s.versionLoop()
+	}
 	return s, nil
 }
 
 // Close releases the database.
 func (s *Server) Close() error {
 	close(s.activity.stop)
+	close(s.versions.stop)
 	<-s.activity.done // last counts written
 	return s.st.close()
 }
