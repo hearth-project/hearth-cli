@@ -137,7 +137,7 @@ hearth config --edit                 # 所有设置都在这一个文件里
 
 ## 路线图：长期记忆
 
-Hearth 搬运工作现场，现在也开始带上记忆：任何 agent 都能想起你在任何机器上做过的事（历史对话、决定、踩过的坑）和你让它记住的习惯；Codex 和 Claude Code 通过提问前 hook 自动带上相关记忆，毫秒级检索，依然端到端加密。试试 `hearth recall <关键词>`。设计和后续计划见 [记忆功能路线图](docs/zh/memory-roadmap.md)。
+Hearth 搬运工作现场，现在也开始带上记忆：任何 agent 都能想起你在任何机器上做过的事（历史对话、决定、踩过的坑）和你让它记住的习惯；Codex 和 Claude Code 通过提问前 hook 自动带上相关记忆，毫秒级检索，依然端到端加密。试试 `hearth recall <关键词>`。设计和后续计划见 [记忆功能路线图](docs/zh/memory-roadmap.md)。本季度和下季度的全部计划见 [开发路线图](https://github.com/hearth-project/hearth-cli/issues/1)。
 
 ---
 
@@ -189,7 +189,7 @@ Hearth 搬运工作现场，现在也开始带上记忆：任何 agent 都能想
 | 接入新的 agent | [Agent 接入](docs/zh/agent-integration.md) | [Agent integration](docs/en/agent-integration.md) |
 | 全部命令 | — | [CLI reference](docs/cli.md) |
 | 内部实现 | — | [Technical reference](docs/en/reference.md) |
-| 长期记忆（规划中） | [记忆功能路线图](docs/zh/memory-roadmap.md) | [Memory roadmap](docs/en/memory-roadmap.md) |
+| 长期记忆：设计与进展 | [记忆功能路线图](docs/zh/memory-roadmap.md) | [Memory roadmap](docs/en/memory-roadmap.md) |
 | agent skill | [skills/hearth/SKILL.md](skills/hearth/SKILL.md) | — |
 
 ---
@@ -203,7 +203,7 @@ scripts/deploy-server.sh --host 127.0.0.1 --source --data /tmp/hearth       # �
 hearth docs cli > docs/cli.md                                                # 重新生成 CLI 参考
 ```
 
-欢迎贡献，见 [CONTRIBUTING](CONTRIBUTING.md)。安全问题见 [SECURITY](SECURITY.md)，更新记录见 [CHANGELOG](CHANGELOG.md)。
+欢迎贡献，见 [CONTRIBUTING](CONTRIBUTING.md) 和 [行为准则](CODE_OF_CONDUCT.md)。获取帮助见 [SUPPORT](SUPPORT.md)，安全问题见 [SECURITY](SECURITY.md)，更新记录见 [CHANGELOG](CHANGELOG.md)。
 
 ## 许可证
 

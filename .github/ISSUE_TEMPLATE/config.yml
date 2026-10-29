@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/hearth-project/hearth-cli/security/advisories/new
+    about: Please report vulnerabilities privately, not in a public issue.
+  - name: Troubleshooting and FAQ
+    url: https://github.com/hearth-project/hearth-cli/blob/main/docs/en/troubleshooting.md
+    about: Common problems and fixes; run `hearth doctor` and `hearth status` first.
+  - name: Development roadmap
+    url: https://github.com/hearth-project/hearth-cli/issues/1
+    about: Planned work for this and the next quarter. Comment there before proposing a large feature.

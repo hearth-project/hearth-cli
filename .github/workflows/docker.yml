@@ -1,0 +1,84 @@
+name: docker
+# Pull requests that touch the image: build it and run the binary (no push).
+# Tags v*: build linux/amd64 + linux/arm64 and push ghcr.io/hearth-project/hearth.
+on:
+  push:
+    tags: ["v*"]
+  pull_request:
+    paths:
+      - Dockerfile
+      - .dockerignore
+      - deploy/**
+      - go.mod
+      - go.sum
+      - scripts/build-dist.sh
+      - .github/workflows/docker.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: docker-${{ github.ref }}
+  cancel-in-progress: true
+env:
+  IMAGE: ghcr.io/hearth-project/hearth
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v3
+      - name: compose files are valid
+        run: |
+          docker compose -f deploy/docker-compose.yml config -q
+          docker compose -f deploy/docker-compose.scale.yml config -q
+      - name: version
+        id: v
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          else echo "version=0.0.0-ci.${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"; fi
+      - name: build for this runner and smoke test
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: hearth:ci
+          build-args: VERSION=${{ steps.v.outputs.version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: smoke test
+        run: |
+          docker run --rm --entrypoint hearth hearth:ci --version
+          docker run -d --name hearth-ci -p 8787:8787 -e HEARTH_REGISTRATION=open hearth:ci
+          for i in $(seq 30); do curl -fsS http://127.0.0.1:8787/v1/info && break; sleep 1; done
+          curl -fsS http://127.0.0.1:8787/v1/info > /dev/null || { docker logs hearth-ci; exit 1; }
+          docker rm -f hearth-ci
+      - uses: docker/metadata-action@v5
+        if: startsWith(github.ref, 'refs/tags/v')
+        id: meta
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+      - uses: docker/login-action@v3
+        if: startsWith(github.ref, 'refs/tags/v')
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: build and push (amd64 + arm64)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: VERSION=${{ steps.v.outputs.version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

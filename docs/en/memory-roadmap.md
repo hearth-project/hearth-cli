@@ -2,7 +2,9 @@
 
 [中文](../zh/memory-roadmap.md) · [Back to README](../../README.md)
 
-> Status: design, not implemented yet. Hearth today is a **portable workspace** for coding agents (conversations, skills, credentials and setup follow you). This document describes how it gains **long-term memory** on top of that.
+> Status: **M1 shipped, M2 in progress** (see "Unreleased" in [CHANGELOG](../../CHANGELOG.md)). Available now: memory cards, the local FTS5 index, `hearth recall`, `hearth memory remember|forget|list`, MCP `recall` / `remember` / `forget`, and the Codex and Claude Code prompt hooks. Still open: `hearth memory review`, confirming proposed facts, the resident profile block, Comate, and all of M3; schedule in the [development roadmap](https://github.com/hearth-project/hearth-cli/issues/1).
+>
+> Hearth is a **portable workspace** for coding agents (conversations, skills, credentials and setup follow you). This document describes how it gains **long-term memory** on top of that.
 
 ## Goals
 

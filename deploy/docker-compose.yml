@@ -6,7 +6,7 @@
 services:
   hearth:
     build: ..
-    image: hearth:latest
+    image: ghcr.io/hearth-project/hearth:latest   # pulled when published; `up --build` builds this checkout
     restart: unless-stopped
     ports: ["8787:8787"]
     volumes: ["hearth-data:/data"]

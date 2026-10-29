@@ -56,7 +56,9 @@ docker compose -f deploy/docker-compose.yml exec hearth hearth server invite  # 
 docker compose -f deploy/docker-compose.scale.yml up -d --scale hearth=2      # PostgreSQL + MinIO + 多实例
 ```
 
-设置 `HEARTH_PUBLIC_URL` 并提供 TLS（`hearth server gencert` 写入数据卷，或前置 HTTPS 反向代理）后才提供安装脚本。Docker 文件尚未在 CI 中测试。
+每次发布都会推送镜像 `ghcr.io/hearth-project/hearth`（标签 `latest`、`<版本号>`、`<主版本>.<次版本>`；linux/amd64 和 linux/arm64），compose 文件默认使用它。加 `--build` 则用本地代码构建镜像。Docker 相关文件有改动时，CI 会构建镜像并启动服务器检查。
+
+设置 `HEARTH_PUBLIC_URL` 并提供 TLS（`hearth server gencert` 写入数据卷，或前置 HTTPS 反向代理）后才提供安装脚本。
 
 ## 站点默认配置（组织内部的配方和文件）
 

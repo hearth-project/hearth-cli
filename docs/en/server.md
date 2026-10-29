@@ -56,7 +56,9 @@ docker compose -f deploy/docker-compose.yml exec hearth hearth server invite  # 
 docker compose -f deploy/docker-compose.scale.yml up -d --scale hearth=2      # PostgreSQL + MinIO + replicas
 ```
 
-The installer is served once `HEARTH_PUBLIC_URL` is set and TLS is provided (`hearth server gencert` into the volume, or an HTTPS reverse proxy). The Docker files are not tested in CI yet.
+Every release publishes the image `ghcr.io/hearth-project/hearth` (`latest`, `<version>`, `<major>.<minor>`; linux/amd64 and linux/arm64), which the compose files use. Add `--build` to build the image from your checkout instead. CI builds the image and starts the server for every change to the Docker files.
+
+The installer is served once `HEARTH_PUBLIC_URL` is set and TLS is provided (`hearth server gencert` into the volume, or an HTTPS reverse proxy).
 
 ## Site defaults (your organisation's recipes and files)
 

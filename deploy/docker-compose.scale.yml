@@ -31,7 +31,7 @@ services:
              mc mb --ignore-existing m/hearth"
   hearth:
     build: ..
-    image: hearth:latest
+    image: ghcr.io/hearth-project/hearth:latest   # pulled when published; `up --build` builds this checkout
     restart: unless-stopped
     depends_on:
       postgres: {condition: service_healthy}
