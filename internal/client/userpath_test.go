@@ -92,14 +92,35 @@ func TestLookToolFallbacks(t *testing.T) {
 	h := t.TempDir()
 	t.Setenv("HOME", h)
 	t.Setenv("PATH", "/nonexistent")
-	bin := filepath.Join(h, "Applications", "Codex.app", "Contents", "Resources", "app", "bin", "codex")
-	os.MkdirAll(filepath.Dir(bin), 0o755)
-	os.WriteFile(bin, []byte("#!/bin/sh\n"), 0o755)
-	if p, err := lookTool("codex"); err != nil || p != bin {
-		t.Fatalf("app bundle: %q %v", p, err)
+	mk := func(rel string) string {
+		p := filepath.Join(h, "Applications", rel)
+		os.MkdirAll(filepath.Dir(p), 0o755)
+		os.WriteFile(p, []byte("#!/bin/sh\n"), 0o755)
+		return p
 	}
-	self, _ := os.Executable()
-	if p := runningBinary(filepath.Base(self)); p == "" {
+	// Codex shipped with the ChatGPT app: the wrapper and the nested app.
+	nested := mk("ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex")
+	if p, err := lookTool("codex"); err != nil || p != nested {
+		t.Fatalf("nested CodexCLI.app: %q %v", p, err)
+	}
+	wrapper := mk("ChatGPT.app/Contents/Resources/codex-cli/bin/codex")
+	if p, _ := lookTool("codex"); p != wrapper {
+		t.Fatalf("wrapper not preferred: %q", p)
+	}
+	if p, _ := lookTool("codex-mixin"); strings.Contains(p, "ChatGPT.app") {
+		t.Fatalf("codex-mixin found in the ChatGPT app: %q", p)
+	}
+	mixin := mk("Codex Mixin.app/Contents/Resources/codex-mixin")
+	if p, _ := lookTool("codex-mixin"); p != mixin {
+		t.Fatalf("Codex Mixin.app: %q", p)
+	}
+	// Elsewhere in an app: found by walking apps named like the tool.
+	os.RemoveAll(filepath.Join(h, "Applications"))
+	odd := mk("Codex Beta.app/Contents/Resources/app/bin/codex")
+	if p, _ := lookTool("codex"); p != odd {
+		t.Fatalf("walk: %q", p)
+	}
+	if self, _ := os.Executable(); runningBinary(filepath.Base(self)) == "" {
 		t.Fatal("running process not found")
 	}
 }

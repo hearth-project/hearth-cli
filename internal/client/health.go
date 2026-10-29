@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hearth-project/hearth-cli/internal/mcpcfg"
 	"github.com/hearth-project/hearth-cli/internal/proxyenv"
 )
 
@@ -202,26 +203,80 @@ func cachedMixinDoctor(bin string) (*bool, string) {
 	return mixinCache.ok, mixinCache.detail
 }
 
-// lookTool finds a tool the way the user reaches it: on PATH, else inside
-// an app bundle (the Codex app ships its CLI), else as a running process
-// (a gateway started by its own service), else in a launchd agent (macOS).
-func lookTool(name string) (string, error) {
+// appTools: where desktop apps bundle a tool's command line (macOS),
+// relative to an app; the apps named first are searched first, then any
+// app whose name contains a hint (a few levels deep, nested apps too).
+var appTools = map[string]struct {
+	paths []string // "<App>.app/..." under /Applications or ~/Applications
+	hints []string // app name parts
+}{
+	"codex": {paths: []string{
+		"ChatGPT.app/Contents/Resources/codex-cli/bin/codex", // Codex ships with the ChatGPT app
+		"ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex",
+		"Codex.app/Contents/Resources/codex", "Codex.app/Contents/Resources/bin/codex", "Codex.app/Contents/MacOS/codex",
+	}, hints: []string{"ChatGPT", "Codex"}},
+	"codex-mixin": {paths: []string{"Codex Mixin.app/Contents/Resources/codex-mixin", "Codex Mixin.app/Contents/MacOS/codex-mixin"},
+		hints: []string{"Mixin"}},
+	"claude": {paths: []string{"Claude.app/Contents/Resources/claude-code/bin/claude"}, hints: []string{"Claude"}},
+}
+
+// LookTool finds a tool the way the user reaches it: on PATH, else inside
+// a desktop app (Codex in ChatGPT.app, codex-mixin in Codex Mixin.app),
+// else as a running process (a gateway started by its own service), else
+// in a launchd agent (macOS). The check and every command Hearth runs an
+// agent CLI with use it, so they agree with each other.
+func LookTool(name string) (string, error) {
 	p, err := exec.LookPath(name)
 	if err == nil {
 		return p, nil
 	}
-	if name == "codex" {
-		if c := appBundleBinary("Codex", name); c != "" {
+	if c := appBinary(name); c != "" {
+		return c, nil
+	}
+	if serviceTools[name] {
+		if c := runningBinary(name); c != "" {
+			return c, nil
+		}
+		if c := launchAgentBinary(name); c != "" {
 			return c, nil
 		}
 	}
-	if c := runningBinary(name); c != "" {
-		return c, nil
-	}
-	if c := launchAgentBinary(name); c != "" {
-		return c, nil
-	}
 	return "", err
+}
+
+func lookTool(name string) (string, error) { return LookTool(name) }
+
+// serviceTools run as background services (a gateway): a running process
+// or a launchd agent of theirs shows where they are installed.
+var serviceTools = map[string]bool{"codex-mixin": true}
+
+func init() { mcpcfg.Look = LookTool }
+
+func appDirs() []string {
+	h, _ := os.UserHomeDir()
+	return []string{"/Applications", filepath.Join(h, "Applications")}
+}
+
+// appBinary looks in the known places first, then walks apps named like
+// the tool's hints.
+func appBinary(name string) string {
+	t, ok := appTools[name]
+	if !ok {
+		return ""
+	}
+	for _, dir := range appDirs() {
+		for _, rel := range t.paths {
+			if p := filepath.Join(dir, rel); isExecFile(p) {
+				return p
+			}
+		}
+	}
+	for _, hint := range t.hints {
+		if c := appBundleBinary(hint, name); c != "" {
+			return c
+		}
+	}
+	return ""
 }
 
 func isExecFile(p string) bool {
@@ -232,8 +287,7 @@ func isExecFile(p string) bool {
 // appBundleBinary looks for an executable called name in *<app>*.app
 // bundles under /Applications and ~/Applications (a few levels deep).
 func appBundleBinary(app, name string) string {
-	h, _ := os.UserHomeDir()
-	for _, dir := range []string{"/Applications", filepath.Join(h, "Applications")} {
+	for _, dir := range appDirs() {
 		apps, _ := filepath.Glob(filepath.Join(dir, "*"+app+"*.app"))
 		for _, a := range apps {
 			root := filepath.Join(a, "Contents")
@@ -243,7 +297,7 @@ func appBundleBinary(app, name string) string {
 					return filepath.SkipDir
 				}
 				if d.IsDir() {
-					if strings.Count(strings.TrimPrefix(p, root), string(filepath.Separator)) > 5 || strings.HasSuffix(p, ".framework") || strings.HasSuffix(p, ".lproj") {
+					if strings.Count(strings.TrimPrefix(p, root), string(filepath.Separator)) > 6 || strings.HasSuffix(p, ".framework") || strings.HasSuffix(p, ".lproj") {
 						return filepath.SkipDir
 					}
 					return nil
