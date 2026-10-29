@@ -137,7 +137,7 @@ Every step in detail: [Quick start guide](docs/en/quickstart.md).
 
 ## Roadmap: long-term memory
 
-Hearth carries the workspace, and now a memory too: every agent can recall what you did on any machine (past conversations, decisions, fixes) and what you asked it to remember, automatically in Codex and Claude Code through prompt hooks, in milliseconds, still end-to-end encrypted. Try `hearth recall <words>`. Design and next steps: [Memory roadmap](docs/en/memory-roadmap.md).
+Hearth carries the workspace, and now a memory too: every agent can recall what you did on any machine (past conversations, decisions, fixes) and what you asked it to remember, automatically in Codex and Claude Code through prompt hooks, in milliseconds, still end-to-end encrypted. Try `hearth recall <words>`. Design and next steps: [Memory roadmap](docs/en/memory-roadmap.md). Everything planned for this and the next quarter: [Development roadmap](https://github.com/hearth-project/hearth-cli/issues/1).
 
 ---
 
@@ -189,7 +189,7 @@ Hearth carries the workspace, and now a memory too: every agent can recall what 
 | Adding an agent | [Agent integration](docs/en/agent-integration.md) | [Agent 接入](docs/zh/agent-integration.md) |
 | Every command | [CLI reference](docs/cli.md) | — |
 | How it works inside | [Technical reference](docs/en/reference.md) | — |
-| Long-term memory (planned) | [Memory roadmap](docs/en/memory-roadmap.md) | [记忆功能路线图](docs/zh/memory-roadmap.md) |
+| Long-term memory: design and status | [Memory roadmap](docs/en/memory-roadmap.md) | [记忆功能路线图](docs/zh/memory-roadmap.md) |
 | The agent skill | [skills/hearth/SKILL.md](skills/hearth/SKILL.md) | — |
 
 ---
@@ -203,7 +203,7 @@ scripts/deploy-server.sh --host 127.0.0.1 --source --data /tmp/hearth       # a 
 hearth docs cli > docs/cli.md                                                # regenerate the CLI reference
 ```
 
-Contributions are welcome: see [CONTRIBUTING](CONTRIBUTING.md). Security issues: [SECURITY](SECURITY.md). Changes: [CHANGELOG](CHANGELOG.md).
+Contributions are welcome: see [CONTRIBUTING](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md). Getting help: [SUPPORT](SUPPORT.md). Security issues: [SECURITY](SECURITY.md). Changes: [CHANGELOG](CHANGELOG.md).
 
 ## License
 

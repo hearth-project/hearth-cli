@@ -5,7 +5,7 @@ Thanks for helping. Hearth is a single Go module: client and server are one bina
 ## Setup
 
 ```bash
-git clone https://github.com/hearth-project/hearth-cli && cd hearth
+git clone https://github.com/hearth-project/hearth-cli && cd hearth-cli
 go build -o ~/.local/bin/hearth ./cmd/hearth      # Go 1.26+
 ```
 

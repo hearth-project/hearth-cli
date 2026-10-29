@@ -16,7 +16,13 @@ jobs:
       - run: go test -count=1 ./...
       - name: build
         run: scripts/build-dist.sh dist "${GITHUB_REF_NAME#v}"
+      - name: release notes from CHANGELOG.md
+        # The "## <version> ..." section, followed by GitHub's generated list of
+        # pull requests and contributors.
+        run: |
+          scripts/changelog-notes.sh "${GITHUB_REF_NAME#v}" > notes.md
+          cat notes.md
       - name: publish
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" dist/hearth-* dist/SHA256SUMS --generate-notes --title "$GITHUB_REF_NAME"
+        run: gh release create "$GITHUB_REF_NAME" dist/hearth-* dist/SHA256SUMS --notes-file notes.md --generate-notes --title "$GITHUB_REF_NAME"

@@ -11,4 +11,4 @@ Please report vulnerabilities privately through GitHub's "Report a vulnerability
 - The recovery key is the only way back after a forgotten password; `hearth recovery-key rotate` replaces it.
 - In plaintext on the server: account emails, session sizes and timestamps, the user's library (skills, agents, recipes, settings; a secret scan blocks likely credentials before upload), team publications, and the site defaults (served without login unless `--site-auth`).
 - A compromised client machine is out of scope: the cached vault key there can decrypt the account's data.
-- Not implemented yet: MFA, email verification, an audit log of admin actions.
+- Not implemented yet: MFA, email verification ([roadmap](https://github.com/hearth-project/hearth-cli/issues/1)). Admin actions are written to an audit log (web console, `GET /v1/admin/audit`).

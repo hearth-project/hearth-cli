@@ -407,11 +407,11 @@ hearth flush                 # upload everything now (k8s preStop hook)
 
 - Comate's agent and instruction formats are not rendered (skills and MCP are).
 - Windows is not supported (use WSL). The darwin and linux-arm64 builds are cross-compiled and served by tests, but were not executed on those platforms here.
-- No audit log of admin actions yet.
 - Client side: no systemd unit for the daemon; run `hearth up` after a reboot or container restart.
-- The Docker images and compose files are not tested in CI yet (no Docker on the development machine).
 - Path translation covers home and workspace only; other absolute paths (e.g. /mnt/data on one machine, /data on another) are kept as they are.
-- Polling instead of fsnotify; no agent hooks yet.
+- Polling instead of fsnotify. The only agent hooks are the memory hooks of Codex and Claude Code.
+
+Planned work for these and other items: [development roadmap](https://github.com/hearth-project/hearth-cli/issues/1).
 
 ## Development
 

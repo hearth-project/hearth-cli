@@ -2,7 +2,9 @@
 
 [English](../en/memory-roadmap.md) · [返回 README](../../README.zh-CN.md)
 
-> 状态：设计稿，尚未实现。现在的 Hearth 是 agent 的**随身工作现场**（会话、skills、凭证、环境跟着你走）；这份文档描述怎么在此基础上加上**长期记忆**。
+> 状态：**M1 已完成，M2 进行中**（见 [CHANGELOG](../../CHANGELOG.md) 的 Unreleased）。已经可用：会话卡片、本地 FTS5 索引、`hearth recall`、`hearth memory remember|forget|list`、MCP `recall` / `remember` / `forget`，以及 Codex 和 Claude Code 的提问前 hook。尚未完成：`hearth memory review`、提议事实的确认流程、常驻画像受管块、Comate，以及 M3 全部内容；排期见 [开发路线图](https://github.com/hearth-project/hearth-cli/issues/1)。
+>
+> Hearth 是 agent 的**随身工作现场**（会话、skills、凭证、环境跟着你走）；这份文档描述怎么在此基础上加上**长期记忆**。
 
 ## 目标
 
