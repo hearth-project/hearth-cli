@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -274,9 +275,14 @@ func setupCmd() *cobra.Command {
 				if ss, err := e.EnsureSSHD(); err != nil {
 					fmt.Println("      ssh:", err, "(hearth ssh status)")
 				} else if ss.Running {
-					fmt.Printf("      ssh: this machine accepts your devices at %s:%d; from another device: hearth ssh %s (off: hearth ssh disable)\n",
-						ss.Address, ss.Port, shortHost(e.Cfg.DeviceName))
+					alias := client.MachineAlias(e.Cfg.DeviceName, factsMap())
+					fmt.Printf("      ssh: this machine accepts your devices at %s:%d as %s (Codex Desktop / VS Code / Cursor on a Mac with hearth list it; off: hearth ssh disable)\n",
+						ss.Address, ss.Port, alias)
 				}
+			}
+			// The user's apps on this machine (a Mac) list the other machines.
+			if n, path, err := writeSSHConfig(e, false); err == nil && n > 0 {
+				fmt.Printf("      ssh: %d machine(s) in %s for Codex Desktop (Connections > SSH), VS Code and Cursor: hearth ssh lists them\n", n, path)
 			}
 			withSkill, err := installSetupSkillTo(false, false)
 			if err != nil {
@@ -406,4 +412,12 @@ func setupTeam(e *client.Engine, team string) {
 	}
 	fmt.Printf("      created team %s (owner); invite colleagues: hearth team invite %s; share skills: hearth team share %s <skill> ...\n", team, team, team)
 	syncTeams(e)
+}
+
+// factsMap is this machine's facts in the shape devices report them.
+func factsMap() map[string]any {
+	b, _ := json.Marshal(client.Facts())
+	var m map[string]any
+	_ = json.Unmarshal(b, &m)
+	return m
 }

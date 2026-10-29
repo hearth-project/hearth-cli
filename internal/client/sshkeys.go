@@ -266,7 +266,25 @@ func (e *Engine) SSHEndpoints() ([]SSHEndpoint, error) {
 		ep.Online = online[ep.DeviceID]
 		out = append(out, ep)
 	}
-	sort.Slice(out, func(i, j int) bool {
+	// Two Hearth homes on one machine (~/.hearth and a workspace) publish
+	// the same sshd: list it once, the online and newest entry.
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].Online != out[j].Online {
+			return out[i].Online
+		}
+		return out[i].Updated > out[j].Updated
+	})
+	seen := map[string]bool{}
+	uniq := out[:0]
+	for _, ep := range out {
+		k := fmt.Sprintf("%s:%d", ep.Address, ep.Port)
+		if !seen[k] {
+			seen[k] = true
+			uniq = append(uniq, ep)
+		}
+	}
+	out = uniq
+	sort.SliceStable(out, func(i, j int) bool {
 		if out[i].Online != out[j].Online {
 			return out[i].Online
 		}

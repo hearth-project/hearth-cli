@@ -11,6 +11,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/hearth-project/hearth-cli/internal/api"
 	"github.com/hearth-project/hearth-cli/internal/client"
 	"github.com/hearth-project/hearth-cli/internal/recipe"
 )
@@ -52,21 +53,25 @@ func sshCmd() *cobra.Command {
 					return nil
 				}
 				t := &table{}
-				t.add("MACHINE", "STATE", "CONNECT", "SSH / IDE HOST (after hearth ssh config)")
-				names := sshNames(eps)
+				t.add("MACHINE", "STATE", "SSH HOST (ssh, Codex / VS Code / Cursor)")
+				aliases := sshAliases(e, eps)
 				for i, ep := range eps {
 					st := "offline"
 					if ep.Online {
 						st = "online"
 					}
-					t.add(ep.Name, st, "hearth ssh "+names[i], "ssh hearth-"+names[i])
+					t.add(ep.Name, st, aliases[i])
 				}
 				t.fit()
 				t.print()
-				fmt.Println("hearth ssh config adds them to ~/.ssh/config as hearth-<machine>, with their host keys, for ssh, scp, rsync and VS Code / Cursor / Codex Remote-SSH")
+				if n, path, err := writeSSHConfig(e, false); err == nil && n > 0 {
+					fmt.Printf("in %s with their host keys: ssh <host>, or pick them in Codex Desktop (Connections > SSH), VS Code or Cursor\n", path)
+				} else {
+					fmt.Println("hearth ssh config adds them to ~/.ssh/config (with host keys) for ssh, scp, rsync and Codex Desktop / VS Code / Cursor; hearth ssh <host> works either way")
+				}
 				return nil
 			}
-			ep, err := e.FindSSHEndpoint(args[0])
+			ep, err := findSSHTarget(e, eps, args[0])
 			if err != nil {
 				return err
 			}
@@ -188,28 +193,22 @@ func sshCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Printf("%d machine(s) in %s: ssh hearth-<machine>, or pick them in VS Code / Cursor Remote-SSH\n", n, path)
+			if n == 0 {
+				fmt.Println("no other machine accepts SSH yet")
+				return nil
+			}
+			fmt.Printf("%d machine(s) in %s (kept up to date by the daemon):\n", n, path)
+			eps, _ := e.SSHEndpoints()
+			for i, a := range sshAliases(e, eps) {
+				if eps[i].DeviceID != e.Cfg.DeviceID {
+					fmt.Printf("  %-40s %s\n", a, eps[i].Name)
+				}
+			}
+			fmt.Println("connect: ssh <host>; in Codex Desktop add them once under Connections > SSH (VS Code / Cursor: Remote-SSH lists them)")
 			return nil
 		}},
 	)
 	return c
-}
-
-// sshNames gives each machine a short name to connect with: its host
-// name, or the start of its device id when two machines share a name.
-func sshNames(eps []client.SSHEndpoint) []string {
-	n := map[string]int{}
-	for _, ep := range eps {
-		n[shortHost(ep.Name)]++
-	}
-	out := make([]string, len(eps))
-	for i, ep := range eps {
-		out[i] = shortHost(ep.Name)
-		if n[out[i]] > 1 {
-			out[i] = ep.DeviceID[:min(8, len(ep.DeviceID))]
-		}
-	}
-	return out
 }
 
 func sshArgs(home string, ep client.SSHEndpoint) []string {
@@ -237,30 +236,85 @@ func printSSHStatus(st client.SSHStatus) {
 const sshBlockBegin = "# >>> hearth ssh (managed; hearth ssh config) >>>"
 const sshBlockEnd = "# <<< hearth ssh <<<"
 
-// writeSSHConfig puts one Host entry per machine into ~/.ssh/config, inside
-// a managed block. Without create it only refreshes an existing block.
+// sshAliases are the machines' names in ~/.ssh/config (the same names
+// hearth machine list shows).
+func sshAliases(e *client.Engine, eps []client.SSHEndpoint) []string {
+	by := map[string]string{}
+	if ds, err := e.API.Devices(); err == nil {
+		by = deviceAliases(e, ds)
+	}
+	out := make([]string, len(eps))
+	for i, ep := range eps {
+		if out[i] = by[ep.DeviceID]; out[i] == "" {
+			out[i] = client.MachineAlias(ep.Name, nil)
+		}
+	}
+	return out
+}
+
+// deviceAliases names every active device (device id -> alias).
+func deviceAliases(e *client.Engine, ds []api.Device) map[string]string {
+	var ids, names, addrs []string
+	var fs []map[string]any
+	for _, d := range ds {
+		if d.Status != "" && d.Status != "active" {
+			continue
+		}
+		f, _ := d.Machine["facts"].(map[string]any)
+		ids, names, fs, addrs = append(ids, d.ID), append(names, d.Name), append(fs, f), append(addrs, d.LastIP)
+	}
+	out := map[string]string{}
+	for i, a := range client.MachineAliases(e.Home, ids, names, fs, addrs) {
+		out[ids[i]] = a
+	}
+	return out
+}
+
+// findSSHTarget resolves a machine by its alias, else by name or id.
+func findSSHTarget(e *client.Engine, eps []client.SSHEndpoint, ref string) (client.SSHEndpoint, error) {
+	for i, a := range sshAliases(e, eps) {
+		if a == ref || "hearth-"+shortHost(eps[i].Name) == ref {
+			return eps[i], nil
+		}
+	}
+	return e.FindSSHEndpoint(ref)
+}
+
+// writeSSHConfig puts one Host entry per machine (not this one) into
+// ~/.ssh/config, inside a managed block, with Hearth's known_hosts so the
+// host keys are checked. create: write the block even if there is none
+// yet (hearth ssh config; on by default on a Mac, [ssh] config); otherwise
+// only an existing block is refreshed.
 func writeSSHConfig(e *client.Engine, create bool) (int, string, error) {
 	h, _ := os.UserHomeDir()
 	path := filepath.Join(h, ".ssh", "config")
 	cur, _ := os.ReadFile(path)
 	text := string(cur)
 	i, j := strings.Index(text, sshBlockBegin), strings.Index(text, sshBlockEnd)
-	if !create && (i < 0 || j < i) {
+	if !create && (i < 0 || j < i) && !client.SSHClientConfigOn(e.Home) {
 		return 0, path, nil
 	}
-	eps, err := e.SSHEndpoints()
+	all, err := e.SSHEndpoints()
 	if err != nil {
 		return 0, path, err
 	}
-	if err := e.WriteKnownHosts(eps); err != nil {
+	if err := e.WriteKnownHosts(all); err != nil {
 		return 0, path, err
 	}
+	aliases := sshAliases(e, all)
 	var b strings.Builder
 	b.WriteString(sshBlockBegin + "\n")
-	names := sshNames(eps)
-	for i, ep := range eps {
-		fmt.Fprintf(&b, "Host hearth-%s\n  HostName %s\n  Port %d\n  User %s\n  IdentityFile %s\n  IdentitiesOnly yes\n  UserKnownHostsFile %s\n  StrictHostKeyChecking yes\n",
-			names[i], ep.Address, ep.Port, ep.User, client.SSHKeyPath(e.Home), client.SSHKnownHosts(e.Home))
+	n := 0
+	for k, ep := range all {
+		if ep.DeviceID == e.Cfg.DeviceID {
+			continue // this machine
+		}
+		n++
+		fmt.Fprintf(&b, "Host %s\n  HostName %s\n  Port %d\n  User %s\n  IdentityFile %s\n  IdentitiesOnly yes\n  UserKnownHostsFile %s\n  StrictHostKeyChecking yes\n",
+			aliases[k], ep.Address, ep.Port, ep.User, client.SSHKeyPath(e.Home), client.SSHKnownHosts(e.Home))
+	}
+	if n == 0 && (i < 0 || j < i) {
+		return 0, path, nil // nothing to add, no block to refresh
 	}
 	b.WriteString(sshBlockEnd + "\n")
 	if i >= 0 && j > i {
@@ -272,10 +326,10 @@ func writeSSHConfig(e *client.Engine, create bool) (int, string, error) {
 		text += b.String()
 	}
 	if text == string(cur) {
-		return len(eps), path, nil
+		return n, path, nil
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return 0, path, err
 	}
-	return len(eps), path, os.WriteFile(path, []byte(text), 0o600)
+	return n, path, os.WriteFile(path, []byte(text), 0o600)
 }
