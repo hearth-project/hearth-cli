@@ -74,7 +74,7 @@ func skillTargets() map[string]string {
 	out := map[string]string{}
 	for _, t := range library.DefaultTargets() {
 		if _, err := os.Stat(t.Root); err != nil {
-			if _, err := exec.LookPath(t.Name); err != nil {
+			if _, err := client.LookTool(t.Name); err != nil {
 				continue // agent not on this machine
 			}
 		}
@@ -84,7 +84,7 @@ func skillTargets() map[string]string {
 }
 
 func mcpRegistered(agent string) bool {
-	bin, err := exec.LookPath(agent)
+	bin, err := client.LookTool(agent)
 	if err != nil {
 		return false
 	}
@@ -122,7 +122,7 @@ func collectOnboard() onboardStatus {
 	targets := skillTargets()
 	for _, a := range []string{"codex", "claude", "comate"} {
 		s := agentState{Enabled: enabled[a]}
-		if _, err := exec.LookPath(a); err == nil {
+		if _, err := client.LookTool(a); err == nil {
 			s.Installed = true
 			if a != "comate" {
 				s.MCPRegistered = mcpRegistered(a)

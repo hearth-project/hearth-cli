@@ -17,6 +17,8 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/net/http/httpproxy"
+
 	"github.com/hearth-project/hearth-cli/internal/api"
 )
 
@@ -107,6 +109,11 @@ func fastTransport() *http.Transport {
 	tr := http.DefaultTransport.(*http.Transport).Clone()
 	tr.DialContext = (&net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second}).DialContext
 	tr.TLSHandshakeTimeout = 15 * time.Second
+	// The proxy is looked up per request: http.ProxyFromEnvironment reads
+	// the environment once per process, before a remembered proxy is set.
+	tr.Proxy = func(r *http.Request) (*url.URL, error) {
+		return httpproxy.FromEnvironment().ProxyFunc()(r.URL)
+	}
 	return tr
 }
 

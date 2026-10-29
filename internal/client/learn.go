@@ -370,7 +370,7 @@ func (e *Engine) Discover() []Finding {
 			add(Finding{ID: "tool:" + name, Kind: "tool", Title: name + " CLI", Detail: "installed " + v + "; new machines get the latest version", tool: &t})
 		}
 	}
-	if p, err := exec.LookPath("codex-mixin"); err == nil && !SiteCaptures(e.Home, "codex-mixin-config") {
+	if p, err := LookTool("codex-mixin"); err == nil && !SiteCaptures(e.Home, "codex-mixin-config") {
 		out, _ := exec.Command(p, "--version").Output()
 		add(Finding{ID: "codex-mixin", Kind: "tool", Title: "codex-mixin gateway (its config is backed up, so new machines skip the QR login)",
 			Detail: strings.TrimSpace(string(out)), steps: codexMixinSteps()})

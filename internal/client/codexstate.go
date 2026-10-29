@@ -68,7 +68,7 @@ func (t *stdioTransport) close() {
 }
 
 func startAppServer(ctx context.Context, codexHome string) (*appServer, error) {
-	bin, err := exec.LookPath(CodexBinary)
+	bin, err := LookTool(CodexBinary)
 	if err != nil {
 		return nil, fmt.Errorf("codex not installed: %w", err)
 	}

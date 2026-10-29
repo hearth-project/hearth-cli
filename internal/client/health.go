@@ -7,11 +7,13 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/hearth-project/hearth-cli/internal/mcpcfg"
 	"github.com/hearth-project/hearth-cli/internal/proxyenv"
 )
 
@@ -201,27 +203,166 @@ func cachedMixinDoctor(bin string) (*bool, string) {
 	return mixinCache.ok, mixinCache.detail
 }
 
-// lookTool finds a tool on PATH, else where desktop apps bundle it (the
-// Codex app on macOS ships its CLI inside the app).
-func lookTool(name string) (string, error) {
+// appTools: where desktop apps bundle a tool's command line (macOS),
+// relative to an app; the apps named first are searched first, then any
+// app whose name contains a hint (a few levels deep, nested apps too).
+var appTools = map[string]struct {
+	paths []string // "<App>.app/..." under /Applications or ~/Applications
+	hints []string // app name parts
+}{
+	"codex": {paths: []string{
+		"ChatGPT.app/Contents/Resources/codex-cli/bin/codex", // Codex ships with the ChatGPT app
+		"ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex",
+		"Codex.app/Contents/Resources/codex", "Codex.app/Contents/Resources/bin/codex", "Codex.app/Contents/MacOS/codex",
+	}, hints: []string{"ChatGPT", "Codex"}},
+	"codex-mixin": {paths: []string{"Codex Mixin.app/Contents/Resources/codex-mixin", "Codex Mixin.app/Contents/MacOS/codex-mixin"},
+		hints: []string{"Mixin"}},
+	"claude": {paths: []string{"Claude.app/Contents/Resources/claude-code/bin/claude"}, hints: []string{"Claude"}},
+}
+
+// LookTool finds a tool the way the user reaches it: on PATH, else inside
+// a desktop app (Codex in ChatGPT.app, codex-mixin in Codex Mixin.app),
+// else as a running process (a gateway started by its own service), else
+// in a launchd agent (macOS). The check and every command Hearth runs an
+// agent CLI with use it, so they agree with each other.
+func LookTool(name string) (string, error) {
 	p, err := exec.LookPath(name)
-	if err == nil || name != "codex" {
-		return p, err
+	if err == nil {
+		return p, nil
 	}
-	h, _ := os.UserHomeDir()
-	var cands []string
-	for _, dir := range []string{"/Applications", filepath.Join(h, "Applications")} {
-		for _, pat := range []string{"*Codex*.app/Contents/Resources/codex", "*Codex*.app/Contents/Resources/bin/codex", "*Codex*.app/Contents/MacOS/codex"} {
-			m, _ := filepath.Glob(filepath.Join(dir, pat))
-			cands = append(cands, m...)
+	if c := appBinary(name); c != "" {
+		return c, nil
+	}
+	if serviceTools[name] {
+		if c := runningBinary(name); c != "" {
+			return c, nil
 		}
-	}
-	for _, c := range cands {
-		if fi, e := os.Stat(c); e == nil && !fi.IsDir() && fi.Mode()&0o111 != 0 {
+		if c := launchAgentBinary(name); c != "" {
 			return c, nil
 		}
 	}
 	return "", err
+}
+
+func lookTool(name string) (string, error) { return LookTool(name) }
+
+// serviceTools run as background services (a gateway): a running process
+// or a launchd agent of theirs shows where they are installed.
+var serviceTools = map[string]bool{"codex-mixin": true}
+
+func init() { mcpcfg.Look = LookTool }
+
+func appDirs() []string {
+	h, _ := os.UserHomeDir()
+	return []string{"/Applications", filepath.Join(h, "Applications")}
+}
+
+// appBinary looks in the known places first, then walks apps named like
+// the tool's hints.
+func appBinary(name string) string {
+	t, ok := appTools[name]
+	if !ok {
+		return ""
+	}
+	for _, dir := range appDirs() {
+		for _, rel := range t.paths {
+			if p := filepath.Join(dir, rel); isExecFile(p) {
+				return p
+			}
+		}
+	}
+	for _, hint := range t.hints {
+		if c := appBundleBinary(hint, name); c != "" {
+			return c
+		}
+	}
+	return ""
+}
+
+func isExecFile(p string) bool {
+	fi, err := os.Stat(p)
+	return err == nil && fi.Mode().IsRegular() && fi.Mode()&0o111 != 0
+}
+
+// appBundleBinary looks for an executable called name in *<app>*.app
+// bundles under /Applications and ~/Applications (a few levels deep).
+func appBundleBinary(app, name string) string {
+	for _, dir := range appDirs() {
+		apps, _ := filepath.Glob(filepath.Join(dir, "*"+app+"*.app"))
+		for _, a := range apps {
+			root := filepath.Join(a, "Contents")
+			found := ""
+			_ = filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
+				if err != nil || found != "" {
+					return filepath.SkipDir
+				}
+				if d.IsDir() {
+					if strings.Count(strings.TrimPrefix(p, root), string(filepath.Separator)) > 6 || strings.HasSuffix(p, ".framework") || strings.HasSuffix(p, ".lproj") {
+						return filepath.SkipDir
+					}
+					return nil
+				}
+				if d.Name() == name && isExecFile(p) {
+					found = p
+					return filepath.SkipAll
+				}
+				return nil
+			})
+			if found != "" {
+				return found
+			}
+		}
+	}
+	return ""
+}
+
+// runningBinary is the executable of a running process called name.
+func runningBinary(name string) string {
+	if runtime.GOOS == "linux" {
+		exes, _ := filepath.Glob("/proc/[0-9]*/exe")
+		for _, e := range exes {
+			if p, err := os.Readlink(e); err == nil && filepath.Base(p) == name && isExecFile(p) {
+				return p
+			}
+		}
+		return ""
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "ps", "-axww", "-o", "comm=").Output() // macOS: the full path
+	if err != nil {
+		return ""
+	}
+	for _, l := range strings.Split(string(out), "\n") {
+		if l = strings.TrimSpace(l); filepath.IsAbs(l) && filepath.Base(l) == name && isExecFile(l) {
+			return l
+		}
+	}
+	return ""
+}
+
+var plistStringRE = regexp.MustCompile(`<string>([^<]+)</string>`)
+
+// launchAgentBinary finds name in the user's launchd agents (a service
+// installed by the tool itself, macOS).
+func launchAgentBinary(name string) string {
+	if runtime.GOOS != "darwin" {
+		return ""
+	}
+	h, _ := os.UserHomeDir()
+	plists, _ := filepath.Glob(filepath.Join(h, "Library", "LaunchAgents", "*.plist"))
+	for _, p := range plists {
+		b, err := os.ReadFile(p)
+		if err != nil || !strings.Contains(string(b), name) {
+			continue
+		}
+		for _, m := range plistStringRE.FindAllStringSubmatch(string(b), -1) {
+			if v := strings.TrimSpace(m[1]); filepath.IsAbs(v) && filepath.Base(v) == name && isExecFile(v) {
+				return v
+			}
+		}
+	}
+	return ""
 }
 
 // mixinDoctor runs codex-mixin's own check (gateway running, provider

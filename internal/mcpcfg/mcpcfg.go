@@ -180,11 +180,15 @@ func DefaultTargets() []Target {
 		claude = filepath.Join(d, ".claude.json")
 	}
 	ts = append(ts, Target{Agent: "claude", JSONPath: claude})
-	if bin, err := exec.LookPath("codex"); err == nil {
+	if bin, err := Look("codex"); err == nil {
 		ts = append(ts, Target{Agent: "codex", CodexBin: bin})
 	}
 	return ts
 }
+
+// Look finds an agent CLI (the client sets it to its lookup, which also
+// knows the CLIs bundled in desktop apps).
+var Look = exec.LookPath
 
 // Render applies cfg to every target. Servers that exist in a target but
 // were not written by hearth are left alone unless adopt is set.

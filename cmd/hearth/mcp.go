@@ -288,7 +288,7 @@ func installSkillMCP(quiet bool) ([]string, error) {
 	}
 	var done []string
 	for _, a := range agents {
-		bin, err := exec.LookPath(a.name)
+		bin, err := client.LookTool(a.name)
 		if err != nil {
 			if !quiet {
 				fmt.Printf("%-6s not installed, skipped\n", a.name)
