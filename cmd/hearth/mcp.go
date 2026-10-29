@@ -52,7 +52,23 @@ func mcpCmd() *cobra.Command {
 			svc := &mcpserver.Service{Sources: skillSources(extra), UsageLog: usageLog(),
 				Recipes: func() string { return client.RecipesSummary(home) },
 				Propose: func(r, steps, reason string) (string, error) { return client.Propose(home, r, steps, reason) }}
+			if client.MemoryOn(home) {
+				svc.Recall = func(q, cwd string, limit int) (string, error) {
+					hits, err := client.Recall(home, q, cwd, limit)
+					if err != nil || len(hits) == 0 {
+						return "", err
+					}
+					return client.FormatHits(hits, 6000) + "\nDetails of one: `hearth recall --show <id>`.", nil
+				}
+			}
 			if e, err := engine(); err == nil {
+				if client.MemoryOn(home) {
+					svc.Remember = func(t, scope string) (string, error) {
+						f, err := e.Remember(t, scope, "agent")
+						return "f:" + f.ID, err
+					}
+					svc.Forget = e.ForgetFact
+				}
 				// Logged in: also search linked and trusted shared skills.
 				svc.Remote, svc.Fetch = e.SearchableSkills, e.FetchSkill
 				svc.RemoteSearch = func(q string, limit int) []search.Result { return e.SearchTeams(q, limit, 1500*time.Millisecond) }

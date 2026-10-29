@@ -137,7 +137,7 @@ hearth config --edit                 # 所有设置都在这一个文件里
 
 ## 路线图：长期记忆
 
-现在 Hearth 负责搬运工作现场；下一步让 agent 有记忆：任何 agent 都能在日常工作中自动想起你在任何机器上做过的事（历史对话、决定、踩过的坑）和你的习惯，毫秒级检索，依然端到端加密。设计和里程碑见 [记忆功能路线图](docs/zh/memory-roadmap.md)。
+Hearth 搬运工作现场，现在也开始带上记忆：任何 agent 都能想起你在任何机器上做过的事（历史对话、决定、踩过的坑）和你让它记住的习惯；Codex 和 Claude Code 通过提问前 hook 自动带上相关记忆，毫秒级检索，依然端到端加密。试试 `hearth recall <关键词>`。设计和后续计划见 [记忆功能路线图](docs/zh/memory-roadmap.md)。
 
 ---
 

@@ -182,9 +182,19 @@ Generated from `hearth --help` by `hearth docs cli > docs/cli.md`; every command
 | [`hearth identity disable`](#hearth-identity-disable) | Stop allowing passwordless login for this account |
 | [`hearth identity status`](#hearth-identity-status) | Show whether a platform credential is available on this machine |
 | [`hearth mcp`](#hearth-mcp) | Serve skill search over MCP on stdio (search_skills, get_skill, list_skills) |
+| [`hearth memory`](#hearth-memory) | Long-term memory shared by your agents and machines: remember, forget, list, index, hooks |
+| [`hearth memory remember`](#hearth-memory-remember) | Remember a fact or habit for all your agents (end-to-end encrypted) |
+| [`hearth memory forget`](#hearth-memory-forget) | Forget a remembered fact (id f:… from hearth memory list) |
+| [`hearth memory list`](#hearth-memory-list) | Remembered facts and habits |
+| [`hearth memory index`](#hearth-memory-index) | Bring the local memory index up to date now (the background sync does it every 5 min) |
+| [`hearth memory status`](#hearth-memory-status) | What the memory holds here, and the agent hooks |
+| [`hearth memory hooks`](#hearth-memory-hooks) | Hooks that add relevant memories to every prompt of Codex and Claude Code |
+| [`hearth memory hooks on`](#hearth-memory-hooks-on) | Install the hooks (default) |
+| [`hearth memory hooks off`](#hearth-memory-hooks-off) | Remove the hooks (recall stays available as a command and MCP tool) |
 | [`hearth onboard`](#hearth-onboard) | Machine setup status and next steps (used by the hearth agent skill) |
 | [`hearth onboard status`](#hearth-onboard-status) | What is set up on this machine and what to do next |
 | [`hearth onboard install-skill`](#hearth-onboard-install-skill) | Install the hearth skill into every agent on this machine (--print shows it) |
+| [`hearth recall`](#hearth-recall) | Search long-term memory: your conversations on every machine and agent, remembered facts, agents' notes (local, milliseconds) |
 | [`hearth register`](#hearth-register) | Create an account (prints a one-time recovery key) |
 | [`hearth save`](#hearth-save) | Run every capture step now (the daemon also runs them on schedule) |
 | [`hearth shell`](#hearth-shell) | Your own lines of ~/.bashrc / ~/.zshrc / ~/.bash_aliases, kept encrypted for new machines ([shell] in config.toml) |
@@ -1990,6 +2000,82 @@ Flags:
       --skills-dir strings   additional skill directories to index (repeatable)
 ```
 
+## hearth memory
+
+Long-term memory shared by your agents and machines: remember, forget, list, index, hooks
+
+```text
+hearth memory
+```
+
+## hearth memory remember
+
+Remember a fact or habit for all your agents (end-to-end encrypted)
+
+```text
+hearth memory remember <text> [flags]
+
+Flags:
+      --here           only for the current directory tree
+      --scope string   only for this directory tree (e.g. a repository)
+```
+
+## hearth memory forget
+
+Forget a remembered fact (id f:… from hearth memory list)
+
+```text
+hearth memory forget <id>
+```
+
+## hearth memory list
+
+Remembered facts and habits
+
+```text
+hearth memory list
+```
+
+## hearth memory index
+
+Bring the local memory index up to date now (the background sync does it every 5 min)
+
+```text
+hearth memory index
+```
+
+## hearth memory status
+
+What the memory holds here, and the agent hooks
+
+```text
+hearth memory status
+```
+
+## hearth memory hooks
+
+Hooks that add relevant memories to every prompt of Codex and Claude Code
+
+```text
+hearth memory hooks
+```
+
+## hearth memory hooks on
+
+Install the hooks (default)
+
+```text
+hearth memory hooks on
+```
+
+## hearth memory hooks off
+
+Remove the hooks (recall stays available as a command and MCP tool)
+
+```text
+hearth memory hooks off
+```
+
 ## hearth onboard
 
 Machine setup status and next steps (used by the hearth agent skill)
@@ -2019,6 +2105,20 @@ hearth onboard install-skill [flags]
 Flags:
       --print   print the skill instead of installing it
       --quiet   only print the hint
+```
+
+## hearth recall
+
+Search long-term memory: your conversations on every machine and agent, remembered facts, agents' notes (local, milliseconds)
+
+```text
+hearth recall [words ...] [flags]
+
+Flags:
+      --cwd string    rank memories of this directory higher (default: the current one)
+      --json          JSON
+  -n, --limit int     results (default 5)
+      --show string   print one memory in full (id from the results)
 ```
 
 ## hearth register

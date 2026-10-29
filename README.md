@@ -137,7 +137,7 @@ Every step in detail: [Quick start guide](docs/en/quickstart.md).
 
 ## Roadmap: long-term memory
 
-Today Hearth carries the workspace. Next it gives agents a memory: every agent can recall what you did on any machine (past conversations, decisions, fixes) and what you prefer, automatically during normal work, in milliseconds, still end-to-end encrypted. Design and milestones: [Memory roadmap](docs/en/memory-roadmap.md).
+Hearth carries the workspace, and now a memory too: every agent can recall what you did on any machine (past conversations, decisions, fixes) and what you asked it to remember, automatically in Codex and Claude Code through prompt hooks, in milliseconds, still end-to-end encrypted. Try `hearth recall <words>`. Design and next steps: [Memory roadmap](docs/en/memory-roadmap.md).
 
 ---
 

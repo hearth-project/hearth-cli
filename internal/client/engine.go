@@ -42,6 +42,15 @@ type SessionMeta struct {
 	// Parent thread (fork origin or the thread that spawned a subagent).
 	Parent     string `json:"parent,omitempty"`
 	ParentKind string `json:"parent_kind,omitempty"`
+	// Card: the memory card (goal, outcome, files, commands, errors).
+	Card *MemoryCard `json:"card,omitempty"`
+}
+
+func cardPtr(c MemoryCard) *MemoryCard {
+	if c.empty() {
+		return nil
+	}
+	return &c
 }
 
 func hostname() string { h, _ := os.Hostname(); return h }
@@ -345,7 +354,7 @@ func (e *Engine) register(sid string, f adapter.SessionFile, file *os.File, size
 	st.Writer = host
 	m := SessionMeta{Agent: f.Agent, RelPath: f.RelPath, Host: host, OrigPath: f.AbsPath, CreatedAt: now, Kind: f.Kind, Thread: f.Thread, Roots: localRoots(), Cwd: sessionCwd(f),
 		Title: sessionTitle(threadName(f.Thread), st, f.RelPath), Turns: st.Turns, LastActive: st.LastActive, Writer: host, IndexVersion: sessionIndexVersion,
-		Parent: st.Parent, ParentKind: st.ParentKind}
+		Parent: st.Parent, ParentKind: st.ParentKind, Card: cardPtr(st.Card)}
 	if ri != nil {
 		// Restored from another machine: keep the origin's metadata.
 		m = ri.Meta
@@ -464,7 +473,7 @@ func (e *Engine) updateMeta(sid string, f adapter.SessionFile, fs *fileState) er
 	}
 	m := SessionMeta{Agent: f.Agent, RelPath: f.RelPath, Host: host, OrigPath: f.AbsPath, CreatedAt: created, Kind: f.Kind, Thread: f.Thread, Roots: localRoots(), Cwd: sessionCwd(f),
 		Title: title, Turns: fs.Turns, LastActive: fs.LastActive, Writer: host, IndexVersion: sessionIndexVersion,
-		Parent: fs.Parent, ParentKind: fs.ParentKind}
+		Parent: fs.Parent, ParentKind: fs.ParentKind, Card: cardPtr(fs.Card)}
 	if ri := e.st.remote(sid); ri != nil {
 		m = ri.Meta // keep the origin's path, roots and host
 		if f.Thread != nil {
@@ -476,6 +485,9 @@ func (e *Engine) updateMeta(sid string, f adapter.SessionFile, fs *fileState) er
 		}
 		m.Title, m.Turns, m.LastActive, m.Writer = title, fs.Turns, fs.LastActive, host
 		m.IndexVersion, m.Parent, m.ParentKind = sessionIndexVersion, fs.Parent, fs.ParentKind
+		if c := cardPtr(fs.Card); c != nil {
+			m.Card = c
+		}
 	}
 	meta, _ := json.Marshal(m)
 	enc, err := e.Vault.SealMeta(sid, meta)

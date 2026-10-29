@@ -15,7 +15,7 @@ import (
 // a title, its turn count and when it was last written. It is computed
 // incrementally from appended bytes, so syncing a long transcript does not
 // re-read it.
-const sessionIndexVersion = 4 // bump when the counting rules change (3: injected context blocks are not titles; 4: parent thread)
+const sessionIndexVersion = 5 // bump when the counting rules change (3: injected context blocks are not titles; 4: parent thread; 5: memory card)
 
 type SessionStats struct {
 	Turns      int    `json:"turns,omitempty"`
@@ -29,6 +29,8 @@ type SessionStats struct {
 	// their parent.
 	Parent     string `json:"parent,omitempty"`
 	ParentKind string `json:"parent_kind,omitempty"`
+	// Card is the memory card of the conversation (memcard.go).
+	Card MemoryCard `json:"card,omitempty"`
 }
 
 // scanStats reads the complete lines of path starting at from (a line
@@ -45,7 +47,7 @@ func scanStats(agent, path string, from int64, st SessionStats) (SessionStats, e
 		return st, err
 	}
 	if from > fi.Size() {
-		from, st.Turns, st.Title, st.LastActive = 0, 0, "", 0
+		from, st.Turns, st.Title, st.LastActive, st.Card = 0, 0, "", 0, MemoryCard{}
 	}
 	if agent == "comate" { // one JSON document, rewritten in place
 		data, err := os.ReadFile(path)
@@ -57,6 +59,8 @@ func scanStats(agent, path string, from int64, st SessionStats) (SessionStats, e
 		if st.Title == "" {
 			st.Title = firstUser(turns)
 		}
+		st.Card = MemoryCard{}
+		cardTurns(&st.Card, turns)
 		st.Scanned = int64(len(data))
 		return st, nil
 	}
@@ -77,6 +81,8 @@ func scanStats(agent, path string, from int64, st SessionStats) (SessionStats, e
 			if st.Title == "" {
 				st.Title = firstUser(turns)
 			}
+			cardTurns(&st.Card, turns)
+			cardLine(agent, line, &st.Card)
 			var l struct {
 				Timestamp string `json:"timestamp"`
 			}

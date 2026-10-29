@@ -265,8 +265,16 @@ func daemonCmd() *cobra.Command {
 			if err := client.AutoEnableIdentityLogin(e.Home); err != nil {
 				log.Printf("identity login: %v", err)
 			}
-			var lastLib, lastUsage time.Time
-			var lastLibMsg string
+			var lastLib, lastUsage, lastMemory time.Time
+			var lastLibMsg, lastMemoryMsg string
+			// Memory hooks follow the setting (and a moved binary).
+			if res, err := client.SyncMemoryHooks(e.Home, client.MemoryHooksOn(e.Home)); err == nil {
+				for _, r := range res {
+					if r.Op == "installed" || r.Op == "removed" {
+						log.Printf("memory hooks %s: %s %s", r.Agent, r.Op, r.Path)
+					}
+				}
+			}
 			shareSeen := map[string]string{} // team/type/name -> last logged op
 			hb := client.DaemonStatus{PID: os.Getpid(), Version: version, Started: time.Now().Unix(), Interval: interval.String()}
 			// First update check a few minutes after start, then every
@@ -298,6 +306,20 @@ func daemonCmd() *cobra.Command {
 					}
 				}
 				st, err := e.PushOnce()
+				if time.Since(lastMemory) >= memoryInterval {
+					lastMemory = time.Now()
+					ms, merr := e.IndexMemory()
+					msg := ""
+					if merr != nil {
+						msg = "memory index: " + merr.Error()
+					} else if ms.Updated+ms.Removed > 0 && ms.Updated > 20 {
+						msg = fmt.Sprintf("memory index: %d updated, %d removed (%s)", ms.Updated, ms.Removed, ms.Took.Round(time.Millisecond))
+					}
+					if msg != "" && msg != lastMemoryMsg {
+						log.Print(msg)
+					}
+					lastMemoryMsg = msg
+				}
 				// Online for the other machines: their default restore leaves
 				// out the conversations this machine is working on.
 				if n, err := e.API.HeartbeatIntents(); err == nil && n > 0 {
@@ -1105,6 +1127,10 @@ func (r *restoreReport) print() int {
 // restoreIncludeOnline: the default restore also brings conversations that
 // machines still online are working on (restore --include-online).
 var restoreIncludeOnline bool
+
+// memoryInterval is how often the daemon brings the memory index up to
+// date (other machines' new conversation cards and facts).
+const memoryInterval = 5 * time.Minute
 
 // restoreAskOnline: the caller (setup in a terminal) asks about the
 // conversations left on online machines itself, so restoreAll does not

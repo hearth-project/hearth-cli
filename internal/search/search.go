@@ -30,6 +30,10 @@ type Result struct {
 	Score float64 `json:"score"`
 }
 
+// Tokens is the tokenizer of the skill search, for other indexes (memory)
+// that must split mixed Chinese / English text the same way.
+func Tokens(s string) []string { return tokenize(s) }
+
 // tokenize lower-cases text, keeps latin/digit words (also split on - _ /),
 // and turns runs of CJK characters into overlapping bigrams.
 func tokenize(s string) []string {

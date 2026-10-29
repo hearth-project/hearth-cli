@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Long-term memory. Every conversation gets a memory card while it syncs (goal, outcome, later requests, errors, commands, files; extracted without model calls) carried encrypted in its metadata, so every machine indexes every machine's conversations without downloading them. A local SQLite FTS5 index (shared CJK/English tokenizer, BM25 with recency, kind and directory boosts, common terms pruned) also holds remembered facts (end-to-end encrypted secrets `memory.<id>`) and the agents' own memory notes; searches take a few milliseconds and never use the network. `hearth recall <words>` (`--show`, `--json`), `hearth memory remember|forget|list|index|status|hooks on|off`; MCP tools `recall`, `remember`, `forget`. Codex and Claude Code get a `UserPromptSubmit` hook that adds up to 3 clearly related memories to each prompt (about 15 ms including process start) and a `SessionStart` hook with the remembered facts; Codex asks once to trust it. The daemon updates the index every 5 minutes; `[memory] enabled`, `hooks`.
+
 ## 0.1.0 — 2026-10-29 (first public version)
 
 - README in English by default (`README.md`; Chinese: `README.zh-CN.md`), reorganised around a quick start with separate one-command server and client deployment. New `scripts/deploy-server.sh`: installs the latest release (or builds from source), creates a self-signed certificate, starts the supervised server and prints the client install command; re-running upgrades.

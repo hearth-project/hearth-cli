@@ -27,6 +27,17 @@ type Config struct {
 	Recipes    *RecipesConfig    `toml:"recipes,omitempty"`
 	Teams      *TeamsConfig      `toml:"teams,omitempty"`
 	Shell      *ShellConfig      `toml:"shell,omitempty"`
+	Memory     *MemoryConfig     `toml:"memory,omitempty"`
+}
+
+// MemoryConfig: long-term memory (conversation cards, remembered facts,
+// agents' notes) searched by every agent.
+type MemoryConfig struct {
+	// Enabled turns the index, recall and the agent hooks on (default true).
+	Enabled *bool `toml:"enabled,omitempty"`
+	// Hooks installs the prompt hooks that inject relevant memories into
+	// Codex and Claude Code (default true).
+	Hooks *bool `toml:"hooks,omitempty"`
 }
 
 type TeamsConfig struct {
@@ -253,6 +264,14 @@ const Template = `# Hearth settings — the only file you need to edit. It syncs
 # auto = true
 # Also SSH keys, agent / git logins and token files (encrypted); setup asks.
 # auto_credentials = true
+
+[memory]
+# Long-term memory: cards of your conversations on every machine, facts you
+# asked agents to remember and the agents' own notes, searched locally in
+# milliseconds. Hooks add the most relevant ones to each prompt of Codex and
+# Claude Code (Codex asks once to trust the hook).
+# enabled = true
+# hooks = true
 
 [shell]
 # Your own lines of ~/.bashrc / ~/.zshrc (and ~/.bash_aliases) are kept

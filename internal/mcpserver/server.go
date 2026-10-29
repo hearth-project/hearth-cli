@@ -46,6 +46,11 @@ type Service struct {
 	// propose a step it just performed with the user (reviewed later).
 	Recipes func() string
 	Propose func(recipe, stepsTOML, reason string) (string, error)
+	// Long-term memory: Recall searches the local index (no network);
+	// Remember / Forget keep the user's facts.
+	Recall   func(query, cwd string, limit int) (string, error)
+	Remember func(text, scope string) (string, error)
+	Forget   func(id string) error
 
 	mu        sync.Mutex
 	sig       string
@@ -170,6 +175,21 @@ type getArgs struct {
 
 type listArgs struct{}
 
+type recallArgs struct {
+	Query string `json:"query" jsonschema:"what to look for, in a few words; include English keywords and the user's language, error messages, file or tool names"`
+	Cwd   string `json:"cwd,omitempty" jsonschema:"the current working directory (ranks memories of the same repository higher)"`
+	Limit int    `json:"limit,omitempty" jsonschema:"maximum number of results (default 5)"`
+}
+
+type rememberArgs struct {
+	Text  string `json:"text" jsonschema:"one fact, habit or decision, written so another agent understands it without this conversation"`
+	Scope string `json:"scope,omitempty" jsonschema:"a directory (e.g. the repository root) when it only holds there; empty = everywhere"`
+}
+
+type forgetArgs struct {
+	ID string `json:"id" jsonschema:"the id of a remembered fact (f:...), from recall"`
+}
+
 type proposeArgs struct {
 	Recipe string `json:"recipe,omitempty" jsonschema:"recipe to extend (default: learned)"`
 	Steps  string `json:"steps" jsonschema:"TOML with one or more [[step]] tables, e.g. [[step]] type = \"manual\" text = \"...\"; types: tool, file, env, run, service, check, capture, manual; reference credentials by secret name, never inline them; add when = { profile = \"<name>\" } (or gpu / arch / os) to steps that only some kinds of machines need, see list_setup_recipes"`
@@ -192,6 +212,11 @@ func (s *Service) New(version string) *mcp.Server {
 		instr += " When you help the user set up this machine (install a tool, log in, configure auth, edit " +
 			"shell or agent config), ask whether every new machine needs it and, if so, record it with " +
 			"propose_setup_step (check list_setup_recipes first to avoid duplicates; never put secret values in steps)."
+	}
+	if s.Recall != nil {
+		instr += " Long-term memory: call recall when you hit an error, start on an unfamiliar repository, or the user refers to " +
+			"earlier work (\"like last time\", \"上次\"); it searches their conversations on every machine and agent. When the user " +
+			"asks you to remember something, or agrees to your proposal, call remember."
 	}
 	srv := mcp.NewServer(&mcp.Implementation{Name: "hearth-skills", Version: version}, &mcp.ServerOptions{Instructions: instr})
 	mcp.AddTool(srv, &mcp.Tool{
@@ -298,6 +323,50 @@ func (s *Service) New(version string) *mcp.Server {
 		}
 		return text(b.String()), nil, nil
 	})
+	if s.Recall != nil {
+		mcp.AddTool(srv, &mcp.Tool{
+			Name:        "recall",
+			Annotations: readOnly,
+			Description: "Search the user's long-term memory (local, milliseconds): earlier conversations on any of their machines " +
+				"and agents (what was asked, how it ended, errors, commands, files), facts and habits they asked to remember, and the " +
+				"agents' own notes. Use it when you hit an error, start on an unfamiliar repository, or the user refers to earlier work.",
+		}, func(_ context.Context, _ *mcp.CallToolRequest, a recallArgs) (*mcp.CallToolResult, any, error) {
+			limit := a.Limit
+			if limit <= 0 || limit > 20 {
+				limit = 5
+			}
+			out, err := s.Recall(a.Query, a.Cwd, limit)
+			if err != nil {
+				return nil, nil, err
+			}
+			if out == "" {
+				out = "Nothing found in memory."
+			}
+			return text(out), nil, nil
+		})
+	}
+	if s.Remember != nil {
+		mcp.AddTool(srv, &mcp.Tool{
+			Name: "remember",
+			Description: "Remember a fact, habit or decision for all of the user's agents and machines (end-to-end encrypted). Only " +
+				"when the user asks you to remember something or agreed to your proposal; never store credentials or secrets.",
+		}, func(_ context.Context, _ *mcp.CallToolRequest, a rememberArgs) (*mcp.CallToolResult, any, error) {
+			id, err := s.Remember(a.Text, a.Scope)
+			if err != nil {
+				return text("Not remembered: " + err.Error()), nil, nil
+			}
+			return text("Remembered as " + id + "; every agent of this user gets it at session start."), nil, nil
+		})
+		mcp.AddTool(srv, &mcp.Tool{
+			Name:        "forget",
+			Description: "Forget a remembered fact (id f:... from recall) on all of the user's machines, when the user asks.",
+		}, func(_ context.Context, _ *mcp.CallToolRequest, a forgetArgs) (*mcp.CallToolResult, any, error) {
+			if err := s.Forget(a.ID); err != nil {
+				return text("Not forgotten: " + err.Error()), nil, nil
+			}
+			return text("Forgotten."), nil, nil
+		})
+	}
 	if s.Recipes != nil {
 		mcp.AddTool(srv, &mcp.Tool{
 			Name:        "list_setup_recipes",

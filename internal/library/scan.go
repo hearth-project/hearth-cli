@@ -110,3 +110,26 @@ func placeholder(v string) bool {
 	}
 	return false
 }
+
+// SecretInText reports whether a line of text looks like it holds a
+// credential (the rules ScanSecrets uses), e.g. before it is indexed.
+func SecretInText(text string) bool {
+	for _, line := range strings.Split(text, "\n") {
+		line = secretRef.ReplaceAllString(line, "${}")
+		if strings.Contains(line, "hearth:allow-secret") {
+			continue
+		}
+		for _, r := range secretRules {
+			idx := r.re.FindStringSubmatchIndex(line)
+			if idx == nil {
+				continue
+			}
+			vs, ve := idx[len(idx)-2], idx[len(idx)-1]
+			if vs >= 0 && (placeholder(line[vs:ve]) || codeExpr(line, ve)) {
+				continue
+			}
+			return true
+		}
+	}
+	return false
+}

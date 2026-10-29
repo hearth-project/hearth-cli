@@ -2,6 +2,7 @@ package client
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -248,7 +249,7 @@ func (e *Engine) LearnStatus(fs []Finding, learned *recipe.Recipe) map[string]st
 						}
 					}
 				}
-				if cur, err := os.ReadFile(sf.path); err == nil && !bytes.Equal(withoutOwnMCP(v), withoutOwnMCP(cur)) {
+				if cur, err := os.ReadFile(sf.path); err == nil && !bytes.Equal(withoutOwn(v), withoutOwn(cur)) {
 					st = "changed"
 					break
 				}
@@ -363,4 +364,43 @@ func withoutOwnMCP(b []byte) []byte {
 		}
 	}
 	return []byte(strings.TrimSpace(strings.Join(out, "\n")))
+}
+
+// withoutOwn drops what Hearth writes into agent config files on every
+// machine (its MCP entry, its memory hooks), so they do not make a
+// recorded copy look changed.
+func withoutOwn(b []byte) []byte { return withoutOwnHooks(withoutOwnMCP(b)) }
+
+// withoutOwnHooks normalises a JSON settings file without Hearth's hooks.
+func withoutOwnHooks(b []byte) []byte {
+	if t := bytes.TrimSpace(b); len(t) == 0 || t[0] != '{' {
+		return b
+	}
+	var doc map[string]any // both sides are re-encoded, so formatting does not count
+	if json.Unmarshal(b, &doc) != nil {
+		return b
+	}
+	hooks, _ := doc["hooks"].(map[string]any)
+	for ev, gs := range hooks {
+		groups, _ := gs.([]any)
+		var keep []any
+		for _, g := range groups {
+			if !hearthGroup(g) {
+				keep = append(keep, g)
+			}
+		}
+		if len(keep) == 0 {
+			delete(hooks, ev)
+		} else {
+			hooks[ev] = keep
+		}
+	}
+	if hooks != nil && len(hooks) == 0 {
+		delete(doc, "hooks")
+	}
+	out, err := json.Marshal(doc)
+	if err != nil {
+		return b
+	}
+	return out
 }

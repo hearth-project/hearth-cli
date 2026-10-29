@@ -230,7 +230,26 @@ func setupCmd() *cobra.Command {
 			if done, err := installSkillMCP(true); err != nil {
 				fmt.Println("      mcp:", err)
 			} else if len(done) > 0 {
-				fmt.Println("      skill search MCP: registered with " + strings.Join(done, ", "))
+				fmt.Println("      skill search and memory MCP: registered with " + strings.Join(done, ", "))
+			}
+			// Long-term memory: index every machine's conversations here and
+			// let the agents' prompt hooks use it.
+			if client.MemoryOn(home) {
+				if ms, err := e.IndexMemory(); err != nil {
+					fmt.Println("      memory:", err)
+				} else {
+					fmt.Printf("      memory: %d conversation(s), %d fact(s), %d note(s) indexed for recall\n", ms.Conversations, ms.Facts, ms.Notes)
+				}
+				if res, err := client.SyncMemoryHooks(home, client.MemoryHooksOn(home)); err == nil {
+					for _, r := range res {
+						if r.Op == "installed" {
+							fmt.Printf("      memory hook: %s (%s)\n", r.Agent, r.Path)
+							if r.Agent == "codex" {
+								fmt.Println("        Codex asks once to trust it at its next start: choose \"Trust all and continue\"")
+							}
+						}
+					}
+				}
 			}
 
 			// Record this machine for the next one: its skills and agents,

@@ -114,7 +114,12 @@ func secretCmd() *cobra.Command {
 				}
 				tw := tabwriter.NewWriter(os.Stdout, 0, 2, 2, ' ', 0)
 				fmt.Fprintln(tw, "NAME\tSIZE\tUSE\tUPDATED")
+				facts := 0
 				for _, s := range all {
+					if strings.HasPrefix(s.Name, "memory.") {
+						facts++ // remembered facts: hearth memory list
+						continue
+					}
 					use := "-"
 					if strings.HasPrefix(s.Name, "hearth.") {
 						use = "hearth internal (recipe approvals)"
@@ -125,7 +130,13 @@ func secretCmd() *cobra.Command {
 					}
 					fmt.Fprintf(tw, "%s\t%d B\t%s\t%s\n", s.Name, len(s.Value), use, humanize.Time(time.Unix(s.UpdatedAt, 0)))
 				}
-				return tw.Flush()
+				if err := tw.Flush(); err != nil {
+					return err
+				}
+				if facts > 0 {
+					fmt.Printf("(+ %d remembered fact(s), stored encrypted the same way: hearth memory list)\n", facts)
+				}
+				return nil
 			}},
 		&cobra.Command{Use: "rm <NAME>", Short: "Delete a secret", Args: cobra.ExactArgs(1),
 			RunE: func(_ *cobra.Command, a []string) error {
