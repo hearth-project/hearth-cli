@@ -113,3 +113,19 @@ func TestShellHookSyntax(t *testing.T) {
 		}
 	}
 }
+
+func TestNeutralizeGuardsMissingTools(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	in := "conda activate py312\n  eval \"$(starship init bash)\"\nconda() {\nexport X=1\nls -la"
+	out, _ := neutralize(in)
+	lines := strings.Split(out, "\n")
+	if !strings.HasPrefix(lines[0], "command -v conda >/dev/null 2>&1 && conda activate py312") {
+		t.Fatalf("conda not guarded: %q", lines[0])
+	}
+	if !strings.HasPrefix(lines[1], "  command -v starship >/dev/null 2>&1 && eval") {
+		t.Fatalf("eval not guarded: %q", lines[1])
+	}
+	if lines[2] != "conda() {" || lines[3] != "export X=1" || lines[4] != "ls -la" {
+		t.Fatalf("other lines changed: %q", lines[2:])
+	}
+}

@@ -282,6 +282,7 @@ func daemonCmd() *cobra.Command {
 				log.Printf("ssh key: %v", err)
 			}
 			var lastSSH string
+			skillTargetsSeen := fmt.Sprint(len(skillTargets()), skillTargets()) // setup installed it for these
 			var lastHealth time.Time
 			var health client.HealthReport
 			// Memory hooks follow the setting (and a moved binary).
@@ -390,6 +391,16 @@ func daemonCmd() *cobra.Command {
 				}
 				if time.Since(lastLib) >= libInterval {
 					lastLib = time.Now()
+					// An agent installed after setup (e.g. Codex during the
+					// environment restore) gets the hearth skill too.
+					if ts := skillTargets(); fmt.Sprint(len(ts), ts) != skillTargetsSeen {
+						skillTargetsSeen = fmt.Sprint(len(ts), ts)
+						if got, err := installSetupSkillTo(false, false); err != nil {
+							log.Printf("hearth skill: %v", err)
+						} else if len(got) > 0 {
+							log.Printf("hearth skill installed for %s", strings.Join(got, ", "))
+						}
+					}
 					if r, err := e.SiteSync(); err != nil {
 						log.Printf("site defaults: %v", err)
 					} else if r.Op == "pulled" || r.Op == "removed" {
@@ -732,7 +743,8 @@ func restoreAll(e *client.Engine, agent string, force bool, last int, only map[s
 		return err
 	}
 	counts := map[string]int{}
-	busy := map[string]int{} // online machine -> conversations left there
+	skippedWhy := map[string]int{} // reason -> files and notes skipped for it
+	busy := map[string]int{}       // online machine -> conversations left there
 	report := restoreReport{thisDevice: e.Cfg.DeviceName}
 	defer func() { e.Progress = nil }()
 	key := func(rs client.RemoteSession) string {
@@ -835,6 +847,9 @@ func restoreAll(e *client.Engine, agent string, force bool, last int, only map[s
 		if only != nil && rs.Status == "expired" {
 			_, _ = e.API.Touch(rs.ID) // restoring by id revives it
 		}
+		if rs.Meta.Agent == "wip" {
+			continue // uncommitted-work snapshots of older versions: nothing to restore
+		}
 		if term.IsTerminal(int(os.Stdout.Fd())) {
 			e.Progress = progressLine("downloading " + truncW(titleOf(rs), 40))
 		}
@@ -847,13 +862,20 @@ func restoreAll(e *client.Engine, agent string, force bool, last int, only map[s
 		counts[r.Action]++
 		restored = append(restored, client.RestoredSession{Remote: rs, Result: r, Group: key(rs)})
 		if r.Action == "skipped" {
-			fmt.Printf("%s  skipped  %s: %s\n", short(rs.ID), r.Path, r.Reason)
+			if conversation(rs) {
+				fmt.Printf("%s  skipped  %s: %s\n", short(rs.ID), r.Path, r.Reason)
+			} else {
+				skippedWhy[r.Reason]++ // files and notes: one line per reason below
+			}
 		}
 		if conversation(rs) {
 			report.add(rs, key(rs), r.Action)
 		} else if r.Action != "up-to-date" && r.Action != "skipped" {
 			report.other++
 		}
+	}
+	for why, n := range skippedWhy {
+		fmt.Printf("skipped %d workspace file(s) / note(s): %s\n", n, why)
 	}
 	lastRestore.Written = report.print()
 	switch {

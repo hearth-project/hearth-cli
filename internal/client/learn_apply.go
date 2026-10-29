@@ -28,10 +28,38 @@ func LoadLearned(home string) (*recipe.Recipe, error) {
 		return nil, err
 	}
 	r, err := recipe.Parse(b)
-	if err == nil && upgradeLearned(r) {
-		err = SaveRecipe(home, r) // a migration: keep it
+	if err == nil {
+		up := upgradeLearned(r)
+		if cfg, cerr := LoadConfig(home); cerr == nil && dropOthersComateLogins(r, cfg.Email) {
+			up = true
+		}
+		if up {
+			err = SaveRecipe(home, r) // a migration: keep it
+		}
 	}
 	return r, err
+}
+
+// dropOthersComateLogins removes recorded Comate logins of other people
+// (older versions kept every login-user/<name> of a shared account), so
+// new machines no longer get them.
+func dropOthersComateLogins(r *recipe.Recipe, email string) bool {
+	me, _, _ := strings.Cut(email, "@")
+	if me == "" {
+		return false
+	}
+	const prefix = "token:~/.comate/login-user/"
+	out := r.Steps[:0]
+	dropped := false
+	for _, s := range r.Steps {
+		if n, ok := strings.CutPrefix(s.Name, prefix); ok && !strings.EqualFold(n, me) {
+			dropped = true
+			continue
+		}
+		out = append(out, s)
+	}
+	r.Steps = out
+	return dropped
 }
 
 // upgradeLearned replaces steps recorded by older versions that do not

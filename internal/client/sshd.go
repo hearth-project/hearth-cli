@@ -31,6 +31,10 @@ import (
 
 const defaultSSHPort = 8022
 
+// sshdFlags versions the options startSSHD passes; an sshd Hearth started
+// with older ones is restarted (sessions already open stay).
+const sshdFlags = 2
+
 type sshState struct {
 	Disabled bool   `json:"disabled,omitempty"` // this machine only
 	Address  string `json:"address,omitempty"`
@@ -38,6 +42,7 @@ type sshState struct {
 	PID      int    `json:"pid,omitempty"`
 	External bool   `json:"external,omitempty"` // an sshd Hearth did not start (left running when SSH is turned off)
 	HostKey  string `json:"host_key,omitempty"`
+	Flags    int    `json:"flags,omitempty"` // sshdFlags the running sshd was started with
 	KeysHash string `json:"keys_hash,omitempty"`
 	Endpoint string `json:"endpoint,omitempty"` // published value, to skip unchanged uploads
 	LastErr  string `json:"last_error,omitempty"`
@@ -231,14 +236,16 @@ func (e *Engine) EnsureSSHD() (SSHStatus, error) {
 		return fail(errors.New("no IPv4 address to listen on; set [ssh] address in config.toml"))
 	}
 	want := sshPortWanted(home)
-	ours := !s.External && alive(s.PID) && s.Address == addr && s.Port >= want && s.Port < want+20 && listening(addr, s.Port)
+	ours := !s.External && alive(s.PID) && s.Flags == sshdFlags && s.Address == addr && s.Port >= want && s.Port < want+20 && listening(addr, s.Port)
 	adopted := s.External && s.Address == addr && s.Port == want && listening(addr, s.Port)
 	hostKey := s.HostKey
 	if !ours && !adopted {
 		hostKey = ""
 		if alive(s.PID) && !s.External {
 			_ = syscall.Kill(s.PID, syscall.SIGTERM)
-			time.Sleep(300 * time.Millisecond)
+			for i := 0; i < 30 && listening(s.Address, s.Port); i++ {
+				time.Sleep(100 * time.Millisecond) // not taken for an sshd started by hand
+			}
 		}
 		s.PID, s.External, s.Port = 0, false, 0
 		if hk, err := probeHostKey(addr, want); err == nil {
@@ -259,7 +266,7 @@ func (e *Engine) EnsureSSHD() (SSHStatus, error) {
 			if err != nil {
 				return fail(err)
 			}
-			s.PID, s.Address, s.Port = pid, addr, port
+			s.PID, s.Address, s.Port, s.Flags = pid, addr, port, sshdFlags
 		}
 	}
 	if hostKey == "" {
@@ -323,7 +330,10 @@ func startSSHD(home, authPath, addr string, port int) (int, error) {
 		"-o", "AuthenticationMethods=publickey", "-o", "PubkeyAuthentication=yes",
 		"-o", "PasswordAuthentication=no", "-o", "KbdInteractiveAuthentication=no",
 		"-o", "PermitRootLogin=prohibit-password", "-o", "AllowUsers="+u.Username,
-		"-o", "ClientAliveInterval=60")
+		"-o", "ClientAliveInterval=60",
+		// Some images set LogLevel DEBUG; with -e the session's debug
+		// lines would end up in the user's terminal.
+		"-o", "LogLevel=INFO")
 	if authPath != filepath.Join(u.HomeDir, ".ssh", "authorized_keys") {
 		args = append(args, "-o", "AuthorizedKeysFile="+authPath) // $HOME is not the account's home
 	}

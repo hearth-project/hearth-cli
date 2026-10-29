@@ -321,13 +321,19 @@ func (e *Engine) Discover() []Finding {
 	// Login tokens of tools that expire and are cheap to re-create, plus
 	// the user's own patterns (library/learn.json "token_files", e.g. a
 	// company SSO cache), synced so every machine looks for them.
+	// Comate keeps one login per person in login-user/<name>; on an account
+	// several people share, only this user's own file is theirs to keep.
+	me, _, _ := strings.Cut(e.Cfg.Email, "@")
 	tokenGlobs := []string{filepath.Join(home, ".comate/login-user/*")}
 	for _, g := range learnConfig(e.Home).TokenFiles {
 		tokenGlobs = append(tokenGlobs, paths.Expand(g))
 	}
-	for _, pattern := range tokenGlobs {
+	for i, pattern := range tokenGlobs {
 		matches, _ := filepath.Glob(pattern)
 		for _, m := range matches {
+			if i == 0 && me != "" && !strings.EqualFold(filepath.Base(m), me) {
+				continue // another person's Comate login
+			}
 			add(fileSecret("token:"+paths.Contract(m), "credential", "login token "+filepath.Base(m)+" (expires; restored only if absent)", m, "if-absent"))
 		}
 	}

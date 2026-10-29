@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -403,12 +404,48 @@ func (e *Engine) SaveShell() ([]ShellSaved, error) {
 
 var sourceLineRE = regexp.MustCompile(`^(\s*)(?:source|\.)\s+["']?([^"'\s;&|]+)["']?\s*$`)
 
+// Version managers and prompt tools people call from their rc files; a new
+// machine often lacks them, and every new shell would print "command not
+// found". Their lines are guarded with command -v (checked when the shell
+// starts, so they work again once the tool is installed).
+var guardedTools = map[string]bool{"conda": true, "mamba": true, "micromamba": true, "pyenv": true, "rbenv": true, "nodenv": true,
+	"nvm": true, "fnm": true, "direnv": true, "starship": true, "zoxide": true, "atuin": true, "thefuck": true, "rustup": true, "brew": true}
+
+var (
+	toolLineRE = regexp.MustCompile(`^(\s*)([a-z][a-z0-9_-]*)(\s[^\\]*)?$`)
+	evalToolRE = regexp.MustCompile(`^(\s*)eval\s+"\$\(([a-z][a-z0-9_-]*)\s[^"]*\)"\s*$`)
+)
+
+// guardTool returns the line guarded by command -v when it calls one of
+// guardedTools that is not installed here ("" = leave it).
+func guardTool(l string) string {
+	if strings.Contains(l, "<<") || strings.HasSuffix(strings.TrimSpace(l), "{") {
+		return ""
+	}
+	m := evalToolRE.FindStringSubmatch(l)
+	if m == nil {
+		m = toolLineRE.FindStringSubmatch(l)
+	}
+	if m == nil || !guardedTools[m[2]] {
+		return ""
+	}
+	if _, err := exec.LookPath(m[2]); err == nil {
+		return ""
+	}
+	return m[1] + "command -v " + m[2] + " >/dev/null 2>&1 && " + strings.TrimLeft(l, " \t") + " # hearth: guarded, " + m[2] + " was not installed here"
+}
+
 // neutralize replaces lines that source a file missing on this machine
-// with a no-op (":" keeps if / fi bodies valid).
+// with a no-op (":" keeps if / fi bodies valid), and guards calls of tools
+// that are not installed here.
 func neutralize(s string) (string, []string) {
 	var missing []string
 	lines := strings.Split(s, "\n")
 	for i, l := range lines {
+		if g := guardTool(l); g != "" {
+			lines[i] = g
+			continue
+		}
 		m := sourceLineRE.FindStringSubmatch(l)
 		if m == nil {
 			continue
