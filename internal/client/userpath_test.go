@@ -29,3 +29,24 @@ func TestEnsureUserPath(t *testing.T) {
 		t.Fatalf("version %q", v)
 	}
 }
+
+// A proxy the daemon reached the server with is used by commands started
+// from shells without one, and never overrides one that is set.
+func TestRememberedProxy(t *testing.T) {
+	home := t.TempDir()
+	for _, k := range []string{"https_proxy", "http_proxy", "no_proxy", "HTTPS_PROXY", "HTTP_PROXY", "NO_PROXY"} {
+		t.Setenv(k, "")
+	}
+	t.Setenv("https_proxy", "http://p:8188")
+	RememberProxy(home)
+	t.Setenv("https_proxy", "")
+	useRememberedProxy(home)
+	if os.Getenv("https_proxy") != "http://p:8188" {
+		t.Fatalf("remembered proxy not used: %q", os.Getenv("https_proxy"))
+	}
+	t.Setenv("https_proxy", "http://other:1")
+	useRememberedProxy(home)
+	if os.Getenv("https_proxy") != "http://other:1" {
+		t.Fatal("overrode the shell's proxy")
+	}
+}

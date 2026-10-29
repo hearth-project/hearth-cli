@@ -59,7 +59,7 @@ chmod +x ~/.local/bin/codex
 ```
 
 - Check: `codex --version`; `type -a codex` should list yours first. Login: not needed when Hearth restored `~/.codex/auth.json` and `config.toml`; otherwise `codex login`.
-- Versions: `[[tools.pin]]` in config.toml records the version your machines use; `hearth recipe plan` lists it.
+- Versions: the latest by default (`npm view @openai/codex version`). `[[tools.pin]]` in config.toml lists the CLIs to install; only a `version` there holds one back.
 
 ## 4. Claude Code
 
@@ -95,6 +95,8 @@ t=$(mktemp) && hearth secret get codex-mixin-config > "$t" \
 ```
 
 - Codex installed after codex-mixin: `codex-mixin agent connect codex --mode custom-only`.
+- **An import that succeeds is not yet a working setup**: afterwards `codex-mixin doctor --no-tui` must say `doctor: ok`. With a degraded provider (`codex exec` answers "high demand") this machine needs the user's own login again, in a terminal: `codex-mixin setup ...` (from another machine: `hearth ssh -t <machine> -- ...`), then `hearth save --yes`.
+- `api.github.com` rate-limited (403) behind a shared proxy: read the version from `https://github.com/Edward-lyz/codex-mixin/releases.atom` and the checksum from the release page, or use a logged-in `gh api`.
 - Check: `codex-mixin doctor --no-tui` (`doctor: ok`), `codex-mixin provider list --no-tui` (STATUS healthy), `codex-mixin service status --no-tui` (gateway running).
 
 ## 6. Comate and other agents

@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/hearth-project/hearth-cli/internal/api"
 )
 
 func TestManagedKeysBlock(t *testing.T) {
@@ -83,5 +85,24 @@ func TestSSHKeysFollowDevices(t *testing.T) {
 	}
 	if keys, _ = a.SSHKeys(); len(keys) != 1 {
 		t.Fatalf("removed usual key still published: %+v", keys)
+	}
+}
+
+func TestFindDevice(t *testing.T) {
+	ds := []api.Device{
+		{ID: "f5da6288e7b09482", Name: "10.0.0.1", Status: "revoked"},
+		{ID: "e34b73cb58dc6c8e", Name: "10.0.0.1", Status: "active"},
+		{ID: "3a7c31806665c8c2", Name: "gpu-f04-14.example-host", Status: "active"},
+		{ID: "205cd684faf655cf", Name: "gpu-f04-15.example-host", Status: "active"},
+	}
+	for ref, want := range map[string]string{"gpu-f04-14": "3a7c31806665c8c2", "gpu-f04-14.example-host": "3a7c31806665c8c2",
+		"3a7c": "3a7c31806665c8c2", "10.0.0.1": "e34b73cb58dc6c8e", "f04-15": "205cd684faf655cf"} {
+		d, err := FindDevice(ds, ref)
+		if err != nil || d.ID != want {
+			t.Errorf("%s: %s %v", ref, d.ID, err)
+		}
+	}
+	if _, err := FindDevice(ds, "gpu-f04"); err == nil {
+		t.Error("ambiguous name accepted")
 	}
 }

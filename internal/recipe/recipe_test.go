@@ -404,3 +404,15 @@ func TestManualDoneAndWarnNotBad(t *testing.T) {
 		t.Fatal("warn counted as failure")
 	}
 }
+
+// Path values are set only where their directory exists; others as is.
+func TestRenderEnvGuardsPaths(t *testing.T) {
+	out := string(renderEnv([]scopedEnv{{recipe: "r", step: Step{Type: "env", Set: map[string]string{
+		"GIT_CONFIG_GLOBAL": "/srv/vault/gitconfig", "EDITOR": "vim", "PATHS": "/a:/b"}}}}))
+	if !strings.Contains(out, "[ -d '/srv/vault' ] && export GIT_CONFIG_GLOBAL='/srv/vault/gitconfig'") {
+		t.Fatalf("path not guarded:\n%s", out)
+	}
+	if !strings.Contains(out, "\nexport EDITOR='vim'") || !strings.Contains(out, "\nexport PATHS='/a:/b'") {
+		t.Fatalf("plain values changed:\n%s", out)
+	}
+}

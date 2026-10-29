@@ -361,12 +361,13 @@ func (e *Engine) Discover() []Finding {
 			PerMachine: perMachineVars[v] || hasForeignPath(pv)})
 	}
 
-	// Agent CLIs: pin the installed versions.
+	// Agent CLIs: new machines install them, in their latest version (users
+	// upgrade as they go; a version is kept only when set by hand with
+	// hearth tools add <name> --version x.y.z).
 	for _, name := range tools.BuiltinNames() {
 		t := tools.Tool{Name: name}
 		if v := tools.Installed(t); v != "" && v != "unknown" {
-			t.Version = v
-			add(Finding{ID: "tool:" + name, Kind: "tool", Title: name + " CLI", Detail: "version " + v, tool: &t})
+			add(Finding{ID: "tool:" + name, Kind: "tool", Title: name + " CLI", Detail: "installed " + v + "; new machines get the latest version", tool: &t})
 		}
 	}
 	if p, err := exec.LookPath("codex-mixin"); err == nil && !SiteCaptures(e.Home, "codex-mixin-config") {
@@ -573,7 +574,11 @@ func codexMixinSteps() []recipe.Step {
 			DoneWhen: p + "command -v codex-mixin"},
 		{Type: "run", Name: "codex-mixin-import", WhenSecret: "codex-mixin-config",
 			Unless: p + "codex-mixin doctor --no-tui | grep -q 'doctor: ok'",
-			Run:    p + `command -v codex-mixin >/dev/null || { echo "codex-mixin not installed"; exit 1; }; t=$(mktemp) && hearth secret get codex-mixin-config > "$t" && codex-mixin config import --no-tui "$t" && codex-mixin config apply --no-tui && codex-mixin service restart --no-tui; r=$?; rm -f "$t"; exit $r`},
+			Run: p + `command -v codex-mixin >/dev/null || { echo "codex-mixin not installed"; exit 1; }; t=$(mktemp) && hearth secret get codex-mixin-config > "$t" && codex-mixin config import --no-tui "$t" && codex-mixin config apply --no-tui && codex-mixin service restart --no-tui; r=$?; rm -f "$t"; [ $r = 0 ] || exit $r; ` +
+				`sleep 2; codex-mixin doctor --no-tui | grep -q 'doctor: ok' || { echo "imported, but codex-mixin doctor is not ok (its provider may need this machine's own login): do the step codex-mixin-login"; exit 1; }`},
+		{Type: "manual", Name: "codex-mixin-login", WhenSecret: "codex-mixin-config", TTY: true,
+			Text:     "only if codex-mixin doctor is not ok after the import: the user logs in again in a terminal on this machine (or from another: hearth ssh -t <machine> -- ...): codex-mixin setup (guide: hearth docs env, section 5), then: hearth save --yes",
+			DoneWhen: p + "codex-mixin doctor --no-tui | grep -q 'doctor: ok'"},
 		{Type: "manual", Name: "codex-mixin-setup", UnlessSecret: "codex-mixin-config", TTY: true,
 			Text: "first machine only, in the user's own terminal: codex-mixin setup (its login may show a QR code; guide: hearth docs env, section 5), then: hearth save --yes"},
 	}

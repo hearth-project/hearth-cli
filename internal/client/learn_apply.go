@@ -180,7 +180,11 @@ func (e *Engine) Accept(f Finding, learned *recipe.Recipe) (string, error) {
 		if err := SaveTools(e.Home, m); err != nil {
 			return "", err
 		}
-		did = append(did, "tool "+f.tool.Name+"@"+f.tool.Version)
+		if f.tool.Version != "" {
+			did = append(did, "tool "+f.tool.Name+"@"+f.tool.Version)
+		} else {
+			did = append(did, "tool "+f.tool.Name+" (latest)")
+		}
 	}
 	if f.mcpImport != "" {
 		added, _, err := e.ImportMCP(f.mcpImport, false)

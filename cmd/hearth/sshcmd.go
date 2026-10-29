@@ -16,6 +16,7 @@ import (
 )
 
 func sshCmd() *cobra.Command {
+	var tty bool
 	c := &cobra.Command{
 		Use:   "ssh [machine] [-- command ...]",
 		Short: "SSH to your machines with Hearth managing the keys (no machine: list them)",
@@ -26,6 +27,7 @@ func sshCmd() *cobra.Command {
 			"there is used as it is). Revoking a device removes its keys everywhere within a minute.\n\n" +
 			"  hearth ssh                 machines you can reach\n" +
 			"  hearth ssh <machine>       log in (part of the name is enough)\n" +
+			"  hearth ssh -t <machine> -- <command>   run a command that needs a terminal (QR-code login)\n" +
 			"  hearth ssh config          Host entries in ~/.ssh/config (VS Code / Cursor Remote-SSH, scp, rsync)",
 		Args:               cobra.ArbitraryArgs,
 		DisableFlagParsing: false,
@@ -50,18 +52,18 @@ func sshCmd() *cobra.Command {
 					return nil
 				}
 				t := &table{}
-				t.add("MACHINE", "STATE", "CONNECT", "PLAIN SSH (your usual key)")
+				t.add("MACHINE", "STATE", "CONNECT", "SSH / IDE HOST (after hearth ssh config)")
 				names := sshNames(eps)
 				for i, ep := range eps {
 					st := "offline"
 					if ep.Online {
 						st = "online"
 					}
-					t.add(ep.Name, st, "hearth ssh "+names[i], fmt.Sprintf("ssh -p %d %s@%s", ep.Port, ep.User, ep.Address))
+					t.add(ep.Name, st, "hearth ssh "+names[i], "ssh hearth-"+names[i])
 				}
 				t.fit()
 				t.print()
-				fmt.Println("VS Code / Cursor Remote-SSH, scp, rsync: hearth ssh config adds them to ~/.ssh/config as hearth-<machine>")
+				fmt.Println("hearth ssh config adds them to ~/.ssh/config as hearth-<machine>, with their host keys, for ssh, scp, rsync and VS Code / Cursor / Codex Remote-SSH")
 				return nil
 			}
 			ep, err := e.FindSSHEndpoint(args[0])
@@ -73,11 +75,15 @@ func sshCmd() *cobra.Command {
 				return fmt.Errorf("no ssh client on this machine")
 			}
 			argv := append([]string{"ssh"}, sshArgs(e.Home, ep)...)
+			if tty {
+				argv = append(argv, "-t") // a terminal for the command: QR-code logins, prompts
+			}
 			argv = append(argv, ep.User+"@"+ep.Address)
 			argv = append(argv, args[1:]...)
 			return syscall.Exec(bin, argv, os.Environ())
 		},
 	}
+	c.Flags().BoolVarP(&tty, "tty", "t", false, "give the command a terminal (logins that show a QR code or ask questions): hearth ssh -t <machine> -- <command>")
 	var all bool
 	setOn := func(on bool) func(*cobra.Command, []string) error {
 		return func(*cobra.Command, []string) error {
@@ -208,7 +214,7 @@ func sshNames(eps []client.SSHEndpoint) []string {
 
 func sshArgs(home string, ep client.SSHEndpoint) []string {
 	return []string{"-i", client.SSHKeyPath(home), "-o", "IdentitiesOnly=yes", "-o", "UserKnownHostsFile=" + client.SSHKnownHosts(home),
-		"-o", "StrictHostKeyChecking=yes", "-p", strconv.Itoa(ep.Port)}
+		"-o", "StrictHostKeyChecking=yes", "-o", "LogLevel=ERROR", "-p", strconv.Itoa(ep.Port)}
 }
 
 func printSSHStatus(st client.SSHStatus) {

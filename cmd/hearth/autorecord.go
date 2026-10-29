@@ -45,6 +45,11 @@ func autoRecord(e *client.Engine, say func(string, ...any)) {
 	if err != nil {
 		say("record: %v", err)
 	}
+	if n, err := e.RefreshShell(); err != nil {
+		say("shell: %v", err)
+	} else if n > 0 {
+		say("shell: %d restored rc snippet(s) adjusted to this machine (lines for tools or paths it lacks are guarded)", n)
+	}
 	saved, err := e.SaveShell()
 	for _, s := range saved {
 		say("shell: %s saved (%d paragraph(s), encrypted)", s.File.Path, s.Paragraphs)

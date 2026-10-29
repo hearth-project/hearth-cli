@@ -101,27 +101,90 @@ func readPasswordVar(envVar, prompt string, confirm bool) ([]byte, error) {
 }
 
 func initCmd() *cobra.Command {
-	return &cobra.Command{
+	var moveLogin bool
+	c := &cobra.Command{
 		Use:   "init [dir]",
-		Short: "Make a directory your hearth workspace (state in <dir>/.hearth)",
+		Short: "Make a directory your hearth workspace (state in <dir>/.hearth; --move-login brings the login of ~/.hearth)",
 		Long: "On machines where several people share one Unix account, each person keeps their state, " +
-			"agent config dirs and credentials in their own workspace instead of the shared $HOME.",
+			"agent config dirs and credentials in their own workspace instead of the shared $HOME.\n\n" +
+			"A workspace has its own login. If this machine is already logged in without one (~/.hearth) and the\n" +
+			"workspace is yours, --move-login moves that login and its state there (the daemon restarts); otherwise\n" +
+			"log in inside the workspace with hearth setup.",
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(_ *cobra.Command, a []string) error {
 			dir := "."
 			if len(a) == 1 {
 				dir = a[0]
 			}
+			abs, err := filepath.Abs(dir)
+			if err != nil {
+				return err
+			}
+			target := filepath.Join(abs, ".hearth")
+			def := client.DefaultHome()
+			_, defErr := client.LoadConfig(def)
+			_, tgtErr := client.LoadConfig(target)
+			movable := defErr == nil && tgtErr != nil && filepath.Clean(def) != filepath.Clean(target)
+			if moveLogin {
+				if !movable {
+					return fmt.Errorf("nothing to move: %s is not logged in, or %s already is", def, target)
+				}
+				wasRunning := client.DaemonPID(def) != 0
+				if wasRunning {
+					if err := client.StopDaemon(def, 30*time.Second); err != nil {
+						return fmt.Errorf("stop the daemon of %s: %w", def, err)
+					}
+				}
+				// A plain hearth init leaves only its marker and the CA copy.
+				entries, _ := os.ReadDir(target)
+				for _, en := range entries {
+					if !client.InitOnlyFile(en.Name()) {
+						return fmt.Errorf("%s already holds hearth state (%s); move it away first", target, en.Name())
+					}
+				}
+				_ = os.RemoveAll(target)
+				if err := os.Rename(def, target); err != nil {
+					return fmt.Errorf("move %s to %s: %w (on another disk: log in inside the workspace instead)", def, target, err)
+				}
+				fmt.Printf("moved the login and state of %s to %s\n", def, target)
+				if wasRunning {
+					fmt.Printf("restart background sync from the workspace:  cd %s && hearth daemon start\n", abs)
+				}
+			}
 			home, err := client.InitWorkspace(dir)
 			if err != nil {
 				return err
 			}
+			if moveLogin {
+				// Links and registrations named the old home: point them here.
+				os.Setenv("HEARTH_HOME", home)
+				if e, err := client.NewEngine(home); err == nil {
+					if _, err := e.Render(false); err != nil {
+						fmt.Println("skills and agents:", err)
+					}
+				}
+				if _, err := installSkillMCP(true); err != nil {
+					fmt.Println("skill search:", err)
+				}
+				_, _ = client.SyncMemoryHooks(home, client.MemoryHooksOn(home))
+			}
 			fmt.Printf("workspace %s (state %s)\n", filepath.Dir(home), home)
+			if _, err := client.LoadConfig(home); err != nil {
+				if movable {
+					cfg, _ := client.LoadConfig(def)
+					fmt.Printf("not logged in here yet: hearth commands inside the workspace use its own login. ~/.hearth is logged in as %s;\n", cfg.Email)
+					fmt.Printf("  yours: hearth init --move-login %s   (moves that login here)\n  or:    cd %s && hearth setup\n", abs, abs)
+				} else {
+					fmt.Printf("not logged in here yet:  cd %s && hearth setup\n", abs)
+				}
+			}
 			fmt.Println("hearth commands run anywhere inside it use this state. Keep agent configs there too, e.g.:")
 			fmt.Println("  hearth agents home codex '${WORKSPACE}/.codex'")
 			return nil
 		},
 	}
+	c.Flags().BoolVar(&moveLogin, "move-login", false, "move the login and state of ~/.hearth into this workspace")
+	return c
 }
 
 func engine() (*client.Engine, error) { return client.NewEngine(client.Home()) }

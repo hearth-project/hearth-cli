@@ -298,6 +298,7 @@ func recipeDoneCmd() *cobra.Command {
 				return err
 			}
 			fmt.Printf("marked %d step(s) done on this machine\n", len(mark))
+			reportHealthQuiet(e) // the console and other machines see it now, not in 5 minutes
 			return nil
 		}}
 	c.Flags().BoolVar(&all, "all", false, "mark every step still to do")
@@ -337,6 +338,7 @@ func recipeRunCmd() *cobra.Command {
 					return err
 				}
 			}
+			reportHealthQuiet(e)
 			if bad > 0 {
 				return fmt.Errorf("%d step(s) failed", bad)
 			}

@@ -9,7 +9,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/hearth-project/hearth-cli/internal/api"
 	"github.com/hearth-project/hearth-cli/internal/client"
 	"github.com/hearth-project/hearth-cli/internal/machine"
 	"github.com/hearth-project/hearth-cli/internal/paths"
@@ -110,6 +109,7 @@ func machineCmd() *cobra.Command {
 	add.Flags().StringVar(&workspace, "workspace", "", "working directory on these machines, e.g. /mnt/ssd/$USER/work")
 	add.Flags().StringVar(&desc, "description", "", "description")
 	add.Flags().BoolVar(&here, "here", false, "match machines like this one (by GPU model, else OS and architecture)")
+	var listAll bool
 	list := &cobra.Command{Use: "list", Short: "List your machines, architecture and agent readiness", RunE: func(*cobra.Command, []string) error {
 		e, err := engine()
 		if err != nil {
@@ -120,8 +120,13 @@ func machineCmd() *cobra.Command {
 			return err
 		}
 		t := &table{}
-		t.add("MACHINE", "STATE", "FACTS", "ENVIRONMENT", "CONNECT")
+		t.add("MACHINE", "STATE", "FACTS", "ENVIRONMENT", "CHECKED", "CONNECT")
+		hidden := 0
 		for _, d := range ds {
+			if d.Status != "" && d.Status != "active" && !listAll {
+				hidden++
+				continue
+			}
 			state := "offline"
 			if d.Status != "active" {
 				state = d.Status
@@ -144,13 +149,21 @@ func machineCmd() *cobra.Command {
 			if d.Status != "active" {
 				ag, restore = "-", "-"
 			}
-			t.add(d.Name, state, fact, ag, restore)
+			checked := "-"
+			if at, _ := d.Env["checked_at"].(float64); at > 0 {
+				checked = agoUnix(int64(at))
+			}
+			t.add(d.Name, state, fact, ag, checked, restore)
 		}
 		t.fit()
 		t.print()
+		if hidden > 0 {
+			fmt.Printf("%d revoked machine(s) hidden (--all)\n", hidden)
+		}
 		fmt.Println("details: hearth machine inspect <machine>; fix from here: ask your agent \"恢复 <machine> 的 Codex 环境\"")
 		return nil
 	}}
+	list.Flags().BoolVar(&listAll, "all", false, "also revoked machines")
 	inspect := &cobra.Command{Use: "inspect <machine>", Short: "Show a machine's public health report", Args: cobra.ExactArgs(1), RunE: func(_ *cobra.Command, a []string) error {
 		e, err := engine()
 		if err != nil {
@@ -160,25 +173,13 @@ func machineCmd() *cobra.Command {
 		if err != nil {
 			return err
 		}
-		var fallback *api.Device
-		for i := range ds {
-			d := &ds[i]
-			if d.Name == a[0] || d.ID == a[0] || strings.HasPrefix(d.ID, a[0]) {
-				if d.Status == "active" {
-					fallback = d
-					break
-				}
-				if fallback == nil {
-					fallback = d
-				}
-			}
+		d, err := client.FindDevice(ds, a[0])
+		if err != nil {
+			return err
 		}
-		if fallback != nil {
-			b, _ := json.MarshalIndent(fallback, "", "  ")
-			fmt.Println(string(b))
-			return nil
-		}
-		return fmt.Errorf("no machine %q", a[0])
+		b, _ := json.MarshalIndent(d, "", "  ")
+		fmt.Println(string(b))
+		return nil
 	}}
 	check := &cobra.Command{Use: "check", Short: "Check this machine's environment now and report it (the daemon does it every 5 minutes)", RunE: func(*cobra.Command, []string) error {
 		e, err := engine()
@@ -186,8 +187,7 @@ func machineCmd() *cobra.Command {
 			return err
 		}
 		client.FreshChecks = true
-		h := e.MachineHealth()
-		if err := e.API.HeartbeatReport(map[string]any{"facts": h.Machine, "profiles": h.Profiles, "workspace": h.Workspace}, map[string]any{"status": h.Status, "client": h.Client, "agents": h.Agents, "tools": h.Tools, "recipe_todo": h.RecipeTodo, "recipe_manual": h.RecipeManual, "todo_steps": h.TodoSteps, "issues": h.Issues, "checked_at": h.CheckedAt}); err != nil {
+		if err := reportHealth(e); err != nil {
 			return err
 		}
 		ds, err := e.API.Devices()
@@ -319,3 +319,15 @@ func envProblemText(p map[string]any) string {
 	}
 	return s("code")
 }
+
+// reportHealth runs the environment check and sends it to the server.
+func reportHealth(e *client.Engine) error {
+	h := e.MachineHealth()
+	return e.API.HeartbeatReport(map[string]any{"facts": h.Machine, "profiles": h.Profiles, "workspace": h.Workspace},
+		map[string]any{"status": h.Status, "client": h.Client, "agents": h.Agents, "tools": h.Tools, "recipe_todo": h.RecipeTodo,
+			"recipe_manual": h.RecipeManual, "todo_steps": h.TodoSteps, "issues": h.Issues, "checked_at": h.CheckedAt})
+}
+
+// reportHealthQuiet reports after a change (a restore step done); a
+// failure only means the daemon reports it a few minutes later.
+func reportHealthQuiet(e *client.Engine) { _ = reportHealth(e) }
