@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Environment check finds tools that are not on any PATH: an executable of that name anywhere inside a Codex app bundle (a few levels deep), the executable of a running process (a codex-mixin gateway started by its service), or a program in the user's launchd agents (macOS).
 - The proxy the daemon remembered is used by every request again: the client's transport looks the proxy up per request (`http.ProxyFromEnvironment` reads the environment once per process, before the remembered proxy was set), so `hearth self-update` and other commands from a shell without the proxy no longer time out on machines that need one.
 - Workspace made after logging in (shared accounts): commands inside it reported "not logged in" and asked for an email although `~/.hearth` was logged in as the same person, and running `hearth setup` there made a second device on the same machine whose daemon competed with the first ("session is leased by another device").
   - `hearth onboard status` / `hearth status` propose `hearth init --move-login <dir>` (no password) when `~/.hearth`'s account is the workspace's local identity, ask when nothing says whose workspace it is, and never offer another person's login; the JSON has `home_login`.

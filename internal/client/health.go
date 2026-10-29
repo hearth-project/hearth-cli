@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -201,27 +202,113 @@ func cachedMixinDoctor(bin string) (*bool, string) {
 	return mixinCache.ok, mixinCache.detail
 }
 
-// lookTool finds a tool on PATH, else where desktop apps bundle it (the
-// Codex app on macOS ships its CLI inside the app).
+// lookTool finds a tool the way the user reaches it: on PATH, else inside
+// an app bundle (the Codex app ships its CLI), else as a running process
+// (a gateway started by its own service), else in a launchd agent (macOS).
 func lookTool(name string) (string, error) {
 	p, err := exec.LookPath(name)
-	if err == nil || name != "codex" {
-		return p, err
+	if err == nil {
+		return p, nil
 	}
-	h, _ := os.UserHomeDir()
-	var cands []string
-	for _, dir := range []string{"/Applications", filepath.Join(h, "Applications")} {
-		for _, pat := range []string{"*Codex*.app/Contents/Resources/codex", "*Codex*.app/Contents/Resources/bin/codex", "*Codex*.app/Contents/MacOS/codex"} {
-			m, _ := filepath.Glob(filepath.Join(dir, pat))
-			cands = append(cands, m...)
-		}
-	}
-	for _, c := range cands {
-		if fi, e := os.Stat(c); e == nil && !fi.IsDir() && fi.Mode()&0o111 != 0 {
+	if name == "codex" {
+		if c := appBundleBinary("Codex", name); c != "" {
 			return c, nil
 		}
 	}
+	if c := runningBinary(name); c != "" {
+		return c, nil
+	}
+	if c := launchAgentBinary(name); c != "" {
+		return c, nil
+	}
 	return "", err
+}
+
+func isExecFile(p string) bool {
+	fi, err := os.Stat(p)
+	return err == nil && fi.Mode().IsRegular() && fi.Mode()&0o111 != 0
+}
+
+// appBundleBinary looks for an executable called name in *<app>*.app
+// bundles under /Applications and ~/Applications (a few levels deep).
+func appBundleBinary(app, name string) string {
+	h, _ := os.UserHomeDir()
+	for _, dir := range []string{"/Applications", filepath.Join(h, "Applications")} {
+		apps, _ := filepath.Glob(filepath.Join(dir, "*"+app+"*.app"))
+		for _, a := range apps {
+			root := filepath.Join(a, "Contents")
+			found := ""
+			_ = filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
+				if err != nil || found != "" {
+					return filepath.SkipDir
+				}
+				if d.IsDir() {
+					if strings.Count(strings.TrimPrefix(p, root), string(filepath.Separator)) > 5 || strings.HasSuffix(p, ".framework") || strings.HasSuffix(p, ".lproj") {
+						return filepath.SkipDir
+					}
+					return nil
+				}
+				if d.Name() == name && isExecFile(p) {
+					found = p
+					return filepath.SkipAll
+				}
+				return nil
+			})
+			if found != "" {
+				return found
+			}
+		}
+	}
+	return ""
+}
+
+// runningBinary is the executable of a running process called name.
+func runningBinary(name string) string {
+	if runtime.GOOS == "linux" {
+		exes, _ := filepath.Glob("/proc/[0-9]*/exe")
+		for _, e := range exes {
+			if p, err := os.Readlink(e); err == nil && filepath.Base(p) == name && isExecFile(p) {
+				return p
+			}
+		}
+		return ""
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "ps", "-axww", "-o", "comm=").Output() // macOS: the full path
+	if err != nil {
+		return ""
+	}
+	for _, l := range strings.Split(string(out), "\n") {
+		if l = strings.TrimSpace(l); filepath.IsAbs(l) && filepath.Base(l) == name && isExecFile(l) {
+			return l
+		}
+	}
+	return ""
+}
+
+var plistStringRE = regexp.MustCompile(`<string>([^<]+)</string>`)
+
+// launchAgentBinary finds name in the user's launchd agents (a service
+// installed by the tool itself, macOS).
+func launchAgentBinary(name string) string {
+	if runtime.GOOS != "darwin" {
+		return ""
+	}
+	h, _ := os.UserHomeDir()
+	plists, _ := filepath.Glob(filepath.Join(h, "Library", "LaunchAgents", "*.plist"))
+	for _, p := range plists {
+		b, err := os.ReadFile(p)
+		if err != nil || !strings.Contains(string(b), name) {
+			continue
+		}
+		for _, m := range plistStringRE.FindAllStringSubmatch(string(b), -1) {
+			if v := strings.TrimSpace(m[1]); filepath.IsAbs(v) && filepath.Base(v) == name && isExecFile(v) {
+				return v
+			}
+		}
+	}
+	return ""
 }
 
 // mixinDoctor runs codex-mixin's own check (gateway running, provider

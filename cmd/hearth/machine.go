@@ -194,7 +194,7 @@ func machineCmd() *cobra.Command {
 			if !ok {
 				continue
 			}
-			where := "not found (PATH, the login shell's PATH, ~/.local/bin, nvm, Homebrew, the Codex app)"
+			where := "not found (PATH, login shell PATH, ~/.local/bin, nvm, Homebrew, Codex app bundle, running processes, launchd agents)"
 			if th.Installed {
 				where = th.Version + "  " + th.Path
 			}

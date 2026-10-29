@@ -85,3 +85,21 @@ func TestTransportProxyPerRequest(t *testing.T) {
 		t.Fatalf("proxy set later not used: %v", u)
 	}
 }
+
+// A tool off PATH is found in an app bundle, as a running process, or in a
+// launchd agent's program arguments.
+func TestLookToolFallbacks(t *testing.T) {
+	h := t.TempDir()
+	t.Setenv("HOME", h)
+	t.Setenv("PATH", "/nonexistent")
+	bin := filepath.Join(h, "Applications", "Codex.app", "Contents", "Resources", "app", "bin", "codex")
+	os.MkdirAll(filepath.Dir(bin), 0o755)
+	os.WriteFile(bin, []byte("#!/bin/sh\n"), 0o755)
+	if p, err := lookTool("codex"); err != nil || p != bin {
+		t.Fatalf("app bundle: %q %v", p, err)
+	}
+	self, _ := os.Executable()
+	if p := runningBinary(filepath.Base(self)); p == "" {
+		t.Fatal("running process not found")
+	}
+}
