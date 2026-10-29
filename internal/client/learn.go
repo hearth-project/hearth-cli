@@ -361,12 +361,13 @@ func (e *Engine) Discover() []Finding {
 			PerMachine: perMachineVars[v] || hasForeignPath(pv)})
 	}
 
-	// Agent CLIs: pin the installed versions.
+	// Agent CLIs: new machines install them, in their latest version (users
+	// upgrade as they go; a version is kept only when set by hand with
+	// hearth tools add <name> --version x.y.z).
 	for _, name := range tools.BuiltinNames() {
 		t := tools.Tool{Name: name}
 		if v := tools.Installed(t); v != "" && v != "unknown" {
-			t.Version = v
-			add(Finding{ID: "tool:" + name, Kind: "tool", Title: name + " CLI", Detail: "version " + v, tool: &t})
+			add(Finding{ID: "tool:" + name, Kind: "tool", Title: name + " CLI", Detail: "installed " + v + "; new machines get the latest version", tool: &t})
 		}
 	}
 	if p, err := exec.LookPath("codex-mixin"); err == nil && !SiteCaptures(e.Home, "codex-mixin-config") {

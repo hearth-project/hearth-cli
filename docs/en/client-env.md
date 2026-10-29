@@ -59,7 +59,7 @@ chmod +x ~/.local/bin/codex
 ```
 
 - Check: `codex --version`; `type -a codex` should list yours first. Login: not needed when Hearth restored `~/.codex/auth.json` and `config.toml`; otherwise `codex login`.
-- Versions: `[[tools.pin]]` in config.toml records the version your machines use; `hearth recipe plan` lists it.
+- Versions: the latest by default (`npm view @openai/codex version`). `[[tools.pin]]` in config.toml lists the CLIs to install; only a `version` there holds one back.
 
 ## 4. Claude Code
 
