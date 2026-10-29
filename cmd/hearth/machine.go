@@ -185,8 +185,24 @@ func machineCmd() *cobra.Command {
 			return err
 		}
 		client.FreshChecks = true
-		if err := reportHealth(e); err != nil {
+		h, err := reportHealthOf(e)
+		if err != nil {
 			return err
+		}
+		for _, name := range []string{"codex", "codex-mixin", "claude", "node"} {
+			th, ok := h.Tools[name]
+			if !ok {
+				continue
+			}
+			where := "not found (PATH, the login shell's PATH, ~/.local/bin, nvm, Homebrew, the Codex app)"
+			if th.Installed {
+				where = th.Version + "  " + th.Path
+			}
+			note := ""
+			if a, ok := h.Agents[name]; ok && !a.Used {
+				note = "  (not one of your agents lately: not checked)"
+			}
+			fmt.Printf("  %-12s %s%s\n", name, where, note)
 		}
 		ds, err := e.API.Devices()
 		if err != nil {
@@ -312,9 +328,11 @@ func envProblemText(p map[string]any) string {
 }
 
 // reportHealth runs the environment check and sends it to the server.
-func reportHealth(e *client.Engine) error {
+func reportHealth(e *client.Engine) error { _, err := reportHealthOf(e); return err }
+
+func reportHealthOf(e *client.Engine) (client.HealthReport, error) {
 	h := e.MachineHealth()
-	return e.API.HeartbeatReport(map[string]any{"facts": h.Machine, "profiles": h.Profiles, "workspace": h.Workspace},
+	return h, e.API.HeartbeatReport(map[string]any{"facts": h.Machine, "profiles": h.Profiles, "workspace": h.Workspace},
 		map[string]any{"status": h.Status, "client": h.Client, "agents": h.Agents, "tools": h.Tools, "recipe_todo": h.RecipeTodo,
 			"recipe_manual": h.RecipeManual, "todo_steps": h.TodoSteps, "issues": h.Issues, "checked_at": h.CheckedAt})
 }
