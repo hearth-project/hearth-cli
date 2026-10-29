@@ -213,6 +213,10 @@ func Render(lib Library, targets []Target, opt Options) ([]Action, error) {
 			act.Op = "update"
 		case managed:
 			act.Op, act.Detail = "skip", "modified outside hearth; run `hearth lib import` or delete it"
+		case w.Kind == "link" && otherHearthLink(p, w.Link):
+			// Linked by another Hearth home on this machine (~/.hearth
+			// before a workspace took over): this library is the one now.
+			act.Op, act.Detail = "update", "was linked to another Hearth home's library"
 		case !opt.Adopt && strings.HasPrefix(w.Item, "skill:") && isSkillDir(p):
 			// The agent already has its own copy of this skill.
 			act.Op = "present"
@@ -296,4 +300,20 @@ func apply(p string, w want, act Action) error {
 func isSkillDir(p string) bool {
 	_, err := os.Stat(filepath.Join(p, "SKILL.md"))
 	return err == nil
+}
+
+// otherHearthLink reports whether path is a symlink into a Hearth library
+// other than the one want points into (".../.hearth/library/...").
+func otherHearthLink(path, want string) bool {
+	fi, err := os.Lstat(path)
+	if err != nil || fi.Mode()&os.ModeSymlink == 0 {
+		return false
+	}
+	dst, err := os.Readlink(path)
+	if err != nil || dst == want {
+		return false
+	}
+	const mark = string(filepath.Separator) + ".hearth" + string(filepath.Separator) + "library" + string(filepath.Separator)
+	i, j := strings.Index(dst, mark), strings.Index(want, mark)
+	return i >= 0 && j >= 0 && dst[:i] != want[:j]
 }

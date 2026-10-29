@@ -35,7 +35,11 @@ type HealthReport struct {
 }
 
 type AgentHealth struct {
-	Enabled   bool   `json:"enabled"`
+	Enabled bool `json:"enabled"`
+	// Used: the user works with this agent (a conversation on any of their
+	// machines within RecentWindow of their latest one); only used agents
+	// are expected to be installed, so an agent tried once is not nagged.
+	Used      bool   `json:"used"`
 	Installed bool   `json:"installed"`
 	Version   string `json:"version,omitempty"`
 	MCP       bool   `json:"mcp,omitempty"`
@@ -47,6 +51,7 @@ type ToolHealth struct {
 	Expected  bool   `json:"expected"` // this machine's setup needs it
 	Installed bool   `json:"installed"`
 	Version   string `json:"version,omitempty"` // x.y.z
+	Path      string `json:"path,omitempty"`    // where it was found
 	OK        *bool  `json:"ok,omitempty"`      // its own check (codex-mixin doctor); nil = none
 	Detail    string `json:"detail,omitempty"`  // why the check failed
 }
@@ -74,8 +79,12 @@ func (e *Engine) MachineHealth() HealthReport {
 		r.Profiles, r.Workspace = m.Names(), m.Workspace()
 	}
 	enabled := EnabledAgents(e.Home)
+	used := enabled
+	if all, err := e.List(); err == nil {
+		used, _ = RecentAgents(e.Home, AgentUse(all))
+	}
 	for _, name := range SupportedAgents {
-		a := AgentHealth{Enabled: contains(enabled, name)}
+		a := AgentHealth{Enabled: contains(enabled, name), Used: contains(used, name)}
 		if bin, err := lookTool(name); err == nil {
 			a.Installed = true
 			a.Version = commandVersion(bin)
@@ -108,17 +117,17 @@ func (e *Engine) MachineHealth() HealthReport {
 	for _, t := range healthTools {
 		th := ToolHealth{}
 		if t.agent != "" {
-			th.Expected = contains(enabled, t.agent)
+			th.Expected = r.Agents[t.agent].Enabled && r.Agents[t.agent].Used
 		}
 		if bin, err := lookTool(t.bin); err == nil {
-			th.Installed = true
+			th.Installed, th.Path = true, bin
 			th.Version = semverRE.FindString(commandVersion(bin))
 			if t.name == "codex-mixin" {
 				th.OK, th.Detail = cachedMixinDoctor(bin)
 			}
 		}
 		if t.name == "codex-mixin" {
-			th.Expected = mixinInFlow || th.Installed
+			th.Expected = (mixinInFlow && r.Agents["codex"].Used) || th.Installed // a Codex gateway
 		}
 		if t.name == "node" {
 			th.Expected = r.Tools["codex"].Expected && !r.Tools["codex"].Installed
@@ -127,6 +136,9 @@ func (e *Engine) MachineHealth() HealthReport {
 	}
 	for _, name := range SupportedAgents {
 		a := r.Agents[name]
+		if !a.Used {
+			continue // not one of the user's agents (enabled, but not used lately)
+		}
 		if a.Enabled && !a.Installed {
 			r.Issues = append(r.Issues, name+" is not installed")
 		} else if a.Enabled && !a.Ready {
@@ -197,7 +209,14 @@ func lookTool(name string) (string, error) {
 		return p, err
 	}
 	h, _ := os.UserHomeDir()
-	for _, c := range []string{"/Applications/Codex.app/Contents/Resources/codex", filepath.Join(h, "Applications/Codex.app/Contents/Resources/codex")} {
+	var cands []string
+	for _, dir := range []string{"/Applications", filepath.Join(h, "Applications")} {
+		for _, pat := range []string{"*Codex*.app/Contents/Resources/codex", "*Codex*.app/Contents/Resources/bin/codex", "*Codex*.app/Contents/MacOS/codex"} {
+			m, _ := filepath.Glob(filepath.Join(dir, pat))
+			cands = append(cands, m...)
+		}
+	}
+	for _, c := range cands {
 		if fi, e := os.Stat(c); e == nil && !fi.IsDir() && fi.Mode()&0o111 != 0 {
 			return c, nil
 		}
