@@ -1,8 +1,8 @@
 <h1 align="center">Hearth</h1>
 
 <p align="center">
-  <b>让 Coding Agent 在每台机器上都有家。</b><br>
-  跨机器备份与恢复 Codex / Claude Code / Comate 的会话、skills、凭证和环境。<br>
+  <b>Coding Agent 的随身工作现场。</b><br>
+  Codex / Claude Code / Comate 的会话、skills、凭证和环境，换到哪台机器都跟着你。<br>
   <sub>自托管 · 端到端加密 · 服务端和客户端是同一个 Go 程序</sub>
 </p>
 
@@ -21,6 +21,7 @@
 <p align="center">
   <a href="#为什么需要-hearth">为什么</a> ·
   <a href="#快速上手">快速上手</a> ·
+  <a href="#路线图长期记忆">路线图</a> ·
   <a href="#功能">功能</a> ·
   <a href="#agent-支持情况">Agent 支持</a> ·
   <a href="#文档">文档</a> ·
@@ -33,7 +34,7 @@
 
 AI coding agent 常常分散在好几台机器上：GPU 机器、随时会被回收的容器、笔记本。每换一台机器，都要重装 agent、拷 skills、重新登录 git 和 SSH，上一台机器上的对话也找不回来了。
 
-Hearth 把这些状态放在团队自己的服务器上，换到哪台机器都能恢复：
+Hearth 就是 agent 的随身工作现场：这些状态放在团队自己的服务器上，换到哪台机器都能原样恢复。
 
 - **每台机器一条命令。** 装好客户端就自动登录，恢复最近的会话、skills、agents、凭证和 shell 配置，之后在后台持续同步。
 - **剩下的交给 agent。** 安装时会给每个 agent 装上 `hearth` skill。说一句「用 hearth」，就能恢复更早的会话、选择上传哪些内容，或者一步步装好这台机器的软件环境。
@@ -134,6 +135,12 @@ hearth config --edit                 # 所有设置都在这一个文件里
 
 ---
 
+## 路线图：长期记忆
+
+现在 Hearth 负责搬运工作现场；下一步让 agent 有记忆：任何 agent 都能在日常工作中自动想起你在任何机器上做过的事（历史对话、决定、踩过的坑）和你的习惯，毫秒级检索，依然端到端加密。设计和里程碑见 [记忆功能路线图](docs/zh/memory-roadmap.md)。
+
+---
+
 ## 功能
 
 | | |
@@ -180,6 +187,7 @@ hearth config --edit                 # 所有设置都在这一个文件里
 | 接入新的 agent | [Agent 接入](docs/zh/agent-integration.md) | [Agent integration](docs/en/agent-integration.md) |
 | 全部命令 | — | [CLI reference](docs/cli.md) |
 | 内部实现 | — | [Technical reference](docs/en/reference.md) |
+| 长期记忆（规划中） | [记忆功能路线图](docs/zh/memory-roadmap.md) | [Memory roadmap](docs/en/memory-roadmap.md) |
 | agent skill | [skills/hearth/SKILL.md](skills/hearth/SKILL.md) | — |
 
 ---

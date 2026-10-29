@@ -1,8 +1,8 @@
 <h1 align="center">Hearth</h1>
 
 <p align="center">
-  <b>Your coding agents' home, on every machine.</b><br>
-  Back up and restore Codex / Claude Code / Comate conversations, skills, credentials and setup across machines.<br>
+  <b>A portable workspace for your coding agents.</b><br>
+  Conversations, skills, credentials and setup of Codex / Claude Code / Comate follow you to any machine.<br>
   <sub>Self-hosted · end-to-end encrypted · one Go binary for server and client</sub>
 </p>
 
@@ -21,6 +21,7 @@
 <p align="center">
   <a href="#why-hearth">Why</a> ·
   <a href="#quick-start">Quick start</a> ·
+  <a href="#roadmap-long-term-memory">Roadmap</a> ·
   <a href="#features">Features</a> ·
   <a href="#agent-support">Agent support</a> ·
   <a href="#documentation">Docs</a> ·
@@ -33,7 +34,7 @@
 
 You work with AI coding agents on several machines: GPU boxes, containers that get reclaimed, a laptop. Every new machine means installing the agents again, copying skills, logging in to git and SSH again, and the conversations from the last machine are gone.
 
-Hearth keeps that state on a server your team runs and puts it back on any machine:
+Hearth is your agents' portable workspace: it keeps that state on a server your team runs and puts it back on any machine.
 
 - **One command per machine.** Install the client and it logs in, restores your newest conversations, skills, agents, credentials and shell setup, then keeps syncing in the background.
 - **Your agent does the rest.** The installer adds a `hearth` skill to every agent. Say *"use hearth"* to restore older conversations, choose what is uploaded, or set up this machine's software step by step.
@@ -134,6 +135,12 @@ Every step in detail: [Quick start guide](docs/en/quickstart.md).
 
 ---
 
+## Roadmap: long-term memory
+
+Today Hearth carries the workspace. Next it gives agents a memory: every agent can recall what you did on any machine (past conversations, decisions, fixes) and what you prefer, automatically during normal work, in milliseconds, still end-to-end encrypted. Design and milestones: [Memory roadmap](docs/en/memory-roadmap.md).
+
+---
+
 ## Features
 
 | | |
@@ -180,6 +187,7 @@ Every step in detail: [Quick start guide](docs/en/quickstart.md).
 | Adding an agent | [Agent integration](docs/en/agent-integration.md) | [Agent 接入](docs/zh/agent-integration.md) |
 | Every command | [CLI reference](docs/cli.md) | — |
 | How it works inside | [Technical reference](docs/en/reference.md) | — |
+| Long-term memory (planned) | [Memory roadmap](docs/en/memory-roadmap.md) | [记忆功能路线图](docs/zh/memory-roadmap.md) |
 | The agent skill | [skills/hearth/SKILL.md](skills/hearth/SKILL.md) | — |
 
 ---
