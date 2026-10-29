@@ -79,6 +79,10 @@ func InitWorkspace(dir string) (string, error) {
 	return home, saveJSON(filepath.Join(home, workspaceMarker), workspaceFile{Path: abs})
 }
 
+// InitOnlyFile reports whether a file in a home is one InitWorkspace writes
+// (so a home holding only those has no state of its own yet).
+func InitOnlyFile(name string) bool { return name == workspaceMarker || name == "ca.pem" }
+
 // WorkspaceOf returns the workspace a home belongs to ("" for ~/.hearth).
 func WorkspaceOf(home string) string {
 	var w workspaceFile

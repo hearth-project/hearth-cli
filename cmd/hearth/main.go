@@ -135,10 +135,14 @@ func initCmd() *cobra.Command {
 						return fmt.Errorf("stop the daemon of %s: %w", def, err)
 					}
 				}
-				if entries, _ := os.ReadDir(target); len(entries) > 0 {
-					return fmt.Errorf("%s exists and is not empty; move it away first", target)
+				// A plain hearth init leaves only its marker and the CA copy.
+				entries, _ := os.ReadDir(target)
+				for _, en := range entries {
+					if !client.InitOnlyFile(en.Name()) {
+						return fmt.Errorf("%s already holds hearth state (%s); move it away first", target, en.Name())
+					}
 				}
-				_ = os.Remove(target)
+				_ = os.RemoveAll(target)
 				if err := os.Rename(def, target); err != nil {
 					return fmt.Errorf("move %s to %s: %w (on another disk: log in inside the workspace instead)", def, target, err)
 				}
