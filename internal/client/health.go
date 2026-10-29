@@ -3,12 +3,16 @@ package client
 import (
 	"context"
 	"encoding/json"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/hearth-project/hearth-cli/internal/proxyenv"
 )
 
 // HealthReport is the small, non-secret status a machine publishes with its
@@ -72,7 +76,7 @@ func (e *Engine) MachineHealth() HealthReport {
 	enabled := EnabledAgents(e.Home)
 	for _, name := range SupportedAgents {
 		a := AgentHealth{Enabled: contains(enabled, name)}
-		if bin, err := exec.LookPath(name); err == nil {
+		if bin, err := lookTool(name); err == nil {
 			a.Installed = true
 			a.Version = commandVersion(bin)
 			a.MCP = name == "comate" || commandOK(bin, "mcp", "get", "hearth")
@@ -106,7 +110,7 @@ func (e *Engine) MachineHealth() HealthReport {
 		if t.agent != "" {
 			th.Expected = contains(enabled, t.agent)
 		}
-		if bin, err := exec.LookPath(t.bin); err == nil {
+		if bin, err := lookTool(t.bin); err == nil {
 			th.Installed = true
 			th.Version = semverRE.FindString(commandVersion(bin))
 			if t.name == "codex-mixin" {
@@ -185,12 +189,30 @@ func cachedMixinDoctor(bin string) (*bool, string) {
 	return mixinCache.ok, mixinCache.detail
 }
 
+// lookTool finds a tool on PATH, else where desktop apps bundle it (the
+// Codex app on macOS ships its CLI inside the app).
+func lookTool(name string) (string, error) {
+	p, err := exec.LookPath(name)
+	if err == nil || name != "codex" {
+		return p, err
+	}
+	h, _ := os.UserHomeDir()
+	for _, c := range []string{"/Applications/Codex.app/Contents/Resources/codex", filepath.Join(h, "Applications/Codex.app/Contents/Resources/codex")} {
+		if fi, e := os.Stat(c); e == nil && !fi.IsDir() && fi.Mode()&0o111 != 0 {
+			return c, nil
+		}
+	}
+	return "", err
+}
+
 // mixinDoctor runs codex-mixin's own check (gateway running, provider
 // logged in and healthy). known is false when it did not finish in time.
 func mixinDoctor(bin string) (ok bool, detail string, known bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, bin, "doctor", "--no-tui").CombinedOutput()
+	cmd := exec.CommandContext(ctx, bin, "doctor", "--no-tui")
+	cmd.Env = proxyenv.Env(nil) // its local gateway must not go through the proxy
+	out, err := cmd.CombinedOutput()
 	if ctx.Err() != nil {
 		return false, "", false // slow provider: no verdict rather than a false alarm
 	}

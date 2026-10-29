@@ -8,8 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/hearth-project/hearth-cli/internal/machine"
-	"github.com/hearth-project/hearth-cli/internal/paths"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -18,6 +16,10 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/hearth-project/hearth-cli/internal/machine"
+	"github.com/hearth-project/hearth-cli/internal/paths"
+	"github.com/hearth-project/hearth-cli/internal/proxyenv"
 )
 
 // Host gives the runner access to secrets and library files.
@@ -334,7 +336,7 @@ func (r *runner) sh(cmdline string, stdin []byte) ([]byte, error) {
 		cmdline = strings.ReplaceAll(cmdline, "${WORKSPACE}", ws)
 	}
 	cmd := exec.CommandContext(ctx, "sh", "-c", cmdline)
-	cmd.Env = append(os.Environ(), "HEARTH_ARCH="+Arch())
+	cmd.Env = append(proxyenv.Env(nil), "HEARTH_ARCH="+Arch()) // loopback services (gateways) bypass the proxy
 	if stdin != nil {
 		cmd.Stdin = bytes.NewReader(stdin)
 	}
