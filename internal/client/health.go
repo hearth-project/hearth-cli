@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -61,6 +62,7 @@ var healthTools = []struct{ name, bin, agent string }{
 // which version, whether the agents' Hearth integration is on, codex-mixin's
 // doctor, and the restore steps left. It never reads secret files.
 func (e *Engine) MachineHealth() HealthReport {
+	EnsureUserPath() // tools installed after the daemon started
 	r := HealthReport{Client: Version, Agents: map[string]AgentHealth{}, Tools: map[string]ToolHealth{}, CheckedAt: time.Now().Unix()}
 	if m, err := Machine(e.Home); err == nil {
 		b, _ := json.Marshal(m.Facts)
@@ -108,8 +110,7 @@ func (e *Engine) MachineHealth() HealthReport {
 			th.Installed = true
 			th.Version = semverRE.FindString(commandVersion(bin))
 			if t.name == "codex-mixin" {
-				ok, detail := mixinDoctor(bin)
-				th.OK, th.Detail = &ok, detail
+				th.OK, th.Detail = cachedMixinDoctor(bin)
 			}
 		}
 		if t.name == "codex-mixin" {
@@ -143,32 +144,76 @@ func (e *Engine) MachineHealth() HealthReport {
 	return r
 }
 
+// FreshChecks makes the next MachineHealth run the slow checks again
+// (hearth machine check) instead of reusing a recent result.
+var FreshChecks bool
+
+var mixinCache struct {
+	sync.Mutex
+	at      time.Time
+	running bool
+	ok      *bool
+	detail  string
+}
+
+// cachedMixinDoctor returns the latest doctor result and refreshes it in
+// the background every 15 minutes: the doctor asks the provider for its
+// models, which can take half a minute, and must not hold up the sync.
+// With FreshChecks it runs now and waits.
+func cachedMixinDoctor(bin string) (*bool, string) {
+	run := func() {
+		ok, detail, known := mixinDoctor(bin)
+		mixinCache.Lock()
+		defer mixinCache.Unlock()
+		mixinCache.at, mixinCache.running = time.Now(), false
+		mixinCache.ok, mixinCache.detail = nil, ""
+		if known {
+			mixinCache.ok, mixinCache.detail = &ok, detail
+		}
+	}
+	mixinCache.Lock()
+	if FreshChecks {
+		mixinCache.running = true
+		mixinCache.Unlock()
+		run()
+		mixinCache.Lock()
+	} else if !mixinCache.running && (mixinCache.at.IsZero() || time.Since(mixinCache.at) >= 15*time.Minute) {
+		mixinCache.running = true
+		go run()
+	}
+	defer mixinCache.Unlock()
+	return mixinCache.ok, mixinCache.detail
+}
+
 // mixinDoctor runs codex-mixin's own check (gateway running, provider
-// logged in and healthy).
-func mixinDoctor(bin string) (bool, string) {
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+// logged in and healthy). known is false when it did not finish in time.
+func mixinDoctor(bin string) (ok bool, detail string, known bool) {
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 	out, err := exec.CommandContext(ctx, bin, "doctor", "--no-tui").CombinedOutput()
+	if ctx.Err() != nil {
+		return false, "", false // slow provider: no verdict rather than a false alarm
+	}
 	text := string(out)
 	if err == nil && strings.Contains(text, "doctor: ok") {
-		return true, ""
+		return true, "", true
 	}
 	for _, l := range strings.Split(text, "\n") {
 		if l = strings.TrimSpace(l); strings.HasPrefix(l, "✗") || strings.HasPrefix(l, "×") {
-			return false, truncHealth(strings.TrimSpace(strings.TrimLeft(l, "✗× ")), 160)
+			return false, truncHealth(strings.TrimSpace(strings.TrimLeft(l, "✗× ")), 160), true
 		}
 	}
 	for _, l := range strings.Split(text, "\n") {
 		l = strings.TrimSpace(l)
 		low := strings.ToLower(l)
 		if strings.Contains(low, "fail") || strings.Contains(low, "error") || strings.Contains(low, "not ") || strings.Contains(low, "missing") {
-			return false, truncHealth(l, 160)
+			return false, truncHealth(l, 160), true
 		}
 	}
 	if err != nil {
-		return false, truncHealth(err.Error(), 160)
+		return false, truncHealth(err.Error(), 160), true
 	}
-	return false, "doctor did not report ok"
+	return false, "doctor did not report ok", true
 }
 
 func truncHealth(s string, n int) string {

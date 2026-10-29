@@ -111,6 +111,7 @@ Generated from `hearth --help` by `hearth docs cli > docs/cli.md`; every command
 | [`hearth machine`](#hearth-machine) | Kinds of machines (H800, GB200, Mac, ...) with their own setup steps and working directory |
 | [`hearth machine list`](#hearth-machine-list) | List your machines, architecture and agent readiness |
 | [`hearth machine inspect`](#hearth-machine-inspect) | Show a machine's public health report |
+| [`hearth machine check`](#hearth-machine-check) | Check this machine's environment now and report it (the daemon does it every 5 minutes) |
 | [`hearth machine add`](#hearth-machine-add) | Add or update a profile (--here: match machines like this one) |
 | [`hearth machine rm`](#hearth-machine-rm) | Remove a profile |
 | [`hearth machine use`](#hearth-machine-use) | Apply profiles to this machine even if they do not match (no names: clear) |
@@ -1292,6 +1293,14 @@ Show a machine's public health report
 
 ```text
 hearth machine inspect <machine>
+```
+
+## hearth machine check
+
+Check this machine's environment now and report it (the daemon does it every 5 minutes)
+
+```text
+hearth machine check
 ```
 
 ## hearth machine add
