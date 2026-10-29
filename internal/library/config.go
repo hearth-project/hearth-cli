@@ -306,10 +306,10 @@ const Template = `# Hearth settings — the only file you need to edit. It syncs
 # files = ["~/.bashrc", "~/.zshrc", "~/.bash_aliases"]
 
 [tools]
-# Pin agent CLIs (installed only when missing; "hearth tools install" upgrades).
+# Agent CLIs new machines install; without a version they get the latest
+# (add version = "x.y.z" only to hold one back on purpose).
 # [[tools.pin]]
 # name = "codex"
-# version = "0.163.0"
 # Custom tools run install/check commands only after approval on each machine.
 # [[tools.custom]]
 # name = "dumate"

@@ -59,7 +59,7 @@ chmod +x ~/.local/bin/codex
 ```
 
 - 检查：`codex --version`；`type -a codex` 第一个应是你装的。登录状态：Hearth 已恢复 `~/.codex/auth.json` 和 `config.toml` 时不用再登录，否则 `codex login`。
-- 版本固定：`config.toml` 的 `[[tools.pin]]` 记录了你各机器用的版本，`hearth recipe plan` 会列出来。
+- 版本：默认装最新版（`npm view @openai/codex version`）。`config.toml` 的 `[[tools.pin]]` 记录要装哪些 CLI；只有写了 `version` 才固定在那个版本。
 
 ## 4. Claude Code
 
