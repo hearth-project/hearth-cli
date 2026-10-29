@@ -201,6 +201,14 @@ Generated from `hearth --help` by `hearth docs cli > docs/cli.md`; every command
 | [`hearth shell show`](#hearth-shell-show) | Print what Hearth keeps of each rc file on this machine (your lines, without the distribution default and Hearth's blocks) |
 | [`hearth shell save`](#hearth-shell-save) | Upload the changed rc files now (the background sync does it every 20 min) |
 | [`hearth shell restore`](#hearth-shell-restore) | Write the stored lines as snippets in <hearth home>/shell and source them from the rc files (setup does this) |
+| [`hearth ssh`](#hearth-ssh) | SSH to your machines with Hearth managing the keys (no machine: list them) |
+| [`hearth ssh enable`](#hearth-ssh-enable) | Accept SSH on this machine (default on Linux) |
+| [`hearth ssh disable`](#hearth-ssh-disable) | Stop accepting SSH on this machine (--all: on every machine of the account) |
+| [`hearth ssh authorize`](#hearth-ssh-authorize) | Also accept a key that is not a Hearth device (e.g. an existing laptop key) |
+| [`hearth ssh status`](#hearth-ssh-status) | This machine's sshd: running, address, accepted keys |
+| [`hearth ssh keys`](#hearth-ssh-keys) | Keys your machines accept |
+| [`hearth ssh unauthorize`](#hearth-ssh-unauthorize) | Remove a key added with authorize |
+| [`hearth ssh config`](#hearth-ssh-config) | Write Host entries for your machines into ~/.ssh/config (kept up to date by the daemon) |
 
 ## hearth setup
 
@@ -2177,4 +2185,85 @@ Write the stored lines as snippets in <hearth home>/shell and source them from t
 
 ```text
 hearth shell restore
+```
+
+## hearth ssh
+
+Every Linux machine of your account accepts SSH from your own devices: Hearth gives each device a key,
+keeps the public keys (plus each device's ~/.ssh/id_*.pub) end-to-end encrypted, writes the keys of your
+active devices into a marked block of ~/.ssh/authorized_keys, and runs the system sshd the way it is set
+up by hand on GPU containers (public keys only, main interface only, port 8022; an sshd already listening
+there is used as it is). Revoking a device removes its keys everywhere within a minute.
+
+  hearth ssh                 machines you can reach
+  hearth ssh <machine>       log in (part of the name is enough)
+  hearth ssh config          Host entries in ~/.ssh/config (VS Code / Cursor Remote-SSH, scp, rsync)
+
+```text
+hearth ssh [machine] [-- command ...]
+```
+
+## hearth ssh enable
+
+Accept SSH on this machine (default on Linux)
+
+```text
+hearth ssh enable [flags]
+
+Flags:
+      --all   every machine of the account (synced setting)
+```
+
+## hearth ssh disable
+
+Stop accepting SSH on this machine (--all: on every machine of the account)
+
+```text
+hearth ssh disable [flags]
+
+Flags:
+      --all   every machine of the account (synced setting)
+```
+
+## hearth ssh authorize
+
+Also accept a key that is not a Hearth device (e.g. an existing laptop key)
+
+```text
+hearth ssh authorize <public key | file> [flags]
+
+Flags:
+      --name string   a name for the key (default: its comment)
+```
+
+## hearth ssh status
+
+This machine's sshd: running, address, accepted keys
+
+```text
+hearth ssh status
+```
+
+## hearth ssh keys
+
+Keys your machines accept
+
+```text
+hearth ssh keys
+```
+
+## hearth ssh unauthorize
+
+Remove a key added with authorize
+
+```text
+hearth ssh unauthorize <id|name>
+```
+
+## hearth ssh config
+
+Write Host entries for your machines into ~/.ssh/config (kept up to date by the daemon)
+
+```text
+hearth ssh config
 ```

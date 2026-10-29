@@ -121,7 +121,9 @@ func secretCmd() *cobra.Command {
 						continue
 					}
 					use := "-"
-					if strings.HasPrefix(s.Name, "hearth.") {
+					if strings.HasPrefix(s.Name, "hearth.ssh-") {
+						use = "hearth ssh (keys and machines: hearth ssh keys)"
+					} else if strings.HasPrefix(s.Name, "hearth.") {
 						use = "hearth internal (recipe approvals)"
 					} else if s.RestoreTo != "" {
 						use = "file " + s.RestoreTo

@@ -266,6 +266,18 @@ func setupCmd() *cobra.Command {
 					return err
 				}
 			}
+			// SSH from the user's other devices (Linux machines, on by default).
+			if _, err := e.PublishDeviceKey(); err != nil {
+				fmt.Println("      ssh key:", err)
+			}
+			if client.SSHOn(home) {
+				if ss, err := e.EnsureSSHD(); err != nil {
+					fmt.Println("      ssh:", err, "(hearth ssh status)")
+				} else if ss.Running {
+					fmt.Printf("      ssh: this machine accepts your devices at %s:%d; from another device: hearth ssh %s (off: hearth ssh disable)\n",
+						ss.Address, ss.Port, shortHost(e.Cfg.DeviceName))
+				}
+			}
 			withSkill, err := installSetupSkillTo(false, false)
 			if err != nil {
 				fmt.Println("      skills:", err)

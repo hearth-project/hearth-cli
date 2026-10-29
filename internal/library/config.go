@@ -28,6 +28,20 @@ type Config struct {
 	Teams      *TeamsConfig      `toml:"teams,omitempty"`
 	Shell      *ShellConfig      `toml:"shell,omitempty"`
 	Memory     *MemoryConfig     `toml:"memory,omitempty"`
+	SSH        *SSHConfig        `toml:"ssh,omitempty"`
+}
+
+// SSHConfig: machines accept SSH from the account's own devices, with
+// Hearth managing keys and host keys.
+type SSHConfig struct {
+	// Enabled for every machine of the account (default: on for Linux);
+	// `hearth ssh disable` turns one machine off.
+	Enabled *bool  `toml:"enabled,omitempty"`
+	Port    int    `toml:"port,omitempty"`    // first port to try (default 8022)
+	Address string `toml:"address,omitempty"` // listen address (default: bond0, else the main interface)
+	// ShareKeys: also accept each device's usual keys (~/.ssh/id_*.pub),
+	// so plain ssh and IDEs work (default true).
+	ShareKeys *bool `toml:"share_keys,omitempty"`
 }
 
 // MemoryConfig: long-term memory (conversation cards, remembered facts,
@@ -272,6 +286,17 @@ const Template = `# Hearth settings — the only file you need to edit. It syncs
 # Claude Code (Codex asks once to trust the hook).
 # enabled = true
 # hooks = true
+
+[ssh]
+# Your Linux machines accept SSH from your own devices: the keys of your
+# devices go into ~/.ssh/authorized_keys (a marked block; your own lines
+# stay) and sshd runs with public keys only on the main interface, port
+# 8022 (an sshd already there is used as it is). Connect from any device:
+# hearth ssh <machine>, or plain ssh -p 8022 user@address with your usual
+# key. One machine off: hearth ssh disable.
+# enabled = true
+# port = 8022
+# share_keys = true   # also accept each device's ~/.ssh/id_*.pub
 
 [shell]
 # Your own lines of ~/.bashrc / ~/.zshrc (and ~/.bash_aliases) are kept

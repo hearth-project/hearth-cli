@@ -100,6 +100,16 @@ func printStatus() error {
 			t.add("online", "no other machine online")
 		}
 	}
+	if ss := client.SSHServerStatus(home); ss.On || ss.Running {
+		line := "on, starting with the daemon (hearth ssh status)"
+		switch {
+		case ss.Running:
+			line = fmt.Sprintf("this machine accepts your devices at %s:%d (%d key(s)); your machines: hearth ssh", ss.Address, ss.Port, ss.Keys)
+		case ss.Err != "":
+			line = "not running: " + truncW(ss.Err, termWidth()-30)
+		}
+		t.add("ssh", line)
+	}
 	if hb := client.LoadDaemonStatus(home); hb.LastError != "" && st.DaemonRunning {
 		t.add("", "last error "+agoUnix(hb.ErrorAt)+": "+truncW(hb.LastError, termWidth()-30))
 	}
@@ -267,6 +277,11 @@ func daemonCmd() *cobra.Command {
 			}
 			var lastLib, lastUsage, lastMemory time.Time
 			var lastLibMsg, lastMemoryMsg string
+			// This device's SSH key, so the user's machines accept it.
+			if _, err := e.PublishDeviceKey(); err != nil {
+				log.Printf("ssh key: %v", err)
+			}
+			var lastSSH string
 			// Memory hooks follow the setting (and a moved binary).
 			if res, err := client.SyncMemoryHooks(e.Home, client.MemoryHooksOn(e.Home)); err == nil {
 				for _, r := range res {
@@ -306,6 +321,21 @@ func daemonCmd() *cobra.Command {
 					}
 				}
 				st, err := e.PushOnce()
+				// sshd for the user's devices: running, current keys, endpoint published.
+				{
+					ss, serr := e.EnsureSSHD()
+					msg := ""
+					switch {
+					case serr != nil:
+						msg = "ssh: " + serr.Error()
+					case ss.Running:
+						msg = fmt.Sprintf("ssh: accepting %d key(s) at %s:%d", ss.Keys, ss.Address, ss.Port)
+					}
+					if msg != lastSSH && msg != "" {
+						log.Print(msg)
+					}
+					lastSSH = msg
+				}
 				if time.Since(lastMemory) >= memoryInterval {
 					lastMemory = time.Now()
 					ms, merr := e.IndexMemory()
@@ -319,6 +349,9 @@ func daemonCmd() *cobra.Command {
 						log.Print(msg)
 					}
 					lastMemoryMsg = msg
+					if _, _, err := writeSSHConfig(e, false); err != nil {
+						log.Printf("ssh config: %v", err)
+					}
 				}
 				// Online for the other machines: their default restore leaves
 				// out the conversations this machine is working on.
