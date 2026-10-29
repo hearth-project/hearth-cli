@@ -1,6 +1,7 @@
 package client
 
 import (
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -65,5 +66,22 @@ func TestLoginShellPath(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("login PATH %v", loginPath.dirs)
+	}
+}
+
+// The transport picks up a proxy set after the process started (the
+// remembered one), unlike http.ProxyFromEnvironment, which reads it once.
+func TestTransportProxyPerRequest(t *testing.T) {
+	for _, k := range []string{"https_proxy", "http_proxy", "no_proxy", "HTTPS_PROXY", "HTTP_PROXY", "NO_PROXY"} {
+		t.Setenv(k, "")
+	}
+	tr := fastTransport()
+	req, _ := http.NewRequest("GET", "https://server.example:8787/v1/info", nil)
+	if u, _ := tr.Proxy(req); u != nil {
+		t.Fatalf("proxy without env: %v", u)
+	}
+	t.Setenv("https_proxy", "http://p:8188")
+	if u, _ := tr.Proxy(req); u == nil || u.Host != "p:8188" {
+		t.Fatalf("proxy set later not used: %v", u)
 	}
 }
