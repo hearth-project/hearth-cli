@@ -68,6 +68,8 @@ hearth setup --server https://<server> --email you@example.com
 
 Hearth commands run inside that directory use `<dir>/.hearth` and only upload your own sessions.
 
+Already logged in without a workspace (`~/.hearth`)? Move that login into the workspace instead of logging in again, which would make a second device whose sync competes with the first: `hearth init --move-login <dir> && cd <dir> && hearth daemon start`. `hearth onboard status` proposes it when `~/.hearth`'s account is the workspace's identity, and `hearth setup` refuses to log in the same account a second time.
+
 ## Manual install
 
 When piping a script is not an option:

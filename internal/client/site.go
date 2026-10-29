@@ -19,6 +19,22 @@ import (
 // SiteDir is the local copy of the server's site defaults.
 func SiteDir(home string) string { return filepath.Join(home, "site") }
 
+// siteDirOrDefault is this home's site defaults, else those of the default
+// home: a workspace made after installing has not fetched them yet, and
+// they are the organisation's (the same for every person on the machine).
+func siteDirOrDefault(home string) string {
+	dir := SiteDir(home)
+	if _, err := os.Stat(dir); err == nil {
+		return dir
+	}
+	if def := SiteDir(DefaultHome()); filepath.Clean(def) != filepath.Clean(dir) {
+		if _, err := os.Stat(def); err == nil {
+			return def
+		}
+	}
+	return dir
+}
+
 const headerSiteSHA256 = "X-Hearth-Site-SHA256"
 
 type siteState struct {

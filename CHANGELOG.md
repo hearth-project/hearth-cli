@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Workspace made after logging in (shared accounts): commands inside it reported "not logged in" and asked for an email although `~/.hearth` was logged in as the same person, and running `hearth setup` there made a second device on the same machine whose daemon competed with the first ("session is leased by another device").
+  - `hearth onboard status` / `hearth status` propose `hearth init --move-login <dir>` (no password) when `~/.hearth`'s account is the workspace's local identity, ask when nothing says whose workspace it is, and never offer another person's login; the JSON has `home_login`.
+  - `hearth setup` in such a workspace refuses to log in the same account again and prints the move command.
+  - Identity detection in a workspace that has not fetched the site defaults yet uses those of `~/.hearth` (SSO token files, mail domain), and else the mail domain of `~/.hearth`'s login; `hearth identity status` no longer prints an empty identity.
+  - `--move-login` accepts a workspace that holds only empty directories (left by `hearth mcp`), and checks it before stopping the daemon.
+  - Without a workspace (`~/.hearth`), sessions run inside another `hearth init` workspace are no longer uploaded (they belong to that workspace's login, usually another person's); `hearth session scope` lists them, `scope all` still takes everything.
 - Fixes from a Mac user's first days (Mac and managing GPU machines from it):
   - Shell lines are kept per operating system (`shell-zshrc.darwin` on a Mac): Linux rc lines (`export HOME=/root`, cluster `JAVA_HOME`, `PATH=/root/...`) no longer reach a Mac, and the Linux snippet older versions sourced there is taken out. On every machine, lines setting `HOME`, `USER`, `LOGNAME`, `SHELL`, `PWD` or `TMPDIR` are never applied; assignments naming absolute paths that do not exist here are guarded (lists such as `PATH` lose the missing entries). Restored snippets of older versions get the guards in place (daemon). New `hearth shell restore --dry-run` and `hearth shell uninstall`; a block whose line the user commented out is left alone.
   - Recipe env values that are paths are exported only where their directory exists (`GIT_CONFIG_GLOBAL=~/bootstrap/vault/gitconfig` on a Mac without it no longer hides the git identity).

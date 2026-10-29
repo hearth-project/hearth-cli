@@ -143,3 +143,63 @@ func TestDetectLocalIdentityDomainFromExistingAccount(t *testing.T) {
 		t.Fatalf("detected %+v ok=%v", id, ok)
 	}
 }
+
+// A workspace made after installing has no site defaults of its own yet:
+// the organisation's token files and mail domain come from ~/.hearth.
+func TestDetectIdentityInNewWorkspaceUsesDefaultHomeSite(t *testing.T) {
+	home, _ := identityEnv(t, "alice")
+	writeSiteLearn(t, DefaultHome())
+	writeSSOToken(t, "alice")
+
+	id, ok := DetectIdentity(home)
+	if !ok || id.Username != "alice" || id.Email != "alice@example.com" {
+		t.Fatalf("detected %+v ok=%v", id, ok)
+	}
+}
+
+// Without a configured domain, the mail domain of ~/.hearth's login is
+// used (only the domain: that login may be another person's).
+func TestDetectIdentityDomainFromDefaultHomeLogin(t *testing.T) {
+	home, _ := identityEnv(t, "alice")
+	t.Setenv("GIT_CONFIG_GLOBAL", filepath.Join(t.TempDir(), "none"))
+	p := filepath.Join(os.Getenv("HOME"), ".comate", "login-user", "alice")
+	os.MkdirAll(filepath.Dir(p), 0o700)
+	os.WriteFile(p, []byte("Bearer-x"), 0o600)
+	if err := saveJSON(filepath.Join(DefaultHome(), "config.json"), Config{Email: "bob@corp.example.com", Server: "https://x"}); err != nil {
+		t.Fatal(err)
+	}
+
+	id, ok := DetectIdentity(home)
+	if !ok || id.Email != "alice@corp.example.com" {
+		t.Fatalf("detected %+v ok=%v", id, ok)
+	}
+}
+
+func TestMovableLogin(t *testing.T) {
+	_, ws := identityEnv(t, "alice")
+	home, err := InitWorkspace(ws)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := MovableLogin(home); ok {
+		t.Fatal("movable without a login in ~/.hearth")
+	}
+	if err := saveJSON(filepath.Join(DefaultHome(), "config.json"), Config{Email: "alice@example.com", Server: "https://x"}); err != nil {
+		t.Fatal(err)
+	}
+	// Empty directories (hearth mcp makes library/) are no state.
+	os.MkdirAll(filepath.Join(home, "library", "skills"), 0o700)
+	if cfg, ok := MovableLogin(home); !ok || cfg.Email != "alice@example.com" {
+		t.Fatalf("not movable: %+v %v", cfg, ok)
+	}
+	if _, ok := MovableLogin(DefaultHome()); ok {
+		t.Fatal("~/.hearth is movable into itself")
+	}
+	os.WriteFile(filepath.Join(home, "library", "config.toml"), []byte("x"), 0o600)
+	if name := OwnState(home); name != "library" {
+		t.Fatalf("own state %q", name)
+	}
+	if _, ok := MovableLogin(home); ok {
+		t.Fatal("movable over existing state")
+	}
+}

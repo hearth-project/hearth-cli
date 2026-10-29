@@ -68,6 +68,8 @@ hearth setup --server https://<server> --email you@example.com
 
 之后在该目录下运行的 hearth 命令都使用 `<工作目录>/.hearth`，只上传你自己的会话。
 
+如果之前已经在没有工作目录的情况下登录过（`~/.hearth`），请把这份登录移进工作目录，而不是再登录一次（那样会多出一台设备，两边的后台同步互相抢同一批会话）：`hearth init --move-login <目录> && cd <目录> && hearth daemon start`。`~/.hearth` 的账号与工作目录的身份一致时，`hearth onboard status` 会给出这一步；`hearth setup` 不会在同一台机器上把同一账号再登录一次。
+
 ## 手动安装
 
 不能用管道执行脚本时：

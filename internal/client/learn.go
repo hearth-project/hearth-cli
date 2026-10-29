@@ -72,7 +72,7 @@ type learnSettings struct {
 // learnConfig merges the site defaults' learn.json with the user's.
 func learnConfig(home string) learnSettings {
 	var out learnSettings
-	for _, dir := range []string{SiteDir(home), LibraryDir(home)} {
+	for _, dir := range []string{siteDirOrDefault(home), LibraryDir(home)} {
 		var s learnSettings
 		loadJSON(filepath.Join(dir, "learn.json"), &s)
 		out.TokenFiles = append(out.TokenFiles, s.TokenFiles...)

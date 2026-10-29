@@ -52,6 +52,7 @@ type onboardStatus struct {
 	ServerReachable *bool                 `json:"server_reachable,omitempty"`
 	Registration    string                `json:"registration,omitempty"` // invite, open, closed: how new accounts sign up
 	Email           string                `json:"email,omitempty"`
+	HomeLogin       string                `json:"home_login,omitempty"` // ~/.hearth's account while this workspace has no login
 	Device          string                `json:"device,omitempty"`
 	Machine         string                `json:"machine"`
 	Profiles        []string              `json:"profiles"`
@@ -142,6 +143,15 @@ func collectOnboard() onboardStatus {
 	}
 	cfg, err := client.LoadConfig(home)
 	if err != nil {
+		if n, ok := moveLoginStep(home, st.Workspace); ok {
+			st.HomeLogin = n.login
+			add(n.step)
+			if n.mine {
+				// Logging in again here would make a second device on this
+				// machine whose sync competes with the first one.
+				return st
+			}
+		}
 		server := client.DefaultServer(home)
 		if server == "" {
 			server = "<url>"
@@ -260,6 +270,42 @@ func wsPrefix(ws string) string {
 		return ""
 	}
 	return "cd " + ws + " && "
+}
+
+type moveLogin struct {
+	step  nextStep
+	login string // ~/.hearth's account
+	mine  bool   // that account is this workspace's local identity
+}
+
+// moveLoginStep handles a workspace made after logging in without one: the
+// login is in ~/.hearth, so commands inside the workspace see none. When
+// ~/.hearth's account is the identity this workspace detects, the login
+// should be moved here rather than made again; otherwise (a shared Unix
+// account) it may be another person's, so the user is asked.
+func moveLoginStep(home, ws string) (moveLogin, bool) {
+	cfg, ok := client.MovableLogin(home)
+	if !ok || ws == "" {
+		return moveLogin{}, false
+	}
+	user, _, _ := strings.Cut(cfg.Email, "@")
+	id, found := client.DetectLocalIdentity(home)
+	if found && !strings.EqualFold(id.Username, user) {
+		return moveLogin{}, false // another person's login: log in here as this one
+	}
+	cmd := "hearth init --move-login " + ws
+	if found {
+		return moveLogin{login: cfg.Email, mine: true, step: nextStep{ID: "move-login",
+			Why: "this workspace has no login yet, but ~/.hearth is logged in as " + cfg.Email + " (this workspace's identity, " + id.Source +
+				"): move that login here instead of logging in again (no password; restart background sync afterwards)",
+			AskUser: "move the hearth login of ~/.hearth (" + cfg.Email + ") into " + ws + "?",
+			Command: cmd + " && cd " + ws + " && hearth daemon start"}}, true
+	}
+	return moveLogin{login: cfg.Email, step: nextStep{ID: "move-login",
+		Why: "this workspace has no login yet; ~/.hearth is logged in as " + cfg.Email +
+			", and nothing here says whose workspace this is (it may be another person on this shared account): move it here only if it is this user's, else log in below",
+		AskUser: "is " + cfg.Email + " your hearth account?",
+		Command: cmd + " && cd " + ws + " && hearth daemon start"}}, true
 }
 
 func serverReachable(home, server string) bool { ok, _ := probeServer(home, server); return ok }

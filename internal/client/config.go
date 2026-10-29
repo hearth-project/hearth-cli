@@ -83,6 +83,56 @@ func InitWorkspace(dir string) (string, error) {
 // (so a home holding only those has no state of its own yet).
 func InitOnlyFile(name string) bool { return name == workspaceMarker || name == "ca.pem" }
 
+// OwnState returns the first entry of home that holds state of its own
+// ("" when there is none): anything but init's files and empty
+// directories, which commands such as `hearth mcp` create before a login.
+func OwnState(home string) string {
+	entries, _ := os.ReadDir(home)
+	for _, en := range entries {
+		if InitOnlyFile(en.Name()) {
+			continue
+		}
+		if en.IsDir() && emptyTree(filepath.Join(home, en.Name())) {
+			continue
+		}
+		return en.Name()
+	}
+	return ""
+}
+
+func emptyTree(dir string) bool {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return false
+	}
+	for _, en := range entries {
+		if !en.IsDir() || !emptyTree(filepath.Join(dir, en.Name())) {
+			return false
+		}
+	}
+	return true
+}
+
+// MovableLogin returns the login of ~/.hearth when home is a workspace
+// that is not logged in yet and holds no state of its own, so that
+// `hearth init --move-login` can bring that login here. Whether that login
+// is this person's is for the caller to judge: on a shared Unix account it
+// may be someone else's.
+func MovableLogin(home string) (*Config, bool) {
+	def := DefaultHome()
+	if filepath.Clean(def) == filepath.Clean(home) || WorkspaceOf(home) == "" {
+		return nil, false
+	}
+	if _, err := LoadConfig(home); err == nil {
+		return nil, false
+	}
+	cfg, err := LoadConfig(def)
+	if err != nil || OwnState(home) != "" {
+		return nil, false
+	}
+	return cfg, true
+}
+
 // WorkspaceOf returns the workspace a home belongs to ("" for ~/.hearth).
 func WorkspaceOf(home string) string {
 	var w workspaceFile

@@ -289,7 +289,7 @@ hearth session scope all             # nobody else uses this account: upload eve
 hearth session scope prune [--keep <dir>] [--yes]   # delete sessions uploaded outside the uploading machine's workspace
 ```
 
-Sessions restored from your account are always yours, wherever they ran. Without any workspace the home directory is assumed to be yours alone (`hearth onboard status` warns on `/root`). The scope is per machine; each session records its `cwd`, so `prune` can judge sessions uploaded by any machine.
+Sessions restored from your account are always yours, wherever they ran. Without any workspace the home directory is assumed to be yours alone (`hearth onboard status` warns on `/root`), except sessions run inside a workspace made with `hearth init`: that workspace has its own login, usually another person's (`hearth session scope all` takes them too). The scope is per machine; each session records its `cwd`, so `prune` can judge sessions uploaded by any machine.
 
 ## Personal files inside the workspace
 

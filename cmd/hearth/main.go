@@ -129,17 +129,16 @@ func initCmd() *cobra.Command {
 				if !movable {
 					return fmt.Errorf("nothing to move: %s is not logged in, or %s already is", def, target)
 				}
+				// A plain hearth init leaves only its marker and the CA copy
+				// (and maybe empty directories from `hearth mcp`). Checked
+				// before stopping the daemon so a refusal leaves it running.
+				if name := client.OwnState(target); name != "" {
+					return fmt.Errorf("%s already holds hearth state (%s); move it away first", target, name)
+				}
 				wasRunning := client.DaemonPID(def) != 0
 				if wasRunning {
 					if err := client.StopDaemon(def, 30*time.Second); err != nil {
 						return fmt.Errorf("stop the daemon of %s: %w", def, err)
-					}
-				}
-				// A plain hearth init leaves only its marker and the CA copy.
-				entries, _ := os.ReadDir(target)
-				for _, en := range entries {
-					if !client.InitOnlyFile(en.Name()) {
-						return fmt.Errorf("%s already holds hearth state (%s); move it away first", target, en.Name())
 					}
 				}
 				_ = os.RemoveAll(target)
@@ -408,7 +407,11 @@ func identityCmd() *cobra.Command {
 				return nil
 			}
 			_, has := client.PlatformSecret(id)
-			fmt.Printf("local identity: %s (%s)\n", id.Email, id.Source)
+			who := id.Email
+			if who == "" {
+				who = id.Username + " (no mail domain known)"
+			}
+			fmt.Printf("local identity: %s (%s)\n", who, id.Source)
 			fmt.Printf("platform credential: %v (account user %q)\n", has, os.Getenv("SYS_USER_NAME"))
 			if st, err := client.IdentityServerStatus(home); err == nil {
 				fmt.Printf("hearth identity login: enabled=%v disabled=%v\n", st.Enabled, st.Disabled)

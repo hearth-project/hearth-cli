@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/hearth-project/hearth-cli/internal/adapter"
 	"github.com/hearth-project/hearth-cli/internal/pathmap"
@@ -97,6 +98,28 @@ func sessionCwd(f adapter.SessionFile) string {
 	return cwd
 }
 
+// wsCache remembers which workspace a directory is in for a minute
+// (workspaces are rarely made, and a scan asks for every session).
+var wsCache sync.Map // dir -> wsEntry
+
+type wsEntry struct {
+	ws string
+	at time.Time
+}
+
+// otherWorkspace reports whether dir is inside a hearth workspace whose
+// state is not home.
+func otherWorkspace(dir, home string) bool {
+	var ws string
+	if v, ok := wsCache.Load(dir); ok && time.Since(v.(wsEntry).at) < time.Minute {
+		ws = v.(wsEntry).ws
+	} else {
+		ws = FindWorkspace(dir)
+		wsCache.Store(dir, wsEntry{ws, time.Now()})
+	}
+	return ws != "" && filepath.Clean(filepath.Join(ws, ".hearth")) != filepath.Clean(home)
+}
+
 // firstJSONField scans the first lines of a JSONL file for a value.
 func firstJSONField(p string, get func(map[string]json.RawMessage) string) string {
 	fh, err := os.Open(p)
@@ -136,12 +159,24 @@ func claudeProjectOwned(rel string, roots []string) bool {
 
 // owns reports whether a local file is this user's to upload.
 func (e *Engine) owns(f adapter.SessionFile, roots []string) bool {
-	if roots == nil {
-		return true
-	}
 	switch f.Agent {
 	case "workspace", "files":
 		return true // created from this user's workspace or chosen by them
+	}
+	if roots == nil {
+		if LoadScope(e.Home).All {
+			return true // the user said every session on this account is theirs
+		}
+		if fs := e.st.get(e.Vault.SessionID(f.Logical())); fs != nil && fs.Restored {
+			return true
+		}
+		// No workspace: the home is assumed to be this user's, except
+		// sessions run inside a workspace made with hearth init. That
+		// workspace has its own login (on a shared account, most likely
+		// another person's), and uploading its sessions from here too
+		// would put them in this account or race its own daemon.
+		cwd := sessionCwd(f)
+		return cwd == "" || !otherWorkspace(cwd, e.Home)
 	}
 	// Restored from this account: it is ours wherever it ran.
 	if sid := e.sidFor(f); e.st.alias(f.Logical()) != "" || e.st.remote(sid) != nil {
@@ -178,7 +213,7 @@ type ForeignSession struct {
 // ForeignSessions lists local session files outside the scope.
 func (e *Engine) ForeignSessions() []ForeignSession {
 	roots := ownedRoots(e.Home)
-	if roots == nil {
+	if roots == nil && LoadScope(e.Home).All {
 		return nil
 	}
 	var out []ForeignSession
