@@ -180,7 +180,35 @@ func machineCmd() *cobra.Command {
 		}
 		return fmt.Errorf("no machine %q", a[0])
 	}}
-	c.AddCommand(list, inspect, add,
+	check := &cobra.Command{Use: "check", Short: "Check this machine's environment now and report it (the daemon does it every 5 minutes)", RunE: func(*cobra.Command, []string) error {
+		e, err := engine()
+		if err != nil {
+			return err
+		}
+		client.FreshChecks = true
+		h := e.MachineHealth()
+		if err := e.API.HeartbeatReport(map[string]any{"facts": h.Machine, "profiles": h.Profiles, "workspace": h.Workspace}, map[string]any{"status": h.Status, "client": h.Client, "agents": h.Agents, "tools": h.Tools, "recipe_todo": h.RecipeTodo, "recipe_manual": h.RecipeManual, "todo_steps": h.TodoSteps, "issues": h.Issues, "checked_at": h.CheckedAt}); err != nil {
+			return err
+		}
+		ds, err := e.API.Devices()
+		if err != nil {
+			return err
+		}
+		for _, d := range ds {
+			if d.ID == e.Cfg.DeviceID {
+				fmt.Println("environment:", envSummary(d.Env))
+				if probs, _ := d.Env["problems"].([]any); len(probs) > 1 {
+					for _, p := range probs {
+						if m, ok := p.(map[string]any); ok {
+							fmt.Println("  -", envProblemText(m))
+						}
+					}
+				}
+			}
+		}
+		return nil
+	}}
+	c.AddCommand(list, inspect, check, add,
 		&cobra.Command{Use: "rm <name>", Short: "Remove a profile", Args: cobra.ExactArgs(1), RunE: func(_ *cobra.Command, a []string) error {
 			home := client.Home()
 			m, err := client.Machine(home)

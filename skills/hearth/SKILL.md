@@ -211,7 +211,7 @@ hearth ssh <machine> -- hearth onboard status --json
 hearth ssh <machine> -- hearth recipe plan --json
 ```
 
-When the user says “恢复这台机器的 Codex 环境” or “恢复 Claude Code 环境”, first use `hearth machine list` and inspect the target. Choose its matching profile from OS, architecture, GPU and labels; then use the target's SSH connection to run the restore flow there. On the target, show the pending recipe steps and follow **D. Restore this machine's environment** in order, checking each step and recording it with `hearth recipe done <key>`. Use `hearth agents enable <agent>` and `hearth agents pull <agent>` only for the requested agent. Finish with `hearth onboard status --json` and `hearth machine inspect <machine>`; the target should report `ready`, or clearly list the remaining issue.
+When the user says “恢复这台机器的 Codex 环境” or “恢复 Claude Code 环境”, first use `hearth machine list` and inspect the target. Choose its matching profile from OS, architecture, GPU and labels; then use the target's SSH connection to run the restore flow there. On the target, show the pending recipe steps and follow **D. Restore this machine's environment** in order, checking each step and recording it with `hearth recipe done <key>`. Use `hearth agents enable <agent>` and `hearth agents pull <agent>` only for the requested agent. Finish with `hearth onboard status --json`, `hearth machine check` (on the target: reports its environment at once instead of within 5 minutes) and `hearth machine inspect <machine>`; the target should report `ready`, or clearly list the remaining issue.
 
 ### SSH between the user's machines
 

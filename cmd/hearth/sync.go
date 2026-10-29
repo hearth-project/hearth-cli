@@ -255,6 +255,7 @@ func daemonCmd() *cobra.Command {
 		Use:   "daemon",
 		Short: "Continuously sync session files in the foreground (flushes on SIGTERM)",
 		RunE: func(*cobra.Command, []string) error {
+			client.EnsureUserPath() // tools the user installed after whatever started the daemon
 			e, err := engine()
 			if err != nil {
 				return err
