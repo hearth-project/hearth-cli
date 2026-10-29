@@ -203,3 +203,22 @@ func TestMovableLogin(t *testing.T) {
 		t.Fatal("movable over existing state")
 	}
 }
+
+func TestIdentityChoicesListsEveryone(t *testing.T) {
+	home, _ := identityEnv(t, "shared")
+	writeSiteLearn(t, home)
+	writeSSOToken(t, "alice")
+	writeSSOToken(t, "bob")
+	t.Setenv("SYS_USER_NAME", "carol")
+	p := filepath.Join(os.Getenv("HOME"), ".comate", "login-user", "bob")
+	os.MkdirAll(filepath.Dir(p), 0o700)
+	os.WriteFile(p, []byte("Bearer-x"), 0o600)
+
+	var got []string
+	for _, c := range IdentityChoices(home) {
+		got = append(got, c.Email)
+	}
+	if strings.Join(got, ",") != "alice@example.com,bob@example.com,carol@example.com" {
+		t.Fatalf("choices %v", got)
+	}
+}

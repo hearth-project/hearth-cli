@@ -70,6 +70,8 @@ hearth setup --server https://<server> --email you@example.com
 
 如果之前已经在没有工作目录的情况下登录过（`~/.hearth`），请把这份登录移进工作目录，而不是再登录一次（那样会多出一台设备，两边的后台同步互相抢同一批会话）：`hearth init --move-login <目录> && cd <目录> && hearth daemon start`。`~/.hearth` 的账号与工作目录的身份一致时，`hearth onboard status` 会给出这一步；`hearth setup` 不会在同一台机器上把同一账号再登录一次。
 
+机器上能找到多个人的身份（SSO token、Comate 登录）时，`hearth setup` 会把他们列出来，让你选自己是哪一个。各 agent 的配置目录（`~/.codex`、`~/.claude`）仍是大家共用的：注册在里面的 Hearth 记忆 hook 和 MCP 服务按 agent 会话所在的工作目录取数据，每个人拿到的都是自己的记忆和 skills。
+
 ## 手动安装
 
 不能用管道执行脚本时：

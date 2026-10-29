@@ -52,7 +52,8 @@ type onboardStatus struct {
 	ServerReachable *bool                 `json:"server_reachable,omitempty"`
 	Registration    string                `json:"registration,omitempty"` // invite, open, closed: how new accounts sign up
 	Email           string                `json:"email,omitempty"`
-	HomeLogin       string                `json:"home_login,omitempty"` // ~/.hearth's account while this workspace has no login
+	HomeLogin       string                `json:"home_login,omitempty"`       // ~/.hearth's account while this workspace has no login
+	IdentityChoices []string              `json:"identity_choices,omitempty"` // accounts known here when none is certain
 	Device          string                `json:"device,omitempty"`
 	Machine         string                `json:"machine"`
 	Profiles        []string              `json:"profiles"`
@@ -173,7 +174,15 @@ func collectOnboard() onboardStatus {
 			st.Email = id.Email // the account setup will use
 		} else {
 			cmd += " --email <email>"
-			ask = strings.TrimPrefix(ask+" and the account email", " and ")
+			what := " and the account email"
+			if cs := client.IdentityChoices(home); len(cs) > 0 {
+				// Several people known here: let the user pick one.
+				for _, c := range cs {
+					st.IdentityChoices = append(st.IdentityChoices, choiceName(c))
+				}
+				what += " (people known on this machine: " + choiceList(cs) + "; or another)"
+			}
+			ask = strings.TrimPrefix(ask+what, " and ")
 		}
 		switch st.Registration {
 		case "invite":

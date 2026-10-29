@@ -70,6 +70,8 @@ Hearth commands run inside that directory use `<dir>/.hearth` and only upload yo
 
 Already logged in without a workspace (`~/.hearth`)? Move that login into the workspace instead of logging in again, which would make a second device whose sync competes with the first: `hearth init --move-login <dir> && cd <dir> && hearth daemon start`. `hearth onboard status` proposes it when `~/.hearth`'s account is the workspace's identity, and `hearth setup` refuses to log in the same account a second time.
 
+When the machine knows several people (SSO tokens, Comate logins), `hearth setup` lists them and asks which one you are. The agents' config dirs (`~/.codex`, `~/.claude`) stay shared: Hearth's memory hook and MCP server registered there answer from the workspace the agent session runs in, so each person gets their own memories and skills.
+
 ## Manual install
 
 When piping a script is not an option:

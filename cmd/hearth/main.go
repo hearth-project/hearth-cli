@@ -275,7 +275,10 @@ func loginCmd() *cobra.Command {
 				}
 			}
 			if email == "" {
-				return errors.New("no local identity found; pass --email <you@example.com>")
+				var err error
+				if email, err = pickIdentity(home); err != nil {
+					return err
+				}
 			}
 			if !switchLogin {
 				if err := client.CheckSwitch(home, server, email); err != nil {
