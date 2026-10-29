@@ -9,6 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/hearth-project/hearth-cli/internal/api"
 	"github.com/hearth-project/hearth-cli/internal/client"
 	"github.com/hearth-project/hearth-cli/internal/machine"
 	"github.com/hearth-project/hearth-cli/internal/paths"
@@ -122,7 +123,9 @@ func machineCmd() *cobra.Command {
 		t.add("MACHINE", "STATE", "FACTS", "AGENTS", "RESTORE")
 		for _, d := range ds {
 			state := "offline"
-			if d.Online {
+			if d.Status != "active" {
+				state = d.Status
+			} else if d.Online {
 				state = "online"
 			}
 			facts, _ := d.Machine["facts"].(map[string]any)
@@ -156,12 +159,23 @@ func machineCmd() *cobra.Command {
 		if err != nil {
 			return err
 		}
-		for _, d := range ds {
+		var fallback *api.Device
+		for i := range ds {
+			d := &ds[i]
 			if d.Name == a[0] || d.ID == a[0] || strings.HasPrefix(d.ID, a[0]) {
-				b, _ := json.MarshalIndent(d, "", "  ")
-				fmt.Println(string(b))
-				return nil
+				if d.Status == "active" {
+					fallback = d
+					break
+				}
+				if fallback == nil {
+					fallback = d
+				}
 			}
+		}
+		if fallback != nil {
+			b, _ := json.MarshalIndent(fallback, "", "  ")
+			fmt.Println(string(b))
+			return nil
 		}
 		return fmt.Errorf("no machine %q", a[0])
 	}}
