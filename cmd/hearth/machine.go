@@ -120,7 +120,8 @@ func machineCmd() *cobra.Command {
 			return err
 		}
 		t := &table{}
-		t.add("MACHINE", "STATE", "FACTS", "ENVIRONMENT", "CHECKED", "CONNECT")
+		t.add("MACHINE", "STATE", "FACTS", "ENVIRONMENT", "CHECKED", "SSH HOST")
+		aliases := deviceAliases(e, ds)
 		hidden := 0
 		for _, d := range ds {
 			if d.Status != "" && d.Status != "active" && !listAll {
@@ -142,10 +143,7 @@ func machineCmd() *cobra.Command {
 				}
 			}
 			ag := envSummary(d.Env)
-			restore := "hearth ssh " + d.ID[:minInt(8, len(d.ID))]
-			if !d.Online {
-				restore = "offline"
-			}
+			restore := aliases[d.ID]
 			if d.Status != "active" {
 				ag, restore = "-", "-"
 			}
@@ -263,13 +261,6 @@ func matchString(m map[string]string) string {
 }
 
 func jsonMarshalIndent(v any) ([]byte, error) { return json.MarshalIndent(v, "", "  ") }
-
-func minInt(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
 
 // envSummary is the server's environment check in one cell.
 func envSummary(env map[string]any) string {

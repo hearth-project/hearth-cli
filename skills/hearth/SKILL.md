@@ -221,7 +221,7 @@ When the user says “恢复这台机器的 Codex 环境” or “恢复 Claude 
 Logged-in Linux machines accept SSH from the user's own devices by default: the keys of their active devices (each device's Hearth key and its `~/.ssh/id_*.pub`) go into a marked block of `~/.ssh/authorized_keys`, and the daemon keeps the system sshd running the usual GPU-container way (public keys only, main interface, port 8022; an sshd already listening there is used as it is).
 
 - "我能 ssh 到哪些机器" / "连上那台机器": `hearth ssh` lists them with the command; `hearth ssh <machine> [-- cmd]` logs in with host-key checking.
-- From a Mac or laptop: install and log in Hearth there, then `ssh -p 8022 <user>@<address>` works with the usual key; `hearth ssh config` adds `Host hearth-<machine>` entries for VS Code / Cursor Remote-SSH, scp and rsync.
+- From a Mac or laptop: install and log in Hearth there. On a Mac Hearth keeps a Host entry per machine in `~/.ssh/config` by itself (with host keys; elsewhere once `hearth ssh config` was run, `[ssh] config`), named `[family]-[host]-[hardware]-[node]`, e.g. `gb-johor-edge-gpu-e05-13` (`[ssh.aliases]` to rename one). `ssh <host>` works; Codex Desktop lists them under Connections > SSH, where the user adds each one once; VS Code / Cursor Remote-SSH list them too. `hearth ssh` shows the names; `onboard status` says when entries are missing.
 - `hearth ssh status` (this machine), `hearth ssh keys`, `hearth ssh authorize <pubkey|file>` for a key that is not a Hearth device; `hearth ssh disable` (this machine; `--all`: every machine). A revoked device (`hearth device revoke`) loses access within a minute.
 
 ### Status and problems

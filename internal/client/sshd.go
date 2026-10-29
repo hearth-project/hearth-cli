@@ -76,6 +76,17 @@ func SSHOn(home string) bool {
 	return runtime.GOOS == "linux"
 }
 
+// SSHClientConfigOn reports whether this machine keeps Host entries for the
+// user's machines in ~/.ssh/config without being asked ([ssh] config;
+// default: on a Mac, where the user's apps connect from).
+func SSHClientConfigOn(home string) bool {
+	c, err := UserConfig(home)
+	if err == nil && c.SSH != nil && c.SSH.Config != nil {
+		return *c.SSH.Config
+	}
+	return runtime.GOOS == "darwin"
+}
+
 // SetSSHHere turns SSH on or off for this machine only.
 func SetSSHHere(home string, on bool) error {
 	s := loadSSHState(home)
