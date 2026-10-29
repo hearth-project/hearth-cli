@@ -31,6 +31,10 @@ func MachineMatches(ref, name, id, addr string) int {
 func FindDevice(ds []api.Device, ref string) (api.Device, error) {
 	var exact, part []api.Device
 	for _, d := range ds {
+		if f, _ := d.Machine["facts"].(map[string]any); ref == MachineAlias(d.Name, f) {
+			exact = append(exact, d)
+			continue
+		}
 		switch MachineMatches(ref, d.Name, d.ID, d.LastIP) {
 		case 2:
 			exact = append(exact, d)

@@ -249,6 +249,11 @@ func collectOnboard() onboardStatus {
 	if !st.DaemonRunning {
 		add(nextStep{ID: "daemon", Why: "background sync is not running", Command: "hearth daemon start"})
 	}
+	// Machines this one can SSH to but that the user's apps do not list.
+	if missing := sshConfigMissing(e); len(missing) > 0 {
+		add(nextStep{ID: "ssh-config", Why: fmt.Sprintf("%d of your machines are not in ~/.ssh/config, so Codex Desktop / VS Code / Cursor do not list them (%s)", len(missing), joinMax(missing, 3)),
+			Command: "hearth ssh config   # then in Codex Desktop: Connections > SSH, add them once"})
+	}
 	// The daemon records new items by itself; what is left needs a choice
 	// (changed copies, credentials while not automatic).
 	n := len(e.LearnPending())
@@ -537,3 +542,25 @@ func writeFileAtomicCLI(p string, b []byte) error {
 }
 
 func fileExists(p string) bool { _, err := os.Stat(p); return err == nil }
+
+// sshConfigMissing lists the aliases of the user's SSH machines missing
+// from ~/.ssh/config (nothing on machines that do not keep it: a Linux box
+// that never ran hearth ssh config).
+func sshConfigMissing(e *client.Engine) []string {
+	h, _ := os.UserHomeDir()
+	cur, _ := os.ReadFile(filepath.Join(h, ".ssh", "config"))
+	if !client.SSHClientConfigOn(e.Home) && !strings.Contains(string(cur), sshBlockBegin) {
+		return nil
+	}
+	eps, err := e.SSHEndpoints()
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for i, a := range sshAliases(e, eps) {
+		if eps[i].DeviceID != e.Cfg.DeviceID && !strings.Contains(string(cur), "Host "+a+"\n") {
+			out = append(out, a)
+		}
+	}
+	return out
+}

@@ -42,6 +42,13 @@ type SSHConfig struct {
 	// ShareKeys: also accept each device's usual keys (~/.ssh/id_*.pub),
 	// so plain ssh and IDEs work (default true).
 	ShareKeys *bool `toml:"share_keys,omitempty"`
+	// Config: keep Host entries for your machines in ~/.ssh/config (Codex
+	// Desktop, VS Code, Cursor list them). Default: on for a Mac; on
+	// other machines once hearth ssh config was run.
+	Config *bool `toml:"config,omitempty"`
+	// Aliases names machines by hand (device id -> alias); the others get
+	// [family]-[host]-[hardware]-[node], e.g. gb-johor-edge-gpu-e05-13.
+	Aliases map[string]string `toml:"aliases,omitempty"`
 }
 
 // MemoryConfig: long-term memory (conversation cards, remembered facts,
@@ -297,6 +304,9 @@ const Template = `# Hearth settings — the only file you need to edit. It syncs
 # enabled = true
 # port = 8022
 # share_keys = true   # also accept each device's ~/.ssh/id_*.pub
+# config = true       # Host entries in ~/.ssh/config (default on a Mac)
+# [ssh.aliases]       # names in ~/.ssh/config: default [family]-[host]-[hardware]-[node]
+# "<device id>" = "gb-johor-edge-gpu-e05-13"
 
 [shell]
 # Your own lines of ~/.bashrc / ~/.zshrc (and ~/.bash_aliases) are kept
