@@ -42,6 +42,7 @@ type EnvTool struct {
 type reportedHealth struct {
 	Agents map[string]struct {
 		Enabled, Installed, Ready bool
+		Used                      *bool // nil: client older than usage-based checks
 		Version                   string
 	} `json:"agents"`
 	Tools map[string]struct {
@@ -96,7 +97,7 @@ func (s *Server) machineEnv(healthJSON, clientVersion string) *MachineEnv {
 		}
 	}
 	for _, name := range []string{"codex", "claude"} {
-		if a, ok := h.Agents[name]; ok && a.Enabled && a.Installed && !a.Ready {
+		if a, ok := h.Agents[name]; ok && a.Enabled && a.Installed && !a.Ready && (a.Used == nil || *a.Used) {
 			add(EnvProblem{Level: "warn", Code: "integration", Tool: name})
 		}
 	}

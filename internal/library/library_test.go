@@ -284,3 +284,28 @@ func TestPresentElsewhereIsNotLinked(t *testing.T) {
 		t.Fatalf("no present action: %+v", acts)
 	}
 }
+
+// A skill linked by another Hearth home on the machine is taken over.
+func TestRenderTakesOverOtherHomesLinks(t *testing.T) {
+	root := t.TempDir()
+	other := filepath.Join(root, "old", ".hearth", "library", "skills", "bench")
+	mine := filepath.Join(root, "ws", ".hearth", "library", "skills", "bench")
+	for _, d := range []string{other, mine} {
+		os.MkdirAll(d, 0o755)
+		os.WriteFile(filepath.Join(d, "SKILL.md"), []byte("---\nname: bench\ndescription: b\n---\n"), 0o644)
+	}
+	if !otherHearthLink(mustLink(t, other, filepath.Join(root, "agent-bench")), mine) {
+		t.Fatal("link into another home's library not recognised")
+	}
+	if otherHearthLink(mustLink(t, mine, filepath.Join(root, "agent-bench2")), mine) {
+		t.Fatal("own link treated as foreign")
+	}
+}
+
+func mustLink(t *testing.T, target, at string) string {
+	t.Helper()
+	if err := os.Symlink(target, at); err != nil {
+		t.Fatal(err)
+	}
+	return at
+}

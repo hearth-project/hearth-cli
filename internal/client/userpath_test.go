@@ -50,3 +50,20 @@ func TestRememberedProxy(t *testing.T) {
 		t.Fatal("overrode the shell's proxy")
 	}
 }
+
+// The login shell's PATH is read from its rc files.
+func TestLoginShellPath(t *testing.T) {
+	h := t.TempDir()
+	t.Setenv("HOME", h)
+	t.Setenv("SHELL", "/bin/bash")
+	os.WriteFile(filepath.Join(h, ".bash_profile"), []byte("echo noise\nexport PATH=\"/opt/from-profile/bin:$PATH\"\n"), 0o644)
+	loginPath.done, loginPath.dirs = false, nil
+	defer func() { loginPath.done, loginPath.dirs = false, nil }()
+	found := false
+	for _, d := range loginShellPath() {
+		found = found || d == "/opt/from-profile/bin"
+	}
+	if !found {
+		t.Fatalf("login PATH %v", loginPath.dirs)
+	}
+}
