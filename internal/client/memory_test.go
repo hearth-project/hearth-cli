@@ -1,6 +1,8 @@
 package client
 
 import (
+	"github.com/hearth-project/hearth-cli/internal/memory"
+
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -80,7 +82,7 @@ func TestMemoryHooksFiles(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "settings.json")
 	other := `{"model":"x","hooks":{"UserPromptSubmit":[{"hooks":[{"type":"command","command":"/usr/bin/other"}]}]}}`
 	os.WriteFile(p, []byte(other), 0o600)
-	cmd := hookCommand("/h", "/bin/hearth")
+	cmd := hookCommand("", "/bin/hearth")
 	for i := 0; i < 2; i++ { // idempotent
 		if _, err := editHooks(p, cmd, true); err != nil {
 			t.Fatal(err)
@@ -93,7 +95,7 @@ func TestMemoryHooksFiles(t *testing.T) {
 	if doc["model"] != "x" || len(hooks["UserPromptSubmit"].([]any)) != 2 || len(hooks["SessionStart"].([]any)) != 1 {
 		t.Fatalf("after install:\n%s", b)
 	}
-	if !strings.Contains(string(b), "HEARTH_HOME='/h' '/bin/hearth' recall --hook") {
+	if !strings.Contains(string(b), "\"'/bin/hearth' recall --hook\"") {
 		t.Fatalf("command:\n%s", b)
 	}
 	// A recorded copy with another machine's hook path is not "changed".
@@ -107,5 +109,59 @@ func TestMemoryHooksFiles(t *testing.T) {
 	b, _ = os.ReadFile(p)
 	if strings.Contains(string(b), "recall --hook") || !strings.Contains(string(b), "/usr/bin/other") || strings.Contains(string(b), "SessionStart") {
 		t.Fatalf("after removal:\n%s", b)
+	}
+}
+
+// One Codex home shared by several people (one Unix account): the hook
+// answers with the facts of the workspace the session runs in, whoever
+// registered it, and with nobody's in a workspace without a login.
+func TestHookAnswersForTheSessionsWorkspace(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("HEARTH_WORKSPACE", "")
+	fact := func(home, body string) {
+		x, err := memory.Open(memory.Path(home))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer x.Close()
+		if err := x.Apply([]memory.Doc{{ID: "f:1", Kind: "fact", Title: body, Body: body, At: 1}}, map[string]string{"f:1": "h"}, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	root := t.TempDir()
+	homes := map[string]string{}
+	for _, u := range []string{"alice", "bob", "carol"} {
+		os.MkdirAll(filepath.Join(root, u), 0o700)
+		h, err := InitWorkspace(filepath.Join(root, u))
+		if err != nil {
+			t.Fatal(err)
+		}
+		homes[u] = h
+	}
+	fact(homes["alice"], "alice prefers tabs")
+	fact(homes["bob"], "bob prefers spaces")
+	fact(DefaultHome(), "root owner prefers vim")
+
+	start := func(cwd string) string {
+		out, _ := Hook(homes["alice"], strings.NewReader(`{"hook_event_name":"SessionStart","cwd":"`+cwd+`"}`))
+		return out
+	}
+	if out := start(filepath.Join(root, "bob", "repo")); !strings.Contains(out, "bob prefers spaces") || strings.Contains(out, "alice") {
+		t.Fatalf("bob's session got: %s", out)
+	}
+	if out := start(filepath.Join(root, "alice")); !strings.Contains(out, "alice prefers tabs") {
+		t.Fatalf("alice's session got: %s", out)
+	}
+	if out := start(filepath.Join(root, "carol")); out != "" {
+		t.Fatalf("carol (no memory) got: %s", out)
+	}
+	if out := start("/elsewhere"); !strings.Contains(out, "root owner prefers vim") {
+		t.Fatalf("session outside workspaces got: %s", out)
+	}
+	if c := hookCommand(homes["alice"], "/bin/hearth"); strings.Contains(c, "HEARTH_HOME") {
+		t.Fatalf("hook names a workspace home: %s", c)
+	}
+	if c := hookCommand("/opt/h", "/bin/hearth"); !strings.Contains(c, "HEARTH_HOME='/opt/h'") {
+		t.Fatalf("hook drops a custom home: %s", c)
 	}
 }

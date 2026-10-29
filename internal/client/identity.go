@@ -97,6 +97,28 @@ type identityCandidate struct {
 	hint     bool // platform environment: only a hint, not proof
 }
 
+// IdentityChoices lists every distinct user name this machine knows, per-user
+// artifacts (SSO tokens, Comate logins) first, then platform hints, for
+// the user to pick from when DetectIdentity cannot decide (several people
+// on one Unix account). It only offers accounts; the server still asks for
+// proof.
+func IdentityChoices(home string) []LocalIdentity {
+	cands := identityCandidates(home)
+	seen := map[string]bool{}
+	var out []LocalIdentity
+	for _, hint := range []bool{false, true} {
+		for _, c := range cands {
+			k := strings.ToLower(c.username)
+			if c.hint != hint || seen[k] {
+				continue
+			}
+			seen[k] = true
+			out = append(out, LocalIdentity{Username: c.username, Email: withDomain(home, c.username), Source: c.source})
+		}
+	}
+	return out
+}
+
 // identityCandidates collects every user name this machine knows about:
 // platform environment variables, SSO token caches (the site's
 // learn.json token_files) and Comate's per-user login files.
@@ -184,9 +206,12 @@ func withDomain(home, username string) string {
 		return username + "@" + d
 	}
 	// The workspace's existing hearth account knows the right domain even
-	// when the caller is switching to another user name.
-	if cfg, err := LoadConfig(home); err == nil && strings.Contains(cfg.Email, "@") {
-		return username + "@" + domainOf(cfg.Email)
+	// when the caller is switching to another user name; else the login of
+	// the default home (only its domain: it may be another person's).
+	for _, h := range []string{home, DefaultHome()} {
+		if cfg, err := LoadConfig(h); err == nil && strings.Contains(cfg.Email, "@") {
+			return username + "@" + domainOf(cfg.Email)
+		}
 	}
 	if e := gitEmail(); strings.Contains(e, "@") {
 		return username + "@" + domainOf(e)

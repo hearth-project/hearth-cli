@@ -68,3 +68,36 @@ func TestSessionScopeOnSharedAccount(t *testing.T) {
 		t.Fatalf("roots without workspace: %v", roots)
 	}
 }
+
+// A home without a workspace (~/.hearth) takes every session on the
+// account, except those run inside a workspace made with hearth init: that
+// workspace has its own login, often another person's on a shared account.
+func TestNoWorkspaceSkipsOtherWorkspaces(t *testing.T) {
+	en := newEnv(t)
+	a := en.machine("shared")
+	learnEnv(t)
+	t.Setenv("HEARTH_WORKSPACE", "")
+	bob := t.TempDir()
+	if _, err := InitWorkspace(bob); err != nil {
+		t.Fatal(err)
+	}
+	day := filepath.Join(a.codex, "sessions/2026/10/23")
+	os.MkdirAll(day, 0o700)
+	line := func(cwd string) []byte {
+		return []byte(`{"type":"session_meta","payload":{"id":"x","cwd":"` + cwd + `"}}` + "\n")
+	}
+	os.WriteFile(filepath.Join(day, "rollout-2026-10-23T10-00-00-01a16500-0000-7000-8000-000000000011.jsonl"), line("/srv/mine"), 0o600)
+	os.WriteFile(filepath.Join(day, "rollout-2026-10-23T10-00-00-01a16500-0000-7000-8000-000000000012.jsonl"), line(bob+"/repo"), 0o600)
+
+	if st := a.push(t); st.Files != 1 || st.Foreign != 1 {
+		t.Fatalf("uploaded %d, foreign %d", st.Files, st.Foreign)
+	}
+	if fs := a.ForeignSessions(); len(fs) != 1 || fs[0].Cwd != bob+"/repo" {
+		t.Fatalf("foreign list %+v", fs)
+	}
+	// "every session on this account is mine" still takes it.
+	SaveScope(a.Home, Scope{All: true})
+	if st := a.push(t); st.Foreign != 0 {
+		t.Fatalf("scope all: foreign %d", st.Foreign)
+	}
+}

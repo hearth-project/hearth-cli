@@ -45,16 +45,21 @@ func setupCmd() *cobra.Command {
 				if id, ok := detect(home); ok && id.Email != "" {
 					email = id.Email
 					fmt.Printf("      local identity: %s (%s)\n", id.Email, id.Source)
-				} else if isTTY() {
-					// Nothing on this machine says who the user is: ask.
-					a, _ := askLine("      your account email (new or existing): ")
-					if !strings.Contains(a, "@") {
-						return errors.New("no email given; run again with --email <you@example.com>")
-					}
-					email = a
 				} else {
-					return errors.New("no local identity found on this machine; pass --email <you@example.com>")
+					// Nothing says which of the people known here is asking.
+					picked, perr := pickIdentity(home)
+					if perr != nil {
+						return perr
+					}
+					email = picked
 				}
+			}
+			if def, ok := client.MovableLogin(home); ok && sameServer(def.Server, server) && strings.EqualFold(def.Email, email) {
+				// A second login of the same account on this machine is a
+				// second device: both daemons would scan the same sessions.
+				ws := client.WorkspaceOf(home)
+				return fmt.Errorf("~/.hearth is already logged in as %s on this machine; move that login into this workspace instead:\n"+
+					"  hearth init --move-login %s && cd %s && hearth daemon start", def.Email, ws, ws)
 			}
 			switch {
 			case err == nil && sameServer(cfg.Server, server) && strings.EqualFold(cfg.Email, email):

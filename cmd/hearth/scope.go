@@ -24,7 +24,7 @@ func sessionScopeCmd() *cobra.Command {
 			case s.All:
 				fmt.Println("scope: every session on this account (hearth session scope mine-only to limit it)")
 			case ws == "":
-				fmt.Println("scope: every session (no workspace set; on a shared account run: hearth init <your dir>)")
+				fmt.Println("scope: every session except those run inside other hearth workspaces (no workspace set; on a shared account run: hearth init <your dir>)")
 			default:
 				fmt.Printf("scope: sessions run inside %s", ws)
 				for _, p := range s.Paths {
@@ -57,7 +57,11 @@ func sessionScopeCmd() *cobra.Command {
 			for _, k := range keys {
 				fmt.Printf("  %4d  %s\n", by[k], k)
 			}
-			fmt.Println("\nyours too? hearth session scope add <dir>   (or, if nobody else uses this account: hearth session scope all)")
+			if ws == "" {
+				fmt.Println("\nthose workspaces have their own login (hearth init); yours too? hearth session scope all")
+			} else {
+				fmt.Println("\nyours too? hearth session scope add <dir>   (or, if nobody else uses this account: hearth session scope all)")
+			}
 			return nil
 		},
 	}

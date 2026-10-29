@@ -48,8 +48,14 @@ func mcpCmd() *cobra.Command {
 		Use:   "mcp",
 		Short: "Serve skill search over MCP on stdio (search_skills, get_skill, list_skills)",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			os.MkdirAll(client.Home(), 0o700)
 			home := client.Home()
+			if wd, err := os.Getwd(); err == nil && client.FoundHome(home) {
+				// Registered in an agent config dir that several people may
+				// share: answer for the workspace this session runs in.
+				home = client.HomeFor(wd)
+				os.Setenv("HEARTH_HOME", home)
+			}
+			os.MkdirAll(home, 0o700)
 			svc := &mcpserver.Service{Sources: skillSources(extra), UsageLog: usageLog(),
 				Recipes: func() string { return client.RecipesSummary(home) },
 				Propose: func(r, steps, reason string) (string, error) { return client.Propose(home, r, steps, reason) }}
@@ -262,14 +268,20 @@ func installSkillMCP(quiet bool) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	env := "HEARTH_HOME=" + client.Home()
+	// No HEARTH_HOME for ~/.hearth and workspaces: `hearth mcp` finds the
+	// home of the session's directory, so an agent config dir shared by
+	// several people serves each of them their own memories and skills.
+	codexAdd := []string{"mcp", "add", "hearth", "--", exe, "mcp"}
+	if home := client.Home(); !client.FoundHome(home) {
+		codexAdd = []string{"mcp", "add", "--env", "HEARTH_HOME=" + home, "hearth", "--", exe, "mcp"}
+	}
 	type ag struct {
 		name    string
 		add     []string
 		refresh []string
 	}
 	agents := []ag{
-		{"codex", []string{"mcp", "add", "--env", env, "hearth", "--", exe, "mcp"}, []string{"mcp", "remove", "hearth"}},
+		{"codex", codexAdd, []string{"mcp", "remove", "hearth"}},
 		// add-json: claude's -e takes several values and swallowed the
 		// server name after it ("Invalid environment variable format: hearth").
 		{"claude", []string{"mcp", "add-json", "--scope", "user", "hearth", claudeMCPJSON(exe)}, []string{"mcp", "remove", "hearth", "--scope", "user"}},
@@ -368,7 +380,11 @@ func libUsageCmd() *cobra.Command {
 }
 
 func claudeMCPJSON(exe string) string {
-	b, _ := json.Marshal(map[string]any{"type": "stdio", "command": exe, "args": []string{"mcp"}, "env": map[string]string{"HEARTH_HOME": client.Home()}})
+	m := map[string]any{"type": "stdio", "command": exe, "args": []string{"mcp"}}
+	if home := client.Home(); !client.FoundHome(home) {
+		m["env"] = map[string]string{"HEARTH_HOME": home}
+	}
+	b, _ := json.Marshal(m)
 	return string(b)
 }
 

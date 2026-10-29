@@ -88,6 +88,9 @@ func Hook(home string, in io.Reader) (string, error) {
 	var h HookInput
 	b, _ := io.ReadAll(io.LimitReader(in, 1<<20))
 	_ = json.Unmarshal(b, &h)
+	if h.Cwd != "" && FoundHome(home) {
+		home = HomeFor(h.Cwd) // the memories of the person working there
+	}
 	if !MemoryOn(home) {
 		return "", nil
 	}

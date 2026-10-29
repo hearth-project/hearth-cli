@@ -37,9 +37,36 @@ type HookResult struct {
 	Detail          string
 }
 
+// hookCommand names no HEARTH_HOME for ~/.hearth and workspaces: the hook
+// answers from the hearth home of the session's working directory
+// (HomeFor), so one hooks file shared by several people on a Unix account
+// gives each their own memories. A home elsewhere is named.
 func hookCommand(home, exe string) string {
 	q := func(s string) string { return "'" + strings.ReplaceAll(s, "'", `'"'"'`) + "'" }
-	return "HEARTH_HOME=" + q(home) + " " + q(exe) + " " + hookMarker
+	if home != "" && !FoundHome(home) {
+		return "HEARTH_HOME=" + q(home) + " " + q(exe) + " " + hookMarker
+	}
+	return q(exe) + " " + hookMarker
+}
+
+// FoundHome reports whether home is one HomeFor finds by itself: ~/.hearth
+// or a workspace's.
+func FoundHome(home string) bool {
+	return filepath.Clean(home) == filepath.Clean(DefaultHome()) || WorkspaceOf(home) != ""
+}
+
+// HomeFor is the hearth home that answers for an agent session run in
+// cwd: the workspace containing cwd, else ~/.hearth (the home directory is
+// the user's who logged in without a workspace). Agent config dirs are often
+// shared by several people (one Unix account), so a hook or MCP server
+// registered there must not answer with the memories of whoever installed it.
+func HomeFor(cwd string) string {
+	if cwd != "" {
+		if ws := FindWorkspace(cwd); ws != "" {
+			return filepath.Join(ws, ".hearth")
+		}
+	}
+	return DefaultHome()
 }
 
 // hookFiles are the hook configuration files of the agents enabled here.
