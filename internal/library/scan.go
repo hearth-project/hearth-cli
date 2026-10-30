@@ -81,7 +81,10 @@ func ScanSecrets(root string) ([]Finding, error) {
 		rel, _ := filepath.Rel(root, p)
 		// By name, or private by intent (only the owner may read it).
 		inSkill := skillTree || strings.HasPrefix(filepath.ToSlash(rel), "skills/")
-		if info, err := d.Info(); err == nil && (credentialName(d.Name()) || (inSkill && info.Mode().Perm()&0o077 == 0)) {
+		// SKILL.md is the skill's own text: judged by content only (tools
+		// such as codex-mixin install theirs owner-only).
+		private := inSkill && d.Name() != "SKILL.md"
+		if info, err := d.Info(); err == nil && (credentialName(d.Name()) || (private && info.Mode().Perm()&0o077 == 0)) {
 			out = append(out, Finding{File: rel, Rule: "credential file"})
 			return nil
 		}

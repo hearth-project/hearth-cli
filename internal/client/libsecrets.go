@@ -90,7 +90,20 @@ func libSecretName(bp string) string {
 
 // pushLibSecrets uploads changed credential files and deletes the secrets
 // of files that are gone. Returns how many were uploaded.
-func (e *Engine) pushLibSecrets(files map[string]string) (int, error) {
+// fileSums maps bundle paths to the sha256 of their files.
+func fileSums(files map[string]string) map[string]string {
+	out := map[string]string{}
+	for bp, p := range files {
+		if b, err := os.ReadFile(p); err == nil {
+			h := sha256.Sum256(b)
+			out[bp] = hex.EncodeToString(h[:])
+		}
+	}
+	return out
+}
+
+func (e *Engine) pushLibSecrets(files map[string]string, prev map[string]string) (int, error) {
+	had := prev
 	all, err := e.Secrets()
 	if err != nil {
 		return 0, err
@@ -116,10 +129,11 @@ func (e *Engine) pushLibSecrets(files map[string]string) (int, error) {
 		n++
 	}
 	for bp, s := range have {
-		if _, ok := files[bp]; ok {
-			continue
+		if _, ok := files[bp]; ok || had[bp] == "" {
+			continue // still here, or never here (another machine's upload)
 		}
-		// Gone from this library (deleted, or no longer a credential).
+		// Gone from this library since the last sync (deleted, or no
+		// longer a credential).
 		_ = e.DeleteSecret(s.Name)
 	}
 	return n, nil
@@ -137,6 +151,8 @@ func libBundlePath(root, bp string) string {
 // restoreLibSecrets writes the credential files back into the skills this
 // library has (mode 0600). Returns how many it wrote.
 func (e *Engine) restoreLibSecrets() (int, error) {
+	st, _ := loadLibState(e.Home)
+	synced := st.SecretFiles
 	all, err := e.Secrets()
 	if err != nil {
 		return 0, err
@@ -149,8 +165,16 @@ func (e *Engine) restoreLibSecrets() (int, error) {
 			continue
 		}
 		p := libBundlePath(root, bp)
-		if cur, err := os.ReadFile(p); err == nil && bytes.Equal(cur, s.Value) {
-			continue
+		if cur, err := os.ReadFile(p); err == nil {
+			if bytes.Equal(cur, s.Value) {
+				continue
+			}
+			// Changed here since the last sync: this machine's copy wins
+			// (it is pushed next); unchanged here: take the newer upload.
+			h := sha256.Sum256(cur)
+			if synced[bp] != hex.EncodeToString(h[:]) {
+				continue
+			}
 		}
 		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 			return n, err
