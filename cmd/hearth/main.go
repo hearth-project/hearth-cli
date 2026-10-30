@@ -125,6 +125,7 @@ func initCmd() *cobra.Command {
 			_, defErr := client.LoadConfig(def)
 			_, tgtErr := client.LoadConfig(target)
 			movable := defErr == nil && tgtErr != nil && filepath.Clean(def) != filepath.Clean(target)
+			restart := false
 			if moveLogin {
 				if !movable {
 					return fmt.Errorf("nothing to move: %s is not logged in, or %s already is", def, target)
@@ -141,15 +142,13 @@ func initCmd() *cobra.Command {
 						return fmt.Errorf("stop the daemon of %s: %w", def, err)
 					}
 				}
-				_ = os.RemoveAll(target)
-				_ = os.MkdirAll(filepath.Dir(target), 0o700)
-				if err := os.Rename(def, target); err != nil {
-					return fmt.Errorf("move %s to %s: %w (on another disk: log in inside the workspace instead)", def, target, err)
+				// Renamed, or copied then removed on another disk (cluster
+				// storage); rc-file blocks follow it.
+				if _, err := client.MoveHome(def, abs); err != nil {
+					return fmt.Errorf("move %s to %s: %w", def, target, err)
 				}
 				fmt.Printf("moved the login and state of %s to %s\n", def, target)
-				if wasRunning {
-					fmt.Printf("restart background sync from the workspace:  cd %s && hearth daemon start\n", abs)
-				}
+				restart = wasRunning
 			}
 			home, err := client.InitWorkspace(dir)
 			if err != nil {
@@ -167,6 +166,11 @@ func initCmd() *cobra.Command {
 					fmt.Println("skill search:", err)
 				}
 				_, _ = client.SyncMemoryHooks(home, client.MemoryHooksOn(home))
+				if restart {
+					if err := startDaemon(); err != nil {
+						fmt.Println("daemon:", err)
+					}
+				}
 			}
 			fmt.Printf("workspace %s (state %s)\n", abs, home)
 			if dev, other := client.OtherHostHome(abs); other {

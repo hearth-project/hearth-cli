@@ -3,6 +3,7 @@ package client
 import (
 	"errors"
 	"fmt"
+	"github.com/hearth-project/hearth-cli/internal/recipe"
 	"io"
 	"os"
 	"path/filepath"
@@ -91,7 +92,28 @@ func MoveHome(from, ws string) (string, error) {
 	if _, err := InitWorkspace(abs); err != nil {
 		return "", err
 	}
+	rehomeRC(from, target)
 	return target, nil
+}
+
+// rehomeRC points the rc-file blocks that sourced scripts of the old home
+// (restored shell lines, the identity block) at the same scripts in the
+// new one.
+func rehomeRC(from, to string) {
+	h, _ := os.UserHomeDir()
+	scripts, _ := filepath.Glob(filepath.Join(to, "shell", "*.sh"))
+	for _, rc := range []string{".bashrc", ".zshrc", ".profile", ".bash_profile"} {
+		rc = filepath.Join(h, rc)
+		if _, err := os.Stat(rc); err != nil {
+			continue
+		}
+		for _, s := range scripts {
+			old := filepath.Join(from, "shell", filepath.Base(s))
+			if changed, err := recipe.UninstallRC(rc, old); err == nil && changed {
+				_, _ = recipe.InstallRC(rc, s)
+			}
+		}
+	}
 }
 
 // copyTreeX copies a directory with modes and symlinks (a whole home).
