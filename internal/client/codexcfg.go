@@ -38,6 +38,9 @@ type CodexRoute struct {
 	// Shared: on a shared account (a workspace) it is the account-wide
 	// default ~/.codex, which everybody's Codex falls back to.
 	Shared bool `json:"shared,omitempty"`
+	// Missing: login files absent from Home (auth.json, config.toml);
+	// Codex and Codex Desktop then ask to log in.
+	Missing []string `json:"missing,omitempty"`
 }
 
 func loginShell() string {
@@ -130,6 +133,17 @@ func codexHomeSetBy(home, email string) string {
 	return last
 }
 
+// codexLoginMissing lists the login files a Codex home lacks.
+func codexLoginMissing(dir string) []string {
+	var out []string
+	for _, f := range []string{"auth.json", "config.toml"} {
+		if _, err := os.Stat(filepath.Join(dir, f)); err != nil {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
 // codexConfigRoute reads model_provider and its base_url from a config.toml.
 func codexConfigRoute(dir string) (provider, base string) {
 	b, err := os.ReadFile(filepath.Join(dir, "config.toml"))
@@ -205,6 +219,7 @@ func CodexRouteNow(home, email string) CodexRoute {
 		r.Home = filepath.Join(h, ".codex")
 	}
 	r.Provider, r.BaseURL = codexConfigRoute(r.Home)
+	r.Missing = codexLoginMissing(r.Home)
 	r.Gateway = isLoopbackURL(r.BaseURL)
 	r.Shared = WorkspaceOf(home) != "" && filepath.Clean(r.Home) == filepath.Clean(filepath.Join(h, ".codex"))
 	if mine := agentHomeExports(home)["CODEX_HOME"]; mine != "" && filepath.Clean(mine) != filepath.Clean(r.Home) {

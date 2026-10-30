@@ -154,6 +154,19 @@ func doctorCmd() *cobra.Command {
 			fmt.Println("daemon:  not running (hearth daemon start)")
 		}
 		printMachine(home, "")
+		// The agents' own setup: login files where Codex really looks,
+		// app-servers left on an old home, gateway route.
+		if e, err := engine(); err == nil {
+			client.FreshChecks = true
+			if h := e.MachineHealth(); len(h.Issues) == 0 {
+				fmt.Println("environment: ok")
+			} else {
+				fmt.Println("environment:")
+				for _, is := range h.Issues {
+					fmt.Println("  -", is)
+				}
+			}
+		}
 		if msg, when, ok := client.LibraryError(home); ok {
 			fmt.Printf("library: last sync failed %s: %s\n", when.Format("2006-01-02 15:04"), msg)
 			fmt.Println("         recipes and credentials in it are stale on this machine; run: hearth lib pull --force (local copy is backed up)")

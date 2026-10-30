@@ -20,6 +20,8 @@ function envText(p) {
     case "steps": return z ? "恢复流程还有 " + p.behind + " 步未完成" : p.behind + " restore step(s) left";
     case "bypass": return z ? "Codex 没有走 codex-mixin 网关，用的是别处的配置：" + p.detail : "Codex does not go through codex-mixin; it uses another config: " + p.detail;
     case "shared_home": return z ? "你的 codex-mixin 登录放在共用的 " + p.detail + "，这个账号上没设 CODEX_HOME 的人都会用到它" : "Your codex-mixin login is in the shared " + p.detail + "; everyone on this account without their own CODEX_HOME uses it";
+    case "no_login": return z ? "Codex 没有登录信息：" + p.detail + " 里没有 " + p.have + "（Codex Desktop 会显示需要登录）" : "Codex has no login: " + p.detail + " has no " + p.have + " (Codex Desktop asks to log in)";
+    case "stale_app_server": return z ? p.behind + " 个 Codex app-server 还在用切换前的 CODEX_HOME=" + p.detail + "，重启后才会用新的" : p.behind + " Codex app-server process(es) still use CODEX_HOME=" + p.detail + " from before the switch; they use the new one after a restart";
     case "unreachable": return z ? "Codex 连不上它的模型服务 " + p.have + "（" + p.detail + "）" : "Codex cannot reach its model endpoint " + p.have + " (" + p.detail + ")";
     case "hearth": return z ? "Hearth 客户端有新版本（" + p.have + " → " + p.latest + "）" : "Newer Hearth client available (" + p.have + " → " + p.latest + ")";
   }
@@ -35,6 +37,8 @@ function envFix(p, d) {
     case "steps": return "hearth recipe plan";
     case "bypass": return "hearth ssh <machine>   # Hearth's sshd marks your sessions; the end of the rc file sets your CODEX_HOME";
     case "unreachable": return "hearth machine check";
+    case "no_login": return "hearth agents where codex   # the home Hearth sets for you; log in there (codex-mixin connect codex / codex login) or point Hearth at the one with your login";
+    case "stale_app_server": return "hearth agents restart-app-server   # Codex Desktop reconnects and starts a new one";
     case "shared_home": return "hearth agents isolate codex   # moves your Codex config and conversations into your workspace";
   }
   return null;

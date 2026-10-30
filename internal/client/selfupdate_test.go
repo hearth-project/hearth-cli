@@ -107,3 +107,66 @@ func TestAutoUpdateSwitches(t *testing.T) {
 		t.Fatalf("manual: %+v %v", r, err)
 	}
 }
+
+func TestAutoUpdateSkip(t *testing.T) {
+	for _, c := range []struct {
+		cur, served string
+		skip        bool
+	}{
+		{"0.1.0-20261030.1156", "0.1.0-20261030.1600", false}, // newer release
+		{"0.1.0-20261029.2359", "0.1.0-20261030.0001", false},
+		{"0.1.0", "0.1.0-20261030.1156", false},
+		{"0.1.0-20261030.1156", "0.2.0", false},
+		{"0.1.0-20261030.1156", "0.1.0-20261030.1156", true}, // same version, other build: a branch build
+		{"0.1.0-20261030.1600", "0.1.0-20261030.1156", true}, // the server's is older
+		{"0.1.0-20261030.1156+isolate", "0.1.0-20261030.1600", true},
+		{"0.1.0-dev", "0.1.0-20261030.1600", true}, // plain go build
+		{"ca4cac7", "0.1.0-20261030.1600", true},
+		{"0.1.0-dev", "0.1.0-dev", false}, // server without release versions: checksums decide
+		{"", "0.1.0-20261030.1600", false},
+	} {
+		if got := AutoUpdateSkip(c.cur, c.served); (got != "") != c.skip {
+			t.Errorf("AutoUpdateSkip(%q, %q) = %q, want skip=%v", c.cur, c.served, got, c.skip)
+		}
+	}
+}
+
+// The daemon keeps a branch build that has the release's version (the
+// release would rewrite config it does not know); hearth self-update still
+// replaces it.
+func TestAutoUpdateKeepsBranchBuild(t *testing.T) {
+	t.Setenv("HEARTH_AUTO_UPDATE", "")
+	dir := t.TempDir()
+	dist := filepath.Join(dir, "dist")
+	os.MkdirAll(dist, 0o755)
+	os.WriteFile(filepath.Join(dist, PlatformBinary()), []byte("release build"), 0o755)
+	os.WriteFile(filepath.Join(dist, "VERSION"), []byte("0.1.0-20261030.1156\n"), 0o644)
+	own := filepath.Join(dir, "server-binary")
+	os.WriteFile(own, []byte("server"), 0o755)
+	var h http.Handler
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { h.ServeHTTP(w, r) }))
+	defer ts.Close()
+	srv, err := server.New(server.Config{DataDir: t.TempDir(), Logger: log.New(io.Discard, "", 0),
+		Dist: &server.Distribution{PublicURL: ts.URL, BinaryPath: own, Dir: dist}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer srv.Close()
+	h = srv
+	exe := filepath.Join(t.TempDir(), "hearth")
+	os.WriteFile(exe, []byte("branch build"), 0o755)
+	home := t.TempDir()
+	for _, cur := range []string{"0.1.0-20261030.1156", "0.1.0-20261030.1156+isolate", "0.1.0-dev"} {
+		r, err := SelfUpdateWith(home, ts.URL, exe, UpdateOptions{Auto: true, Current: cur})
+		if err != nil || r.Updated || r.Skipped == "" {
+			t.Fatalf("%s replaced: %+v %v", cur, r, err)
+		}
+	}
+	if r, err := SelfUpdateWith(home, ts.URL, exe, UpdateOptions{Auto: true, Current: "0.1.0-20261029.0900"}); err != nil || !r.Updated {
+		t.Fatalf("older release kept: %+v %v", r, err)
+	}
+	os.WriteFile(exe, []byte("branch build"), 0o755)
+	if r, err := SelfUpdate(home, ts.URL, exe); err != nil || !r.Updated {
+		t.Fatalf("manual: %+v %v", r, err)
+	}
+}

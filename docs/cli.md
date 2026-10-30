@@ -35,6 +35,7 @@ Generated from `hearth --help` by `hearth docs cli > docs/cli.md`; every command
 | [`hearth agents pull`](#hearth-agents-pull) | Restore an agent on this machine: skills/agents, newest conversations, its CLI (setup restores only recently used agents) |
 | [`hearth agents isolate`](#hearth-agents-isolate) | Shared account: move your agent config and conversations into your workspace, so nobody else on the account uses your gateway login |
 | [`hearth agents where`](#hearth-agents-where) | Print the config dir an agent uses for you here (e.g. CODEX_HOME=$(hearth agents where codex)) |
+| [`hearth agents restart-app-server`](#hearth-agents-restart-app-server) | Stop your Codex app-servers that still use the CODEX_HOME from before Hearth switched it (Codex Desktop starts new ones) |
 | [`hearth agents disable`](#hearth-agents-disable) | Disable an agent |
 | [`hearth agents import`](#hearth-agents-import) | Import sessions of another agent into this agent (via its own converter) |
 | [`hearth backup`](#hearth-backup) | Choose what Hearth uploads (synced, .gitignore-like selection) |
@@ -539,6 +540,22 @@ Print the config dir an agent uses for you here (e.g. CODEX_HOME=$(hearth agents
 
 ```text
 hearth agents where <agent>
+```
+
+## hearth agents restart-app-server
+
+Codex Desktop starts a long-running codex app-server on a remote machine and
+it keeps the CODEX_HOME of the session that started it. After Hearth changes
+your agent home (hearth agents isolate, a new identity block), those servers
+still use the old home until they restart. This stops the ones of your
+sessions (HEARTH_USER) whose CODEX_HOME is the account-wide ~/.codex or a home
+Hearth set before; other people's processes are not touched.
+
+```text
+hearth agents restart-app-server [flags]
+
+Flags:
+  -y, --yes   do not ask
 ```
 
 ## hearth agents disable
