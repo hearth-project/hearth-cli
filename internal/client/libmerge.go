@@ -113,7 +113,7 @@ func (e *Engine) libMerge() (LibResult, error) {
 	if err := os.MkdirAll(merged, 0o755); err != nil {
 		return LibResult{}, err
 	}
-	bak := filepath.Join(BackupDir(e.Home), time.Now().Format("20060102-150405"), "merge-server-copies")
+	bak := filepath.Join(BackupDir(e.Home), time.Now().Format("20060102-150405"), "merge-other-copies")
 	res := &LibMergeResult{}
 	take := func(side, rel string) error {
 		if side == "" {
@@ -141,9 +141,16 @@ func (e *Engine) libMerge() (LibResult, error) {
 			side = "local"
 			res.Kept = append(res.Kept, rel)
 		default:
+			// Changed on both. With a base both edits are real: this
+			// machine's wins. Without one (the first merge after an
+			// upgrade) this copy is more likely just old: the server's wins.
+			other := "remote"
 			side = "local"
+			if !hasBase {
+				side, other = "remote", "local"
+			}
 			res.Conflicts = append(res.Conflicts, rel)
-			if _, err := copyHome(filepath.Join(dirs["remote"], filepath.FromSlash(rel)), filepath.Join(bak, filepath.FromSlash(rel)), "", ""); err != nil {
+			if _, err := copyHome(filepath.Join(dirs[other], filepath.FromSlash(rel)), filepath.Join(bak, filepath.FromSlash(rel)), "", ""); err != nil {
 				os.RemoveAll(merged)
 				return LibResult{}, err
 			}
@@ -173,8 +180,12 @@ func (e *Engine) libMerge() (LibResult, error) {
 	}
 	LastLibMerge = res
 	if e.Logf != nil {
-		e.Logf("library: merged with the server's version %d: %d file(s) from the server, %d kept from here, %d changed on both (this machine's kept; the server's in %s)",
-			v, len(res.FromServer), len(res.Kept), len(res.Conflicts), bak)
+		winner := "this machine's kept"
+		if !hasBase {
+			winner = "the server's taken, no common base"
+		}
+		e.Logf("library: merged with the server's version %d: %d file(s) from the server, %d kept from here, %d changed on both (%s; the other copies in %s)",
+			v, len(res.FromServer), len(res.Kept), len(res.Conflicts), winner, bak)
 	}
 	pr, err := e.libPush(false)
 	if err != nil {

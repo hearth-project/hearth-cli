@@ -89,7 +89,7 @@ func TestLibrarySyncAcrossMachines(t *testing.T) {
 	if c, _ := os.ReadFile(filepath.Join(LibraryDir(b.Home), "agents/helper.md")); !strings.Contains(string(c), "B says hi.") {
 		t.Fatalf("b lost its edit:\n%s", c)
 	}
-	baks, _ := filepath.Glob(filepath.Join(BackupDir(b.Home), "*", "merge-server-copies", "agents", "helper.md"))
+	baks, _ := filepath.Glob(filepath.Join(BackupDir(b.Home), "*", "merge-other-copies", "agents", "helper.md"))
 	found := false
 	for _, p := range baks {
 		if c, _ := os.ReadFile(p); strings.Contains(string(c), "A says hi.") {
@@ -417,5 +417,40 @@ func TestLibraryCredentialsSurviveOtherMachines(t *testing.T) {
 	}
 	if b, _ := os.ReadFile(filepath.Join(LibraryDir(c.Home), "skills/bos/assets/credentials")); !strings.Contains(string(b), "9999") {
 		t.Fatalf("c kept the old credential: %s", b)
+	}
+}
+
+// The first merge after an upgrade has no base: where both sides differ,
+// the server's copy wins (a machine stuck for hours holds old files) and
+// this machine's is backed up; files only one side has are kept.
+func TestLibraryMergeWithoutBaseTakesServer(t *testing.T) {
+	en := newEnv(t)
+	a, b := en.machine("a"), en.machine("b")
+	libWrite(t, a, "config.toml", "[skills]\nresident = [\"x\"]\n")
+	libWrite(t, a, "skills/x/SKILL.md", "---\nname: x\ndescription: d\n---\nnew\n")
+	if _, err := a.LibPush(false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.LibPull(false); err != nil {
+		t.Fatal(err)
+	}
+	os.Remove(libBasePath(b.Home)) // as after an upgrade from a version without bases
+	libWrite(t, b, "config.toml", "[skills]\n")
+	libWrite(t, b, "skills/mine/SKILL.md", "---\nname: mine\ndescription: d\n---\nx\n")
+	libWrite(t, a, "skills/x/SKILL.md", "---\nname: x\ndescription: d\n---\nnewer\n")
+	if _, err := a.LibPush(false); err != nil {
+		t.Fatal(err)
+	}
+	if r, err := b.LibAuto(); err != nil || r.Op != "merged" {
+		t.Fatalf("%+v %v", r, err)
+	}
+	if c, _ := os.ReadFile(filepath.Join(LibraryDir(b.Home), "config.toml")); !strings.Contains(string(c), "resident") {
+		t.Fatalf("stale local config won:\n%s", c)
+	}
+	if !fileExists(filepath.Join(LibraryDir(b.Home), "skills/mine/SKILL.md")) {
+		t.Fatal("a skill only this machine has was dropped")
+	}
+	if baks, _ := filepath.Glob(filepath.Join(BackupDir(b.Home), "*", "merge-other-copies", "config.toml")); len(baks) == 0 {
+		t.Fatal("this machine's copy not backed up")
 	}
 }
