@@ -246,12 +246,19 @@ func (a *API) do(method, path string, in any, raw []byte, hdr map[string]string,
 	}
 	defer resp.Body.Close()
 	limit := int64(api.MaxChunkBytes + (1 << 20))
-	if strings.HasSuffix(strings.SplitN(path, "?", 2)[0], "/content") {
+	switch p := strings.SplitN(path, "?", 2)[0]; {
+	case strings.HasSuffix(p, "/content"):
 		limit = 4 << 30 // whole-session stream
+	case p == "/v1/library":
+		limit = api.MaxLibraryBytes + (1 << 20) // a library bundle is larger than a chunk
 	}
-	data, err := io.ReadAll(io.LimitReader(resp.Body, limit))
+	data, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))
 	if err != nil {
 		return nil, err
+	}
+	if int64(len(data)) > limit {
+		// Cut off, it would fail later as a corrupt body (unexpected EOF).
+		return nil, fmt.Errorf("%s %s: response larger than %d bytes", method, path, limit)
 	}
 	if resp.StatusCode/100 != 2 {
 		he := &HTTPError{Status: resp.StatusCode}
