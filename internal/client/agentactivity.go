@@ -69,3 +69,51 @@ func RecentAgents(home string, use []AgentActivity) (recent []string, stale []Ag
 	}
 	return recent, stale
 }
+
+// HabitMin is how many conversations within RecentWindow make an agent one
+// the user relies on (besides the agent of their latest conversation).
+const HabitMin = 3
+
+// HabitAgents are the agents the user relies on: the agent of their
+// latest conversation, and any agent with at least HabitMin conversations
+// within RecentWindow of it. A tool tried once does not count, so the
+// environment check does not ask for it on every machine.
+func HabitAgents(all []RemoteSession) map[string]bool {
+	type conv struct {
+		agent string
+		at    int64
+	}
+	var cs []conv
+	var newest int64
+	newestAgent := ""
+	for _, rs := range all {
+		if rs.MetaErr != nil || rs.Meta.Agent == "" || !IsConversation(rs) || rs.Status == "expired" {
+			continue
+		}
+		at := rs.ActiveAt
+		if at == 0 {
+			at = rs.LastAccessedAt
+		}
+		cs = append(cs, conv{rs.Meta.Agent, at})
+		if at > newest {
+			newest, newestAgent = at, rs.Meta.Agent
+		}
+	}
+	out := map[string]bool{}
+	if newestAgent == "" {
+		return nil // no conversations yet: unknown
+	}
+	out[newestAgent] = true
+	n := map[string]int{}
+	for _, c := range cs {
+		if time.Duration(newest-c.at)*time.Second <= RecentWindow {
+			n[c.agent]++
+		}
+	}
+	for a, k := range n {
+		if k >= HabitMin {
+			out[a] = true
+		}
+	}
+	return out
+}

@@ -1607,6 +1607,7 @@ Flags:
       --blobs string                 blob store: empty = <data>/objects, file:///path, or s3://bucket/prefix?endpoint=host:9000 [$HEARTH_BLOBS]
       --data string                  data directory (default database, blobs, TLS files) [$HEARTH_DATA] (default "./hearth-data")
       --db string                    metadata database: empty = SQLite in --data, sqlite:///path, or postgres://user:pass@host/db [$HEARTH_DB]
+      --device-days int              forget machines not seen for N days (offline, reclaimed or revoked: their entry, health report and login; 0 = keep) [$HEARTH_DEVICE_DAYS] (default 7)
       --dist-dir string              directory with client builds hearth-<os>-<arch> for other platforms (scripts/build-dist.sh; default <data>/dist) [$HEARTH_DIST_DIR]
       --expire-days int              mark sessions expired after N days without access (default 30)
       --gc-interval duration         how often to run expiry (default 1h0m0s)

@@ -67,10 +67,7 @@ view("home", "Overview", function () {
 view("machines", "Machines", function () {
   return Promise.all([me("GET", "/devices"), me("GET", "")]).then(function (r) {
     var ds = r[0], o = r[1];
-    var bad = ds.filter(function (d) { return d.status === "active" && d.env && (d.env.status === "error" || d.env.status === "warn"); });
-    var notice = bad.length ? h("div", { class: "notice warnbox" }, h("span", { class: "edot", style: "background:var(--bad)" }),
-      (LANG === "zh" ? bad.length + " 台机器的环境与标准环境不一致：点击“环境”一列查看缺少什么、如何修复。" : bad.length + " machine(s) differ from the standard setup: click the Environment column to see what is missing and how to fix it.")) : null;
-    return [notice, card(t("Machines") + " (" + ds.length + ")", deviceRows(ds, true),
+    return [card(t("Machines") + " (" + ds.length + ")", deviceRows(ds, true),
       h("span", { class: "muted small" }, t("Online = background sync reported in the last 15 minutes."))),
       o.install ? card(t("Add a machine"), [h("p", { class: "muted small" }, t("Run on the new machine, in a terminal. It installs Hearth, signs in and restores your setup:")), cmdLine(o.install),
         h("p", { class: "muted small" }, t("Then, on any other machine with Hearth, tell its agent the sentence the installer prints; it sets up the new machine's software over hearth ssh:")),

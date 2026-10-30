@@ -201,3 +201,38 @@ func TestMemoryNotesArePinnedAndRewritable(t *testing.T) {
 		t.Fatalf("restored memory: %q", got)
 	}
 }
+
+// Machines not seen for a week are forgotten (entry, health, login); the
+// others stay.
+func TestOfflineMachinesForgotten(t *testing.T) {
+	testDeviceTTL = 0 // the server's default, 7 days
+	defer func() { testDeviceTTL = -1 }()
+	en := newEnv(t)
+	a, b := en.machine("a"), en.machine("b")
+	if err := b.API.Heartbeat(); err != nil {
+		t.Fatal(err)
+	}
+	en.clock.add(8 * 24 * time.Hour)
+	if err := a.API.Heartbeat(); err != nil {
+		t.Fatal(err)
+	}
+	st, err := en.srv.RunGC()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ds, err := a.API.Devices()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, d := range ds {
+		if d.ID == b.Cfg.DeviceID {
+			t.Fatalf("offline machine kept: %+v (gc %+v)", d, st)
+		}
+	}
+	if len(ds) != 1 {
+		t.Fatalf("devices %d", len(ds))
+	}
+	if err := b.API.Heartbeat(); err == nil {
+		t.Fatal("forgotten machine still logged in")
+	}
+}

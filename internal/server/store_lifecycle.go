@@ -125,12 +125,14 @@ const pgGCLock = 0x61676763 // "aggc"
 // gcStats summarises one expiry pass.
 type gcStats struct {
 	Expired, Deleted, TombstonesPurged int64
+	DevicesRemoved                     int64
+	users                              []int64 // whose devices were removed (auth cache)
 }
 
 // runGC applies the expiry policy from the design doc (section 6.8):
 // active -> expired after expireAfter without access (unless pinned or
 // leased), expired -> deleted after grace, tombstones purged after tombTTL.
-func (s *store) runGC(now, expireAfter, grace, tombTTL int64) (gcStats, error) {
+func (s *store) runGC(now, expireAfter, grace, tombTTL, deviceTTL int64) (gcStats, error) {
 	var st gcStats
 	tx, err := s.db.Begin()
 	if err != nil {
@@ -182,6 +184,32 @@ func (s *store) runGC(now, expireAfter, grace, tombTTL int64) (gcStats, error) {
 		return st, err
 	}
 	st.TombstonesPurged, _ = res.RowsAffected()
+
+	// Machines not seen for deviceTTL (offline, reclaimed, revoked) are
+	// forgotten: their row, health report and logins. A machine that comes
+	// back logs in again.
+	if deviceTTL > 0 {
+		cut := now - deviceTTL
+		rows, err := tx.Query(`SELECT DISTINCT user_id FROM devices WHERE last_seen < ?`, cut)
+		if err != nil {
+			return st, err
+		}
+		for rows.Next() {
+			var uid int64
+			if rows.Scan(&uid) == nil {
+				st.users = append(st.users, uid)
+			}
+		}
+		rows.Close()
+		if _, err := tx.Exec(`DELETE FROM tokens WHERE device_id IN (SELECT id FROM devices WHERE last_seen < ?)`, cut); err != nil {
+			return st, err
+		}
+		res, err = tx.Exec(`DELETE FROM devices WHERE last_seen < ?`, cut)
+		if err != nil {
+			return st, err
+		}
+		st.DevicesRemoved, _ = res.RowsAffected()
+	}
 	if err := tx.Commit(); err != nil {
 		return st, err
 	}
