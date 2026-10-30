@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- One library sync at a time per home (`<home>/library.lock`): the daemon and a `hearth lib pull` in a terminal merged the same conflict together and the second one reported "the server changed again during a merge".
 - Team copies of a skill leave its credential files out (the ones synced encrypted for its owner: CLI `credentials`, keys, owner-only files); members bring their own. A credential in `SKILL.md` or an agent still refuses the share. Before, a `credentials` file with `ak`/`sk` lines was not recognised and went into the team package.
 - `hearth team unshare <team> <name>...` removes shared skills or agents from a team with every version and its stored objects (maintainers; `DELETE /v1/teams/{team}/packages/{type}/{name}`).
 - Libraries larger than 8 MB (a skill shipping a CLI binary) download whole: the client cut the response at the session chunk size, and pull and merge failed with `unexpected EOF`. Responses over a limit now fail with a clear error instead of being cut.
