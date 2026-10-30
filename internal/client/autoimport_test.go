@@ -1,6 +1,7 @@
 package client
 
 import (
+	"github.com/hearth-project/hearth-cli/internal/library"
 	"os"
 	"path/filepath"
 	"slices"
@@ -34,12 +35,14 @@ func TestAutoImport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(r.Imported, []string{"agent:rev", "skill:demo"}) || len(r.Blocked) != 1 {
+	// A skill with a credential is imported: the credential file travels
+	// encrypted, not in the library bundle (libsecrets.go).
+	if !slices.Equal(r.Imported, []string{"agent:rev", "skill:demo", "skill:leaky"}) || len(r.Blocked) != 0 {
 		t.Fatalf("imported %v blocked %v", r.Imported, r.Blocked)
 	}
 	lib := LibraryDir(m.Home)
-	if _, err := os.Stat(filepath.Join(lib, "skills/leaky")); !os.IsNotExist(err) {
-		t.Fatal("skill with a credential kept in the library")
+	if fs := libSecretFiles(library.Library{Root: lib}); fs["skills/leaky/SKILL.md"] == "" {
+		t.Fatalf("credential of the imported skill not kept apart: %v", fs)
 	}
 	if _, err := os.Stat(filepath.Join(lib, "AGENTS.md")); !os.IsNotExist(err) {
 		t.Fatal("instructions imported")

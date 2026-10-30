@@ -95,7 +95,9 @@ func (e *Engine) AutoImport() (AutoImported, error) {
 				os.RemoveAll(dst)
 				continue
 			}
-			if fs, _ := library.ScanSecrets(dst); len(fs) > 0 {
+			// Credential files inside a skill travel encrypted (libsecrets.go);
+			// an agent file with a credential would block the library upload.
+			if fs, _ := library.ScanSecrets(dst); len(fs) > 0 && strings.HasPrefix(a.Item, "agent:") {
 				os.RemoveAll(dst)
 				f := fs[0]
 				if rel, err := filepath.Rel(dst, f.File); err == nil && rel != "." {
@@ -106,6 +108,9 @@ func (e *Engine) AutoImport() (AutoImported, error) {
 			}
 			have[a.Item] = true // marked seen below
 			r.Imported = append(r.Imported, a.Item)
+			if n, ok := strings.CutPrefix(a.Item, "skill:"); ok {
+				_, _ = AddResident(e.Home, n)
+			}
 		}
 	}
 	// Remember what is in the library now too: deleting one of those later

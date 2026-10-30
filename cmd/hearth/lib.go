@@ -30,10 +30,22 @@ func libCmd() *cobra.Command {
 			home := client.Home()
 			acts, err := library.Import(library.Library{Root: client.LibraryDir(home)}, t, client.RenderManifest(home), overwrite)
 			printActions(acts)
-			if err == nil {
-				fmt.Println("next: `hearth lib sync --adopt` to let hearth manage these paths (originals are backed up)")
+			if err != nil {
+				return err
 			}
-			return err
+			var skills []string
+			for _, a := range acts {
+				if n, ok := strings.CutPrefix(a.Item, "skill:"); ok && a.Op == "import" {
+					skills = append(skills, n)
+				}
+			}
+			if added, err := client.AddResident(home, skills...); err != nil {
+				return err
+			} else if len(added) > 0 {
+				fmt.Printf("resident (in the agents' own skill lists): %s\n", strings.Join(added, ", "))
+			}
+			fmt.Println("next: `hearth lib sync --adopt` to let hearth manage these paths (originals are backed up)")
+			return nil
 		},
 	}
 	imp.Flags().StringVar(&from, "from", "", "agent directory to import from (default: $CODEX_HOME / ~/.claude); a project's .codex or .claude also works")
@@ -131,6 +143,12 @@ func libCmd() *cobra.Command {
 			t.print()
 			fmt.Printf("%d skills (%d resident, the rest found on demand through skill search) and %d agents; change: [skills] resident in hearth config --edit\n",
 				len(lc.Skills), nRes, len(lc.Agents))
+			if fs := client.LibSecretFiles(home); len(fs) > 0 {
+				fmt.Printf("credential files in skills, synced end-to-end encrypted (not in the shared library): %s\n", joinMax(fs, 4))
+			}
+			if msg, _, ok := client.LibraryError(home); ok {
+				fmt.Println("last sync:", msg)
+			}
 			for _, p := range lc.Problems {
 				fmt.Println("problem:", p)
 			}

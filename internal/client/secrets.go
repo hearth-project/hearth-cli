@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/hearth-project/hearth-cli/internal/api"
@@ -55,7 +56,7 @@ func (e *Engine) SetSecret(s Secret) error {
 	if len(s.Value) == 0 || len(s.Value) > api.MaxSecretBytes-1024 {
 		return fmt.Errorf("secret value must be 1..%d bytes", api.MaxSecretBytes-1024)
 	}
-	if s.RestoreTo != "" && !paths.Portable(s.RestoreTo) {
+	if s.RestoreTo != "" && !paths.Portable(s.RestoreTo) && !strings.HasPrefix(s.RestoreTo, libRestorePrefix) {
 		return errors.New("--restore-to must be absolute or start with ~/, ${HOME}/ or ${WORKSPACE}/")
 	}
 	s.UpdatedAt = time.Now().Unix()
@@ -136,8 +137,8 @@ func (e *Engine) RestoreSecretFiles(force bool) ([]SecretRestore, error) {
 	}
 	var out []SecretRestore
 	for _, s := range all {
-		if s.RestoreTo == "" {
-			continue
+		if s.RestoreTo == "" || strings.HasPrefix(s.RestoreTo, libRestorePrefix) {
+			continue // library credential files: written with their skill
 		}
 		p := ExpandHome(s.RestoreTo)
 		r := SecretRestore{Name: s.Name, Path: p}

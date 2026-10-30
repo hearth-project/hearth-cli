@@ -32,13 +32,37 @@ var secretRules = []struct {
 	{"bearer token", regexp.MustCompile(`(?i)\bauthorization:\s*bearer\s+[A-Za-z0-9._~+/=-]{20,}`)},
 	// key = value with a concrete-looking value (not a placeholder).
 	{"credential assignment", regexp.MustCompile(`(?i)\b(password|passwd|secret|token|api[_-]?key|access[_-]?key)\b["']?\s*[:=]\s*["']?([A-Za-z0-9+/_.=-]{16,})`)},
+	// Cloud CLI credential files: `ak = ...` / `sk = ...` (BOS, OSS, COS),
+	// aws_secret_access_key, client_secret.
+	{"access key pair", regexp.MustCompile(`(?i)^\s*["']?(ak|sk|access_?key_?id|secret_?access_?key|aws_secret_access_key|client_?secret)["']?\s*[:=]\s*["']?([A-Za-z0-9+/_.=-]{16,})`)},
+}
+
+// credentialName: files whose name says they hold a credential, whatever
+// their content (binary keystores included).
+func credentialName(name string) bool {
+	n := strings.ToLower(name)
+	switch n {
+	case "credentials", "credentials.json", "credentials.ini", ".netrc", "netrc", "auth.json", "token", "token.json", ".git-credentials":
+		return true
+	}
+	for _, suf := range []string{".pem", ".key", ".p12", ".pfx", ".jks", ".keystore"} {
+		if strings.HasSuffix(n, suf) {
+			return true
+		}
+	}
+	return strings.HasPrefix(n, "id_rsa") || strings.HasPrefix(n, "id_ed25519") || strings.HasPrefix(n, "id_ecdsa")
 }
 
 // ScanSecrets looks for likely credentials in text files under root. A line
 // containing "hearth:allow-secret" is ignored (for documented examples).
 func ScanSecrets(root string) ([]Finding, error) {
 	var out []Finding
-	err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+	// A skill (or the skills dir): files only the owner may read are
+	// credentials by intent. Elsewhere in the library (config, recipes)
+	// Hearth itself writes 0600 files.
+	_, err := os.Stat(filepath.Join(root, "SKILL.md"))
+	skillTree := err == nil || filepath.Base(root) == "skills"
+	err = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			if os.IsNotExist(err) {
 				return nil
@@ -54,6 +78,13 @@ func ScanSecrets(root string) ([]Finding, error) {
 		if !d.Type().IsRegular() || strings.HasPrefix(d.Name(), ".") {
 			return nil
 		}
+		rel, _ := filepath.Rel(root, p)
+		// By name, or private by intent (only the owner may read it).
+		inSkill := skillTree || strings.HasPrefix(filepath.ToSlash(rel), "skills/")
+		if info, err := d.Info(); err == nil && (credentialName(d.Name()) || (inSkill && info.Mode().Perm()&0o077 == 0)) {
+			out = append(out, Finding{File: rel, Rule: "credential file"})
+			return nil
+		}
 		b, err := os.ReadFile(p)
 		if err != nil {
 			return err
@@ -61,7 +92,6 @@ func ScanSecrets(root string) ([]Finding, error) {
 		if bytes.IndexByte(b, 0) >= 0 {
 			return nil // binary
 		}
-		rel, _ := filepath.Rel(root, p)
 		sc := bufio.NewScanner(bytes.NewReader(b))
 		sc.Buffer(make([]byte, 64<<10), 4<<20)
 		for n := 1; sc.Scan(); n++ {

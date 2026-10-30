@@ -101,14 +101,19 @@ func MoveHome(from, ws string) (string, error) {
 // new one.
 func rehomeRC(from, to string) {
 	h, _ := os.UserHomeDir()
-	scripts, _ := filepath.Glob(filepath.Join(to, "shell", "*.sh"))
+	var scripts []string
+	for _, dir := range []string{"shell", "env"} { // restored shell lines, recipe env
+		m, _ := filepath.Glob(filepath.Join(to, dir, "*.sh"))
+		scripts = append(scripts, m...)
+	}
 	for _, rc := range []string{".bashrc", ".zshrc", ".profile", ".bash_profile"} {
 		rc = filepath.Join(h, rc)
 		if _, err := os.Stat(rc); err != nil {
 			continue
 		}
 		for _, s := range scripts {
-			old := filepath.Join(from, "shell", filepath.Base(s))
+			rel, _ := filepath.Rel(to, s)
+			old := filepath.Join(from, rel)
 			if changed, err := recipe.UninstallRC(rc, old); err == nil && changed {
 				_, _ = recipe.InstallRC(rc, s)
 			}

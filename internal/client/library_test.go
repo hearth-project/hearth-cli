@@ -74,41 +74,95 @@ func TestLibrarySyncAcrossMachines(t *testing.T) {
 		t.Fatalf("a not updated:\n%s", b)
 	}
 
-	// Concurrent edits: second writer gets a conflict, nothing is lost.
+	// Concurrent edits of the same file: the second machine merges, keeps
+	// its own copy and backs up the server's; nothing is lost.
 	libWrite(t, a, "agents/helper.md", strings.Replace(agentMD, "Be helpful.", "A says hi.", 1))
 	libWrite(t, b, "agents/helper.md", strings.Replace(agentMD, "Be helpful.", "B says hi.", 1))
 	if _, err := a.LibAuto(); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := b.LibAuto(); !errors.Is(err, ErrLibraryConflict) {
-		t.Fatalf("want conflict, got %v", err)
+	if r, err := b.LibAuto(); err != nil || r.Op != "merged" {
+		t.Fatalf("want a merge, got %+v %v", r, err)
 	}
-	if _, err := b.LibPull(true); err != nil {
-		t.Fatal(err)
+	if c, _ := os.ReadFile(filepath.Join(LibraryDir(b.Home), "agents/helper.md")); !strings.Contains(string(c), "B says hi.") {
+		t.Fatalf("b lost its edit:\n%s", c)
 	}
-	baks, _ := filepath.Glob(filepath.Join(BackupDir(b.Home), "*", "library", "agents", "helper.md"))
+	baks, _ := filepath.Glob(filepath.Join(BackupDir(b.Home), "*", "merge-server-copies", "agents", "helper.md"))
 	found := false
 	for _, p := range baks {
-		if c, _ := os.ReadFile(p); strings.Contains(string(c), "B says hi.") {
+		if c, _ := os.ReadFile(p); strings.Contains(string(c), "A says hi.") {
 			found = true
 		}
 	}
 	if !found {
-		t.Fatal("b's conflicting edit was not backed up")
+		t.Fatal("the server's conflicting copy was not backed up")
+	}
+	if _, err := a.LibAuto(); err != nil {
+		t.Fatal(err)
+	}
+	if c, _ := os.ReadFile(filepath.Join(LibraryDir(a.Home), "agents/helper.md")); !strings.Contains(string(c), "B says hi.") {
+		t.Fatalf("merge not on the server:\n%s", c)
 	}
 }
 
-func TestLibraryPushBlocksSecrets(t *testing.T) {
+// Credentials outside the skills block the upload; inside a skill they
+// travel as encrypted secrets, not in the plaintext bundle, and come back
+// into the skill on the next machine.
+func TestLibraryCredentialsTravelEncrypted(t *testing.T) {
 	en := newEnv(t)
-	a := en.machine("a")
-	libWrite(t, a, "skills/x/SKILL.md", "---\nname: x\n---\napi_key = \"abcd1234efgh5678ijkl\"\n")
+	a, b := en.machine("a"), en.machine("b")
+	libWrite(t, a, "recipes/x.toml", "name = \"x\"\napi_key = \"abcd1234efgh5678ijkl\"\n")
 	var se *SecretsError
 	if _, err := a.LibPush(false); !errors.As(err, &se) || len(se.Findings) != 1 {
-		t.Fatalf("secret not blocked: %v", err)
+		t.Fatalf("secret in a recipe not blocked: %v", err)
 	}
-	libWrite(t, a, "skills/x/SKILL.md", "---\nname: x\n---\napi_key = \"${MY_API_KEY}\"\ntoken: <your token here>\n")
+	os.Remove(filepath.Join(LibraryDir(a.Home), "recipes/x.toml"))
+	libWrite(t, a, "skills/bos/SKILL.md", "---\nname: bos\ndescription: d\n---\nupload\n")
+	libWrite(t, a, "skills/bos/assets/bos_config/credentials", "[Defaults]\nAk = 0123456789abcdef0123\nSk = fedcba9876543210fedc\n")
+	libWrite(t, a, "skills/bos/assets/private.conf", "anything\n")
+	os.Chmod(filepath.Join(LibraryDir(a.Home), "skills/bos/assets/private.conf"), 0o600)
+	libWrite(t, a, "skills/doc/SKILL.md", "---\nname: doc\ndescription: d\n---\napi_key = \"${MY_API_KEY}\"\ntoken: <your token here>\n")
 	if _, err := a.LibPush(false); err != nil {
-		t.Fatalf("placeholder blocked: %v", err)
+		t.Fatalf("push: %v", err)
+	}
+	data, _, _, err := a.API.GetLibrary(-1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(t.TempDir(), "x")
+	if _, err := library.Extract(data, dir); err != nil {
+		t.Fatal(err)
+	}
+	if fileExists(filepath.Join(dir, "skills/bos/assets/bos_config/credentials")) || fileExists(filepath.Join(dir, "skills/bos/assets/private.conf")) {
+		t.Fatal("credential files in the plaintext bundle")
+	}
+	if !fileExists(filepath.Join(dir, "skills/bos/SKILL.md")) || !fileExists(filepath.Join(dir, "skills/doc/SKILL.md")) {
+		t.Fatal("skill content missing from the bundle")
+	}
+	if _, err := b.LibPull(false); err != nil {
+		t.Fatal(err)
+	}
+	p := filepath.Join(LibraryDir(b.Home), "skills/bos/assets/bos_config/credentials")
+	if c, err := os.ReadFile(p); err != nil || !strings.Contains(string(c), "Ak = 0123") {
+		t.Fatalf("credentials not restored on b: %v", err)
+	}
+	if fi, _ := os.Stat(p); fi.Mode().Perm() != 0o600 {
+		t.Fatalf("mode %v", fi.Mode().Perm())
+	}
+	// A changed credential alone is pushed too; a removed one is deleted.
+	libWrite(t, a, "skills/bos/assets/bos_config/credentials", "[Defaults]\nAk = 1111111111abcdef0123\nSk = fedcba9876543210fedc\n")
+	if r, err := a.LibPush(false); err != nil || r.Op != "pushed" {
+		t.Fatalf("credential-only push: %+v %v", r, err)
+	}
+	os.RemoveAll(filepath.Join(LibraryDir(a.Home), "skills/bos"))
+	if _, err := a.LibPush(false); err != nil {
+		t.Fatal(err)
+	}
+	ss, _ := a.Secrets()
+	for _, s := range ss {
+		if strings.HasPrefix(s.RestoreTo, libRestorePrefix) {
+			t.Fatalf("secret of a deleted skill kept: %s", s.Name)
+		}
 	}
 }
 
@@ -183,9 +237,9 @@ func TestDisabledAgentCopiesAreRemoved(t *testing.T) {
 	}
 }
 
-// A conflict stops recipes and credentials from syncing. The daemon logs it
-// once, so keep the reason on disk for `hearth doctor` until a sync works.
-func TestLibraryConflictIsRemembered(t *testing.T) {
+// Both sides changed: the daemon merges instead of stopping the sync, and
+// nothing is reported as an error afterwards.
+func TestLibraryConflictMerges(t *testing.T) {
 	en := newEnv(t)
 	a, b := en.machine("a"), en.machine("b")
 	libWrite(t, a, "skills/s1/SKILL.md", "---\nname: s1\ndescription: d\n---\nx\n")
@@ -195,25 +249,31 @@ func TestLibraryConflictIsRemembered(t *testing.T) {
 	if _, err := b.LibPull(false); err != nil {
 		t.Fatal(err)
 	}
-	libWrite(t, a, "skills/local/SKILL.md", "---\nname: l\ndescription: d\n---\nx\n")
-	libWrite(t, b, "skills/remote/SKILL.md", "---\nname: r\ndescription: d\n---\nx\n")
+	libWrite(t, a, "skills/local/SKILL.md", "---\nname: local\ndescription: d\n---\nx\n")
+	libWrite(t, b, "skills/remote/SKILL.md", "---\nname: remote\ndescription: d\n---\nx\n")
+	os.RemoveAll(filepath.Join(LibraryDir(b.Home), "skills/s1"))
 	if _, err := b.LibPush(false); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := a.LibAuto(); !errors.Is(err, ErrLibraryConflict) {
-		t.Fatalf("want conflict, got %v", err)
+	if r, err := a.LibAuto(); err != nil || r.Op != "merged" {
+		t.Fatalf("want a merge, got %+v %v", r, err)
 	}
-	if msg, _, ok := LibraryError(a.Home); !ok || !strings.Contains(msg, "library changed both locally") {
-		t.Fatalf("conflict not remembered: %q %v", msg, ok)
+	for _, sk := range []string{"local", "remote"} {
+		if !fileExists(filepath.Join(LibraryDir(a.Home), "skills", sk, "SKILL.md")) {
+			t.Fatalf("%s missing after the merge", sk)
+		}
 	}
-	if _, err := a.LibPull(true); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := a.LibAuto(); err != nil {
-		t.Fatal(err)
+	if fileExists(filepath.Join(LibraryDir(a.Home), "skills/s1")) {
+		t.Fatal("deleted on b, unchanged on a: the merge keeps the deletion")
 	}
 	if msg, _, ok := LibraryError(a.Home); ok {
-		t.Fatalf("stale conflict kept: %q", msg)
+		t.Fatalf("error kept after a merge: %q", msg)
+	}
+	if _, err := b.LibAuto(); err != nil {
+		t.Fatal(err)
+	}
+	if !fileExists(filepath.Join(LibraryDir(b.Home), "skills/local/SKILL.md")) {
+		t.Fatal("merge not pushed")
 	}
 }
 

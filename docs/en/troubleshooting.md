@@ -47,7 +47,7 @@ With Desktop running, `hearth session restore` makes the thread appear through i
 ## Library and credentials
 
 **`library: refusing to upload: N likely secret(s) in the library`.**
-The library (skills, agents, settings) is stored in plaintext, so an upload with likely secrets is refused, and library sync (including `config.toml` `[backup]`) stops until it is fixed. Move the real values into local auth files, back them up with `hearth secret set <name> --file <file> --restore-to <path>`, and have the skill read the file; mark lines that really are documented examples with a `hearth:allow-secret` comment.
+The library (skills, agents, settings) is stored in plaintext. Credential files inside skills sync encrypted by themselves; a likely secret elsewhere (config, recipes, agent files) refuses the upload, and library sync (including `config.toml` `[backup]`) stops until it is fixed. Move the real values into local auth files, back them up with `hearth secret set <name> --file <file> --restore-to <path>`, and have the skill read the file; mark lines that really are documented examples with a `hearth:allow-secret` comment.
 
 **An auth file is missing on the new machine.** `hearth secret list` shows whether it was stored, `hearth secret restore` writes it back; if it never was, run `hearth learn` or `hearth secret set --file` on the original machine.
 

@@ -61,6 +61,9 @@ func (l Library) Bundle() (data []byte, sum string, err error) {
 			}
 			return nil
 		}
+		if l.Exclude[filepath.ToSlash(rel)] {
+			return nil
+		}
 		switch {
 		case d.IsDir():
 			files = append(files, file{rel: filepath.ToSlash(rel), base: l.Root, src: filepath.ToSlash(rel), mode: 0o755, dir: true})
@@ -99,6 +102,9 @@ func (l Library) Bundle() (data []byte, sum string, err error) {
 				return nil
 			}
 			name := path.Join("skills", filepath.ToSlash(rel))
+			if l.Exclude[name] {
+				return nil
+			}
 			switch {
 			case d.IsDir():
 				files = append(files, file{rel: name, base: skills, src: filepath.ToSlash(rel), mode: 0o755, dir: true})

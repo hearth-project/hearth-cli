@@ -118,7 +118,7 @@ hearth secret restore                                  # 立即写回所有文�
 hearth secret exec -- <命令>                           # 以环境变量形式注入大写名字的 secret
 ```
 
-skill 或脚本需要 token 时，不要把真实值写进 skill：放在本地认证文件里（如 `${WORKSPACE}/.config/<工具>/…`），用上面的 `secret set --file` 加密备份，skill 从该文件读取。library 上传前会扫描疑似凭证并拒绝上传；确认是文档示例时，在该行加注释 `hearth:allow-secret`。
+skill 或脚本需要 token 时，不要把真实值写进 skill：放在本地认证文件里（如 `${WORKSPACE}/.config/<工具>/…`），用上面的 `secret set --file` 加密备份，skill 从该文件读取。skill 自带的凭证文件（云 CLI 的 `credentials`、密钥、只有本人可读的文件）不会进明文 library：它们端到端加密同步，在你的其他机器上写回 skill 里。library 其他位置（配置、recipes、agents）发现疑似凭证仍会拒绝上传；确认是文档示例时，在该行加注释 `hearth:allow-secret`。
 
 ## 5. 记录这台机器的环境（learn）
 
