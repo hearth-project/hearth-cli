@@ -34,6 +34,7 @@ func (s *Server) teamRoutes(m *http.ServeMux) {
 	m.HandleFunc("PUT /v1/teams/{team}/usage", s.authed(s.handlePutUsage))
 	m.HandleFunc("GET /v1/teams/{team}/usage", s.authed(s.handleGetUsage))
 	m.HandleFunc("PUT /v1/teams/{team}/packages/{type}/{name}", s.authed(s.handlePublish))
+	m.HandleFunc("DELETE /v1/teams/{team}/packages/{type}/{name}", s.authed(s.handleUnpublish))
 	m.HandleFunc("GET /v1/teams/{team}/packages/{type}/{name}/{version}", s.authed(s.handleGetPackage))
 }
 
@@ -175,6 +176,27 @@ func (s *Server) handlePublish(w http.ResponseWriter, r *http.Request) {
 		s.search.invalidate(o.ID)
 	}
 	writeJSON(w, http.StatusOK, api.PublishResponse{Version: v, Created: created})
+}
+
+// handleUnpublish removes a package and every version of it (a skill
+// shared with something it should not carry, or no longer wanted).
+func (s *Server) handleUnpublish(w http.ResponseWriter, r *http.Request) {
+	o, ok := s.team(w, r, "maintainer")
+	if !ok {
+		return
+	}
+	typ, name, ok := pkgPath(r)
+	if !ok {
+		writeErr(w, http.StatusBadRequest, "invalid package type or name")
+		return
+	}
+	n, err := s.st.unpublish(o.ID, typ, name)
+	if err != nil {
+		s.writeStoreErr(w, err)
+		return
+	}
+	s.search.invalidate(o.ID)
+	writeJSON(w, http.StatusOK, map[string]int{"versions": n})
 }
 
 func (s *Server) handleGetPackage(w http.ResponseWriter, r *http.Request) {

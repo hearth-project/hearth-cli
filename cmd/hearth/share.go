@@ -84,6 +84,7 @@ func teamCmd() *cobra.Command {
 				return nil
 			})},
 		teamShareCmd(withEngine),
+		teamUnshareCmd(withEngine),
 		teamShareTopCmd(withEngine),
 		teamUseTopCmd(withEngine),
 		teamShareWithCmd(withEngine),
@@ -332,6 +333,46 @@ func teamShareCmd(withEngine func(func(*client.Engine, []string) error) func(*co
 			return nil
 		})}
 	c.Flags().BoolVar(&allowSecrets, "allow-secrets", false, "share even if the secret scan finds something")
+	return c
+}
+
+// teamUnshareCmd removes shared skills or agents from a team, every version.
+func teamUnshareCmd(withEngine func(func(*client.Engine, []string) error) func(*cobra.Command, []string) error) *cobra.Command {
+	var typ string
+	c := &cobra.Command{Use: "unshare <team> <skill|agent> ...", Short: "Remove skills or agents from a team, with every version shared (maintainers)", Args: cobra.MinimumNArgs(2),
+		RunE: withEngine(func(e *client.Engine, a []string) error {
+			failed := 0
+			for _, name := range a[1:] {
+				types := []string{"skill", "agent"}
+				if typ != "" {
+					types = []string{typ}
+				}
+				done := false
+				for _, t := range types {
+					n, err := e.API.Unpublish(a[0], t, name)
+					if client.StatusOf(err) == 404 {
+						continue
+					}
+					if err != nil {
+						fmt.Printf("  %-24s %v\n", name, err)
+						failed++
+					} else {
+						fmt.Printf("  %-24s removed (%s, %d version(s))\n", name, t, n)
+					}
+					done = true
+					break
+				}
+				if !done {
+					fmt.Printf("  %-24s not shared in %s\n", name, a[0])
+					failed++
+				}
+			}
+			if failed > 0 {
+				return fmt.Errorf("%d item(s) not removed", failed)
+			}
+			return nil
+		})}
+	c.Flags().StringVar(&typ, "type", "", "skill or agent (default: whichever is shared under that name)")
 	return c
 }
 

@@ -171,7 +171,8 @@ hearth lib usage prune                # 清理已删除 / 改名 / 测试 skill 
 hearth team create <团队>                     # 创建团队（你是 owner）
 hearth team invite <团队>                     # 生成邀请码（默认 maintainer 可共享，--role member 只能用；--days 7，--uses N）
 hearth team join <邀请码>                      # 加入；新机器上也可以 hearth setup --team <邀请码>
-hearth team share <团队> <skill|agent> ...     # 把自己 library 里的 skill / agent 共享给团队
+hearth team share <团队> <skill|agent> ...     # 把自己 library 里的 skill / agent 共享给团队（skill 里的凭证文件不会共享出去）
+hearth team unshare <团队> <名字> ...          # 从团队里删掉，连同所有版本
 hearth team share-with <团队> <另一个团队>      # owner：让另一个团队也能用（只读，--off 取消）
 hearth team list                              # 我的团队、角色、各自共享了多少 skills / agents
 hearth team share-top [--dry-run]             # 立即把使用最多的 5 个 skills 和 5 个 agents 共享给团队（后台每 20 分钟自动做）

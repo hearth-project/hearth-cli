@@ -87,6 +87,11 @@ type LibResult struct {
 // Credential files inside skills go up as encrypted secrets instead of in
 // the bundle. When the server changed too, the two are merged.
 func (e *Engine) LibPush(allowSecrets bool) (LibResult, error) {
+	defer lockLibrary(e.Home)()
+	return e.libPush(allowSecrets)
+}
+
+func (e *Engine) libPush(allowSecrets bool) (LibResult, error) {
 	if _, err := EnsureUserConfig(e.Home); err != nil {
 		return LibResult{}, err
 	}
@@ -143,6 +148,11 @@ func (e *Engine) LibPush(allowSecrets bool) (LibResult, error) {
 // were not pushed yet are merged with it (force: replaced); the replaced
 // library is always moved to BackupDir first.
 func (e *Engine) LibPull(force bool) (LibResult, error) {
+	defer lockLibrary(e.Home)()
+	return e.libPull(force)
+}
+
+func (e *Engine) libPull(force bool) (LibResult, error) {
 	st, err := loadLibState(e.Home)
 	if err != nil {
 		return LibResult{}, err
@@ -337,6 +347,7 @@ func (e *Engine) LibAuto() (LibResult, error) {
 }
 
 func (e *Engine) libAuto() (LibResult, error) {
+	defer lockLibrary(e.Home)()
 	st, err := loadLibState(e.Home)
 	if err != nil {
 		return LibResult{}, err
@@ -349,9 +360,9 @@ func (e *Engine) libAuto() (LibResult, error) {
 	neverSynced := st.SHA256 == "" && os.IsNotExist(statErr)
 	var r LibResult
 	if (localSum != st.SHA256 || secSum != st.SecretsSHA) && !neverSynced {
-		r, err = e.LibPush(false) // a conflict is merged
+		r, err = e.libPush(false) // a conflict is merged
 	} else {
-		r, err = e.LibPull(false)
+		r, err = e.libPull(false)
 	}
 	if err != nil {
 		return r, err

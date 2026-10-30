@@ -176,7 +176,7 @@ func (e *Engine) libMerge() (LibResult, error) {
 		e.Logf("library: merged with the server's version %d: %d file(s) from the server, %d kept from here, %d changed on both (this machine's kept; the server's in %s)",
 			v, len(res.FromServer), len(res.Kept), len(res.Conflicts), bak)
 	}
-	pr, err := e.LibPush(false)
+	pr, err := e.libPush(false)
 	if err != nil {
 		return pr, err
 	}

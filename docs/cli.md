@@ -79,6 +79,7 @@ Generated from `hearth --help` by `hearth docs cli > docs/cli.md`; every command
 | [`hearth team join`](#hearth-team-join) | Join a team with an invite code from one of its members |
 | [`hearth team leave`](#hearth-team-leave) | Leave a team |
 | [`hearth team share`](#hearth-team-share) | Share skills or agents of your library with a team (a new version each time they change) |
+| [`hearth team unshare`](#hearth-team-unshare) | Remove skills or agents from a team, with every version shared (maintainers) |
 | [`hearth team share-top`](#hearth-team-share-top) | Share your most used skills and agents with your teams now (automatic every 20 min; [teams] share_top in config.toml) |
 | [`hearth team use-top`](#hearth-team-use-top) | Keep your teams' most used skills and agents in all your agents now (automatic every 20 min; [teams] use_top) |
 | [`hearth team share-with`](#hearth-team-share-with) | Let another team's members use this team's skills and agents (owners; --off to stop); no other team: list |
@@ -992,6 +993,17 @@ hearth team share <team> <skill|agent> ... [flags]
 
 Flags:
       --allow-secrets   share even if the secret scan finds something
+```
+
+## hearth team unshare
+
+Remove skills or agents from a team, with every version shared (maintainers)
+
+```text
+hearth team unshare <team> <skill|agent> ... [flags]
+
+Flags:
+      --type string   skill or agent (default: whichever is shared under that name)
 ```
 
 ## hearth team share-top
