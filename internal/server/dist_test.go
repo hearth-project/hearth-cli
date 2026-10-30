@@ -207,3 +207,29 @@ func TestInstallerPicksPlatformBuild(t *testing.T) {
 		t.Fatalf("tampered: %v\n%s", err, out)
 	}
 }
+
+// Site proxies: the one-liner falls back to the first one, install.sh tries
+// them all when the server does not answer directly; unsafe values are dropped.
+func TestInstallerSiteProxies(t *testing.T) {
+	dir := t.TempDir()
+	site := filepath.Join(dir, "site")
+	os.MkdirAll(site, 0o755)
+	os.WriteFile(filepath.Join(site, "net.json"), []byte(`{"proxies": ["http://proxy.internal:8188", "http://x:1; rm -rf ~", "socks5://y:2"]}`), 0o644)
+	bin := filepath.Join(dir, "fake-binary")
+	os.WriteFile(bin, []byte("binary-content"), 0o755)
+	srv, err := New(Config{DataDir: filepath.Join(dir, "data"), SiteDir: site, Logger: log.New(io.Discard, "", 0),
+		Dist: &Distribution{PublicURL: "https://hearth.internal:8787", BinaryPath: bin}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer srv.Close()
+	want := "{ curl -fsSL --connect-timeout 5 https://hearth.internal:8787/install.sh || curl -fsSL -x http://proxy.internal:8188 https://hearth.internal:8787/install.sh; } | sh"
+	if got := srv.InstallCommand(); got != want {
+		t.Fatalf("install command\n got %s\nwant %s", got, want)
+	}
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, httptest.NewRequest("GET", "/install.sh", nil))
+	if body := rec.Body.String(); !strings.Contains(body, "PROXIES='http://proxy.internal:8188'") || strings.Contains(body, "rm -rf") {
+		t.Fatalf("install.sh proxies:\n%s", body)
+	}
+}

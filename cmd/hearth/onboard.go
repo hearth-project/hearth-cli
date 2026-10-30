@@ -412,11 +412,14 @@ func onboardCmd() *cobra.Command {
 				fmt.Print(skills.Hearth)
 				return nil
 			}
-			quiet, _ := cmd.Flags().GetBool("quiet")
-			return installSetupSkill(!quiet)
+			if quiet, _ := cmd.Flags().GetBool("quiet"); quiet {
+				_, err := installSetupSkillTo(false, false)
+				return err
+			}
+			return installSetupSkill(true)
 		}}
 	install.Flags().Bool("print", false, "print the skill instead of installing it")
-	install.Flags().Bool("quiet", false, "only print the hint")
+	install.Flags().Bool("quiet", false, "print nothing (setup tells the user about the skill)")
 	c.AddCommand(status, install)
 	return c
 }

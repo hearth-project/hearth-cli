@@ -134,8 +134,12 @@ func termWidth() int {
 }
 
 func isTTY() bool {
-	return term.IsTerminal(int(os.Stdin.Fd())) && term.IsTerminal(int(os.Stdout.Fd()))
+	return term.IsTerminal(int(os.Stdin.Fd())) && (term.IsTerminal(int(os.Stdout.Fd())) || quietOnTTY)
 }
+
+// quietOnTTY: setup sends step details to its log while the user is at a
+// terminal; prompts (on stderr) still ask.
+var quietOnTTY bool
 
 // shortHost drops the domain of a host name (IP addresses stay whole).
 func shortHost(h string) string {

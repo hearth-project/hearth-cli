@@ -1953,7 +1953,7 @@ Fetch the site defaults now (works before login with --server)
 hearth site pull [flags]
 
 Flags:
-      --quiet           only report when something was fetched
+      --quiet           print nothing unless it fails
       --server string   server URL (default: the one you are logged in to)
 ```
 
@@ -2185,7 +2185,7 @@ hearth onboard install-skill [flags]
 
 Flags:
       --print   print the skill instead of installing it
-      --quiet   only print the hint
+      --quiet   print nothing (setup tells the user about the skill)
 ```
 
 ## hearth recall
