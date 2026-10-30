@@ -89,3 +89,30 @@ func TestMachineEnvCodexBypass(t *testing.T) {
 		t.Fatalf("%+v", env)
 	}
 }
+
+// Codex's home has no login (Codex Desktop asks to log in): an error ahead
+// of the gateway check; app-servers left on an old home are a warning.
+func TestMachineEnvCodexNoLogin(t *testing.T) {
+	s := &Server{versions: newToolVersions()}
+	health := `{"checked_at":1,"tools":{"codex":{"expected":true,"installed":true,"version":"0.1.0",
+	  "route":{"home":"/root/.codex","provider":"openai","base_url":"https://api.openai.com/v1","gateway":false,"missing":["auth.json","config.toml"]},
+	  "stale_app_servers":[{"pid":7,"codex_home":"/root/.codex"},{"pid":8,"codex_home":"/root/.codex"}]},
+	  "codex-mixin":{"expected":true,"installed":true,"version":"0.7.3","ok":true}}}`
+	env := s.machineEnv(health, "")
+	codes := map[string]EnvProblem{}
+	for _, p := range env.Problems {
+		codes[p.Code] = p
+	}
+	if p, ok := codes["no_login"]; !ok || p.Level != "error" || p.Have != "auth.json, config.toml" {
+		t.Fatalf("no_login: %+v", env.Problems)
+	}
+	if _, ok := codes["bypass"]; ok {
+		t.Fatalf("bypass reported for a home without config: %+v", env.Problems)
+	}
+	if p, ok := codes["stale_app_server"]; !ok || p.Behind != 2 || p.Detail != "/root/.codex" {
+		t.Fatalf("stale_app_server: %+v", env.Problems)
+	}
+	if env.Status != "error" {
+		t.Fatalf("status %s", env.Status)
+	}
+}

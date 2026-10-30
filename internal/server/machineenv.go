@@ -12,7 +12,7 @@ import (
 // EnvProblem is one finding. Code says what it is; the console words it.
 type EnvProblem struct {
 	Level  string   `json:"level"` // error, warn
-	Code   string   `json:"code"`  // missing, outdated, doctor, integration, node, steps, hearth
+	Code   string   `json:"code"`  // missing, outdated, doctor, integration, node, steps, hearth, bypass, unreachable, shared_home, no_login, stale_app_server
 	Tool   string   `json:"tool,omitempty"`
 	Have   string   `json:"have,omitempty"`
 	Latest string   `json:"latest,omitempty"`
@@ -51,15 +51,20 @@ type reportedHealth struct {
 		OK                  *bool
 		Detail              string
 		Route               *struct {
-			Home     string `json:"home"`
-			SetBy    string `json:"set_by"`
-			Provider string `json:"provider"`
-			BaseURL  string `json:"base_url"`
-			Gateway  bool   `json:"gateway"`
-			Reach    *bool  `json:"reach"`
-			Detail   string `json:"detail"`
-			Shared   bool   `json:"shared"`
+			Home     string   `json:"home"`
+			SetBy    string   `json:"set_by"`
+			Provider string   `json:"provider"`
+			BaseURL  string   `json:"base_url"`
+			Gateway  bool     `json:"gateway"`
+			Reach    *bool    `json:"reach"`
+			Detail   string   `json:"detail"`
+			Shared   bool     `json:"shared"`
+			Missing  []string `json:"missing"`
 		} `json:"route"`
+		StaleAppServers []struct {
+			PID       int    `json:"pid"`
+			CodexHome string `json:"codex_home"`
+		} `json:"stale_app_servers"`
 	} `json:"tools"`
 	Client     string   `json:"client"` // Hearth build that made the report (newer than the stored one right after an update)
 	RecipeTodo int      `json:"recipe_todo"`
@@ -121,6 +126,13 @@ func (s *Server) machineEnv(healthJSON, clientVersion string) *MachineEnv {
 		ro := c.Route
 		mixin := h.Tools["codex-mixin"]
 		switch {
+		case len(ro.Missing) > 0:
+			// No login where its sessions look: Codex Desktop asks to log in.
+			d := "CODEX_HOME=" + ro.Home
+			if ro.SetBy != "" {
+				d += ", set by " + ro.SetBy
+			}
+			add(EnvProblem{Level: "error", Code: "no_login", Tool: "codex", Have: strings.Join(ro.Missing, ", "), Detail: d})
 		case mixin.Installed && !ro.Gateway:
 			d := "CODEX_HOME=" + ro.Home + " (" + ro.Provider + ")"
 			if ro.SetBy != "" {
@@ -135,6 +147,10 @@ func (s *Server) machineEnv(healthJSON, clientVersion string) *MachineEnv {
 		if ro.Shared && ro.Gateway {
 			add(EnvProblem{Level: "warn", Code: "shared_home", Tool: "codex", Detail: ro.Home})
 		}
+	}
+	// Codex app-servers started before the agent home changed keep the old one.
+	if st := h.Tools["codex"].StaleAppServers; len(st) > 0 {
+		add(EnvProblem{Level: "warn", Code: "stale_app_server", Tool: "codex", Behind: len(st), Detail: st[0].CodexHome})
 	}
 	for _, name := range []string{"codex", "claude"} {
 		if a, ok := h.Agents[name]; ok && a.Enabled && a.Installed && !a.Ready && (a.Used == nil || *a.Used) {

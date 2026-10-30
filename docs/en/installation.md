@@ -118,6 +118,8 @@ hearth self-update
 
 Usually you need not: the background daemon checks the server every 30 minutes (first 5 minutes after it starts). When there is a new build it downloads it, verifies the SHA-256, replaces the binary, restarts itself on it and refreshes the `hearth` skill in this machine's agents. After the admin publishes new builds, online clients follow within half an hour.
 
+The daemon only moves to a newer release. It keeps a development build (a version the release scripts do not stamp, such as `0.1.0-dev` from `go build` or one with a `+branch` suffix), a build with the same version as the server's but another checksum (a branch build stamped like the release), and a build newer than the server's. Such a build may write settings the release does not know, and the release would rewrite them. `hearth self-update` replaces it when you want the release.
+
 `hearth self-update` does the same right away. Other controls:
 
 ```bash

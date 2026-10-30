@@ -7,6 +7,8 @@ Thanks for helping. Hearth is a single Go module: client and server are one bina
 ```bash
 git clone https://github.com/hearth-project/hearth-cli && cd hearth-cli
 go build -o ~/.local/bin/hearth ./cmd/hearth      # Go 1.26+
+# a branch build on a machine that also gets releases: mark it, so the daemon keeps it
+go build -ldflags "-X main.version=0.1.0-$(date +%Y%m%d.%H%M)+$(git branch --show-current | tr / -)" -o ~/.local/bin/hearth ./cmd/hearth
 ```
 
 ## Before sending a change

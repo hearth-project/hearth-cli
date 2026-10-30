@@ -9,7 +9,10 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -24,13 +27,69 @@ type UpdateResult struct {
 	Version string // version of the server's builds ("" if it does not say)
 	// Disabled: the server asked daemons not to update by themselves.
 	Disabled bool
+	// Skipped: why an automatic update left this build in place (a
+	// development build, or the server's build is not newer).
+	Skipped string
 }
 
 // UpdateOptions tunes SelfUpdateWith.
 type UpdateOptions struct {
 	// Auto is a daemon's periodic check: it honours the server's
-	// auto_update switch and this machine's opt-out.
+	// auto_update switch and this machine's opt-out, and only moves to a
+	// newer release (see AutoUpdateSkip).
 	Auto bool
+	// Current is the running build's version ("" = unknown: checksums decide).
+	Current string
+}
+
+// releaseRE: the versions the release scripts stamp (0.1.0, 0.1.0-20261030.1156).
+var releaseRE = regexp.MustCompile(`^v?(\d+)\.(\d+)\.(\d+)(?:-(\d{8})\.(\d{4}))?$`)
+
+func releaseParts(v string) ([]int, bool) {
+	m := releaseRE.FindStringSubmatch(strings.TrimSpace(v))
+	if m == nil {
+		return nil, false
+	}
+	out := make([]int, 0, 5)
+	for _, s := range m[1:] {
+		n, _ := strconv.Atoi(s) // "" (no date) is 0: 0.1.0 sorts before 0.1.0-<date>
+		out = append(out, n)
+	}
+	return out, true
+}
+
+// DevBuild reports a build made by hand from a branch: build metadata
+// (0.1.0-20261030.1156+isolate) or anything the release scripts do not
+// stamp (0.1.0-dev from a plain `go build`, a commit hash).
+func DevBuild(v string) bool {
+	_, ok := releaseParts(v)
+	return v != "" && !ok
+}
+
+// AutoUpdateSkip says why the daemon must not replace the build current
+// with the server's build served ("" = go ahead). A development build is
+// kept (its config may be one the release does not know, and the release
+// would rewrite it), and so is a build as new as or newer than the
+// server's: the same version with another checksum is a build of a branch.
+// When the server's version is not a release one, checksums decide.
+func AutoUpdateSkip(current, served string) string {
+	sv, ok := releaseParts(served)
+	if !ok || current == "" {
+		return ""
+	}
+	if DevBuild(current) {
+		return "development build " + current + " (hearth self-update replaces it with the server's " + served + ")"
+	}
+	cv, _ := releaseParts(current)
+	for i := range sv {
+		switch {
+		case sv[i] > cv[i]:
+			return ""
+		case sv[i] < cv[i]:
+			return "the server's build " + served + " is older than this one, " + current
+		}
+	}
+	return "the server's build has the same version " + served + " (this one is another build of it; hearth self-update replaces it)"
 }
 
 // SelfUpdate replaces the binary at exe with the server's build for this
@@ -79,6 +138,11 @@ func SelfUpdateWith(home, server, exe string, o UpdateOptions) (UpdateResult, er
 	res.SHA256 = want
 	if cur, err := fileSum(exe); err == nil && cur == want {
 		return res, nil
+	}
+	if o.Auto {
+		if res.Skipped = AutoUpdateSkip(o.Current, m.Version); res.Skipped != "" {
+			return res, nil
+		}
 	}
 	resp, err = hc.Get(base + "/download/" + PlatformBinary())
 	if err != nil {
