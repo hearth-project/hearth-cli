@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `hearth agents isolate codex`: codex-mixin's restore marker of an `auth.json` that is not copied stays behind too; with it, `codex-mixin connect` in the new home refused ("Codex auth changed while a codex-mixin custom-mode restore point exists") and the copied config kept the old client key. A login that lives in `~/.hearth` while a machine profile names the workspace now gets the `hearth init --move-login <workspace>` command instead of "no workspace here".
+- Moving a home (`hearth init --move-login`, setup's workspace choice) leaves `<home>/opt` where it is: restore flows install Node and agent CLIs there, and their wrappers (`~/.local/bin/codex`) point at it; after a move Codex was "not found".
 - Library merge without a common base (the first merge after an upgrade): where both sides differ, the server's copy now wins and this machine's goes to `<home>/backup/<time>/merge-other-copies`. A machine stuck for hours on the old conflict won with its old files, e.g. a `config.toml` without the `[skills] resident` list.
 - Credential files of skills: a machine whose library never had one (it pulled before another machine uploaded it) no longer deletes that upload when it pushes; only files this library had at its last sync and has lost since are deleted (`secret_files` in the library state). Every daemon pass restores missing ones and updates copies unchanged here from newer uploads. An owner-only `SKILL.md` (codex-mixin installs its own that way) is judged by its content, not treated as a credential file.
 - One library sync at a time per home (`<home>/library.lock`): the daemon and a `hearth lib pull` in a terminal merged the same conflict together and the second one reported "the server changed again during a merge".

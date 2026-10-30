@@ -3,15 +3,17 @@ package client
 import (
 	"errors"
 	"fmt"
-	"github.com/hearth-project/hearth-cli/internal/recipe"
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/hearth-project/hearth-cli/internal/api"
 	mach "github.com/hearth-project/hearth-cli/internal/machine"
+	"github.com/hearth-project/hearth-cli/internal/recipe"
 )
 
 // WorkspaceSuggestion is the working directory proposed for a new machine:
@@ -76,6 +78,21 @@ func MoveHome(from, ws string) (string, error) {
 	if err := os.MkdirAll(filepath.Dir(target), 0o700); err != nil {
 		return "", err
 	}
+	// Tools restore flows installed under the home (<home>/opt: Node, agent
+	// CLIs) stay where their wrappers point (~/.local/bin/codex → ~/.hearth/opt/...).
+	opt, keptOpt := filepath.Join(from, "opt"), ""
+	if fi, err := os.Stat(opt); err == nil && fi.IsDir() {
+		keptOpt = filepath.Join(filepath.Dir(from), ".hearth-opt-"+strconv.FormatInt(time.Now().UnixNano(), 36))
+		if err := os.Rename(opt, keptOpt); err != nil {
+			keptOpt = ""
+		}
+	}
+	defer func() {
+		if keptOpt != "" {
+			_ = os.MkdirAll(from, 0o700)
+			_ = os.Rename(keptOpt, opt)
+		}
+	}()
 	if err := os.Rename(from, target); err != nil {
 		var le *os.LinkError
 		if !errors.As(err, &le) || !errors.Is(le.Err, syscall.EXDEV) {

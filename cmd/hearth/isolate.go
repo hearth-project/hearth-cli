@@ -36,6 +36,10 @@ key are removed). A backup of the shared default's config goes to
 			home := client.Home()
 			agent := a[0]
 			if client.WorkspaceOf(home) == "" {
+				if ws := os.Getenv("HEARTH_WORKSPACE"); ws != "" {
+					// A machine profile's workspace: the login still lives in ~/.hearth.
+					return fmt.Errorf("this login lives in %s, not in the workspace: move it there first:  hearth init --move-login %s", home, ws)
+				}
 				return fmt.Errorf("no workspace here: isolate is for shared accounts (hearth init <dir> first)")
 			}
 			from := client.AgentHomeOf(home, agent)

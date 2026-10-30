@@ -81,10 +81,16 @@ func TestMoveHomeRehomesRC(t *testing.T) {
 	if _, err := recipe.InstallRC(rc, hook); err != nil {
 		t.Fatal(err)
 	}
+	os.MkdirAll(filepath.Join(from, "opt", "node", "bin"), 0o755)
+	os.WriteFile(filepath.Join(from, "opt", "node", "bin", "codex"), []byte("#!/bin/sh\n"), 0o755)
 	ws := filepath.Join(h, "ws")
 	to, err := MoveHome(from, ws)
 	if err != nil {
 		t.Fatal(err)
+	}
+	// Tools installed under the home stay where their wrappers point.
+	if !fileExists(filepath.Join(from, "opt", "node", "bin", "codex")) || fileExists(filepath.Join(to, "opt")) {
+		t.Fatal("opt/ moved with the login")
 	}
 	b, _ := os.ReadFile(rc)
 	if strings.Contains(string(b), hook) || !strings.Contains(string(b), filepath.Join(to, "shell", "bashrc.hook.sh")) || !strings.Contains(string(b), "alias x=y") {
