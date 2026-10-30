@@ -1,12 +1,14 @@
 package client
 
 import (
+	"crypto/rand"
 	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/hearth-project/hearth-cli/internal/api"
 	"github.com/hearth-project/hearth-cli/internal/library"
 )
 
@@ -342,5 +344,29 @@ func TestPullHonorsSkillsDir(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(LibraryDir(b.Home), "skills", "s1")); err == nil {
 		t.Fatal("skills also left in the library")
+	}
+}
+
+// A library larger than one session chunk (a skill shipping a CLI binary)
+// downloads whole; it was cut off and failed as a corrupt bundle.
+func TestLargeLibraryPulls(t *testing.T) {
+	en := newEnv(t)
+	a, b := en.machine("a"), en.machine("b")
+	libWrite(t, a, "skills/big/SKILL.md", "---\nname: big\ndescription: d\n---\nx\n")
+	blob := make([]byte, api.MaxChunkBytes+(2<<20))
+	rand.Read(blob) // incompressible
+	p := filepath.Join(LibraryDir(a.Home), "skills/big/assets/tool")
+	os.MkdirAll(filepath.Dir(p), 0o755)
+	if err := os.WriteFile(p, blob, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.LibPush(false); err != nil {
+		t.Fatal(err)
+	}
+	if r, err := b.LibPull(false); err != nil || r.Op != "pulled" {
+		t.Fatalf("pull: %+v %v", r, err)
+	}
+	if fi, err := os.Stat(filepath.Join(LibraryDir(b.Home), "skills/big/assets/tool")); err != nil || fi.Size() != int64(len(blob)) {
+		t.Fatalf("tool not pulled whole: %v", err)
 	}
 }
