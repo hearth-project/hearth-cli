@@ -35,6 +35,9 @@ type CodexRoute struct {
 	Gateway  bool   `json:"gateway"` // a local gateway (codex-mixin)
 	Reach    *bool  `json:"reach,omitempty"`
 	Detail   string `json:"detail,omitempty"` // why it cannot reach it
+	// Shared: on a shared account (a workspace) it is the account-wide
+	// default ~/.codex, which everybody's Codex falls back to.
+	Shared bool `json:"shared,omitempty"`
 }
 
 func loginShell() string {
@@ -203,6 +206,7 @@ func CodexRouteNow(home, email string) CodexRoute {
 	}
 	r.Provider, r.BaseURL = codexConfigRoute(r.Home)
 	r.Gateway = isLoopbackURL(r.BaseURL)
+	r.Shared = WorkspaceOf(home) != "" && filepath.Clean(r.Home) == filepath.Clean(filepath.Join(h, ".codex"))
 	if mine := agentHomeExports(home)["CODEX_HOME"]; mine != "" && filepath.Clean(mine) != filepath.Clean(r.Home) {
 		r.SetBy = codexHomeSetBy(home, email)
 	}

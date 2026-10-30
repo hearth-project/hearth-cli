@@ -30,12 +30,23 @@ var agentHomeEnv = map[string]string{"codex": "CODEX_HOME", "claude": "CLAUDE_CO
 // AgentHomes returns per-user agent config dirs from config.toml, falling
 // back to the old library/agents.json.
 func AgentHomes(home string) map[string]string {
+	out := map[string]string{}
 	if c, err := UserConfig(home); err == nil && c.Agents != nil && len(c.Agents.Homes) > 0 {
-		return c.Agents.Homes
+		for k, v := range c.Agents.Homes {
+			out[k] = v
+		}
+	} else {
+		var f agentsFile
+		loadJSON(agentsPath(home), &f)
+		for k, v := range f.Homes {
+			out[k] = v
+		}
 	}
-	var f agentsFile
-	loadJSON(agentsPath(home), &f)
-	return f.Homes
+	// Chosen on this machine (hearth agents isolate): wins over the synced one.
+	for k, v := range LocalAgentHomes(home) {
+		out[k] = v
+	}
+	return out
 }
 
 // SetAgentHome records where an agent keeps its config for this user and

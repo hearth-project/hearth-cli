@@ -19,6 +19,7 @@ function envText(p) {
     case "node": return z ? "Node.js 版本过低（" + (p.have || "未安装") + "，Codex 需要 ≥ 22）" : "Node.js too old (" + (p.have || "missing") + ", Codex needs ≥ 22)";
     case "steps": return z ? "恢复流程还有 " + p.behind + " 步未完成" : p.behind + " restore step(s) left";
     case "bypass": return z ? "Codex 没有走 codex-mixin 网关，用的是别处的配置：" + p.detail : "Codex does not go through codex-mixin; it uses another config: " + p.detail;
+    case "shared_home": return z ? "你的 codex-mixin 登录放在共用的 " + p.detail + "，这个账号上没设 CODEX_HOME 的人都会用到它" : "Your codex-mixin login is in the shared " + p.detail + "; everyone on this account without their own CODEX_HOME uses it";
     case "unreachable": return z ? "Codex 连不上它的模型服务 " + p.have + "（" + p.detail + "）" : "Codex cannot reach its model endpoint " + p.have + " (" + p.detail + ")";
     case "hearth": return z ? "Hearth 客户端有新版本（" + p.have + " → " + p.latest + "）" : "Newer Hearth client available (" + p.have + " → " + p.latest + ")";
   }
@@ -34,6 +35,7 @@ function envFix(p, d) {
     case "steps": return "hearth recipe plan";
     case "bypass": return "hearth ssh <machine>   # Hearth's sshd marks your sessions; the end of the rc file sets your CODEX_HOME";
     case "unreachable": return "hearth machine check";
+    case "shared_home": return "hearth agents isolate codex   # moves your Codex config and conversations into your workspace";
   }
   return null;
 }

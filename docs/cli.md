@@ -33,6 +33,8 @@ Generated from `hearth --help` by `hearth docs cli > docs/cli.md`; every command
 | [`hearth agents enable`](#hearth-agents-enable) | Enable an agent (synced setting) |
 | [`hearth agents home`](#hearth-agents-home) | Use a per-user config dir for an agent, e.g. '${WORKSPACE}/.codex' (synced) |
 | [`hearth agents pull`](#hearth-agents-pull) | Restore an agent on this machine: skills/agents, newest conversations, its CLI (setup restores only recently used agents) |
+| [`hearth agents isolate`](#hearth-agents-isolate) | Shared account: move your agent config and conversations into your workspace, so nobody else on the account uses your gateway login |
+| [`hearth agents where`](#hearth-agents-where) | Print the config dir an agent uses for you here (e.g. CODEX_HOME=$(hearth agents where codex)) |
 | [`hearth agents disable`](#hearth-agents-disable) | Disable an agent |
 | [`hearth agents import`](#hearth-agents-import) | Import sessions of another agent into this agent (via its own converter) |
 | [`hearth backup`](#hearth-backup) | Choose what Hearth uploads (synced, .gitignore-like selection) |
@@ -506,6 +508,36 @@ hearth agents pull <agent> [flags]
 
 Flags:
       --last int   restore this many newest conversations (0 = all) (default 10)
+```
+
+## hearth agents isolate
+
+On an account several people share, ~/.codex is the config every Codex
+session falls back to. If your codex-mixin gateway and client key are there,
+everyone whose shell does not set CODEX_HOME uses your login.
+
+isolate copies your config (skills, rules, plugins, MCP servers, model
+settings) and your conversations (the session scope decides which are yours)
+to <workspace>/.codex, has codex-mixin connect the new home with a client key
+of its own, makes this machine's Hearth sessions use it, then hands the shared
+default back to codex-mixin (uninstall-codex; else the gateway provider and
+key are removed). A backup of the shared default's config goes to
+<home>/backup. Other people's conversations stay where they are.
+
+```text
+hearth agents isolate <codex|claude> [flags]
+
+Flags:
+      --dir string   new home (default <workspace>/.<agent>)
+  -y, --yes          do not ask
+```
+
+## hearth agents where
+
+Print the config dir an agent uses for you here (e.g. CODEX_HOME=$(hearth agents where codex))
+
+```text
+hearth agents where <agent>
 ```
 
 ## hearth agents disable

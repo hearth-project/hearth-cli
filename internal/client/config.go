@@ -160,6 +160,15 @@ func Activate() string {
 			os.Setenv("HEARTH_WORKSPACE_FROM_PROFILE", "1")
 		}
 	}
+	if WorkspaceOf(home) != "" {
+		// A shared account: the CODEX_HOME this process inherited may come
+		// from another person's rc lines. Hearth works on this person's
+		// agent homes (configured, else the defaults).
+		for v, p := range agentHomeExports(home) {
+			os.Setenv(v, p)
+		}
+		return home
+	}
 	for agent, p := range AgentHomes(home) {
 		if v, ok := agentHomeEnv[agent]; ok && os.Getenv(v) == "" {
 			os.Setenv(v, paths.Expand(p))

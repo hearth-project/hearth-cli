@@ -139,6 +139,11 @@ func setupCmd() *cobra.Command {
 				return err
 			}
 
+			// Shared account: this person's Codex config and conversations
+			// in their workspace, not in the ~/.codex everybody falls back to.
+			if dir := client.PreferOwnCodexHome(home); dir != "" {
+				fmt.Printf("      Codex home: %s (yours; ~/.codex is shared by everyone on this account)\n", dir)
+			}
 			e, err := engine()
 			if err != nil {
 				return err
