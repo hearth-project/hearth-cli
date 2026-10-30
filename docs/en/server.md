@@ -131,6 +131,7 @@ With the account sign-in the browser derives the login key from the master passw
 ## Session expiry
 
 - Sessions not accessed for `--expire-days` (default 30) are marked expired and deleted `--grace-days` (default 7) later; pinned sessions and long-term memory never expire.
+- Machines not seen for `--device-days` (default 7, `$HEARTH_DEVICE_DAYS`; 0 = keep) are forgotten: their entry, environment report and login. A machine that comes back after that runs `hearth setup` again; its conversations stay.
 - Sessions deleted by the user in Codex are marked expired by the client and deleted after the same grace period.
 - Restoring by id during the grace period revives a session.
 

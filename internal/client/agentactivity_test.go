@@ -51,3 +51,27 @@ func TestRecentAgentsAndMachineSelection(t *testing.T) {
 		t.Fatalf("pull claude: %v", MachineAgents(home))
 	}
 }
+
+func TestHabitAgents(t *testing.T) {
+	day := int64(86400)
+	mk := func(agent string, at int64) RemoteSession {
+		rs := RemoteSession{}
+		rs.Meta.Agent, rs.ActiveAt = agent, at
+		return rs
+	}
+	now := int64(1_800_000_000)
+	all := []RemoteSession{mk("codex", now), mk("codex", now-day), mk("claude", now-7*day)}
+	if h := HabitAgents(all); !h["codex"] || h["claude"] {
+		t.Fatalf("one Claude conversation counted: %v", h)
+	}
+	all = append(all, mk("claude", now-2*day), mk("claude", now-3*day))
+	if h := HabitAgents(all); !h["claude"] {
+		t.Fatalf("three Claude conversations not counted: %v", h)
+	}
+	if h := HabitAgents([]RemoteSession{mk("claude", now)}); !h["claude"] {
+		t.Fatalf("agent of the latest conversation: %v", h)
+	}
+	if HabitAgents(nil) != nil {
+		t.Fatal("no conversations should be unknown")
+	}
+}

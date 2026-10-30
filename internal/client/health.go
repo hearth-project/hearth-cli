@@ -38,9 +38,10 @@ type HealthReport struct {
 
 type AgentHealth struct {
 	Enabled bool `json:"enabled"`
-	// Used: the user works with this agent (a conversation on any of their
-	// machines within RecentWindow of their latest one); only used agents
-	// are expected to be installed, so an agent tried once is not nagged.
+	// Used: the user relies on this agent (HabitAgents: the agent of their
+	// latest conversation, or HabitMin conversations within RecentWindow);
+	// only those are expected to be installed, so a tool tried once is not
+	// asked for on every machine.
 	Used      bool   `json:"used"`
 	Installed bool   `json:"installed"`
 	Version   string `json:"version,omitempty"`
@@ -83,7 +84,12 @@ func (e *Engine) MachineHealth() HealthReport {
 	enabled := EnabledAgents(e.Home)
 	used := enabled
 	if all, err := e.List(); err == nil {
-		used, _ = RecentAgents(e.Home, AgentUse(all))
+		if habit := HabitAgents(all); habit != nil {
+			used = nil
+			for a := range habit {
+				used = append(used, a)
+			}
+		}
 	}
 	for _, name := range SupportedAgents {
 		a := AgentHealth{Enabled: contains(enabled, name), Used: contains(used, name)}

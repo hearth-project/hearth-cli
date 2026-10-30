@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- The environment check expects only the agents the user relies on: the agent of their latest conversation, or one with at least 3 conversations within 14 days of it. A single Claude Code conversation a week ago no longer makes every machine report Claude Code missing.
+- Machines not seen for 7 days (offline, reclaimed or revoked) are forgotten by the server: their entry, environment report and login (`hearth server --device-days N`, `$HEARTH_DEVICE_DAYS`, 0 = keep). Conversations they wrote stay.
+- The console's Machines page no longer shows the red "N machines differ from the standard setup" banner; each machine's Environment pill says it.
 - Agent CLIs bundled in desktop apps are found: Codex ships with the ChatGPT app (`ChatGPT.app/Contents/Resources/codex-cli/bin/codex`, the nested `CodexCLI.app`), codex-mixin with `Codex Mixin.app` (`Contents/Resources/codex-mixin`), Claude Code with `Claude.app`; under `/Applications` and `~/Applications`, then by walking apps named like the tool. codex-mixin is also found as a running process (its gateway) or in the user's launchd agents (macOS). The environment check, `onboard status`, skill-search registration, MCP config and the Codex app-server client all use the same lookup, so they agree.
 - The proxy the daemon remembered is used by every request again: the client's transport looks the proxy up per request (`http.ProxyFromEnvironment` reads the environment once per process, before the remembered proxy was set), so `hearth self-update` and other commands from a shell without the proxy no longer time out on machines that need one.
 - Workspace made after logging in (shared accounts): commands inside it reported "not logged in" and asked for an email although `~/.hearth` was logged in as the same person, and running `hearth setup` there made a second device on the same machine whose daemon competed with the first ("session is leased by another device").

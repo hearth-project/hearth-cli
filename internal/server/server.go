@@ -41,6 +41,7 @@ type Config struct {
 	ExpireAfter  time.Duration // default 30 days without access
 	Grace        time.Duration // default 7 days after expiry
 	TombstoneTTL time.Duration // default 365 days
+	DeviceTTL    time.Duration // machines not seen this long are forgotten; default 7 days, <0 = never
 	GCInterval   time.Duration // default 1 hour
 	TokenTTL     time.Duration // default 30 days
 	Now          func() time.Time
@@ -110,6 +111,9 @@ func New(cfg Config) (*Server, error) {
 	if cfg.TombstoneTTL == 0 {
 		cfg.TombstoneTTL = 365 * 24 * time.Hour
 	}
+	if cfg.DeviceTTL == 0 {
+		cfg.DeviceTTL = 7 * 24 * time.Hour
+	}
 	if cfg.GCInterval == 0 {
 		cfg.GCInterval = time.Hour
 	}
@@ -173,7 +177,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) { s.mux.Serve
 // RunGC performs one expiry pass.
 func (s *Server) RunGC() (gcStats, error) {
 	now := s.cfg.Now().Unix()
-	return s.st.runGC(now, int64(s.cfg.ExpireAfter.Seconds()), int64(s.cfg.Grace.Seconds()), int64(s.cfg.TombstoneTTL.Seconds()))
+	st, err := s.st.runGC(now, int64(s.cfg.ExpireAfter.Seconds()), int64(s.cfg.Grace.Seconds()), int64(s.cfg.TombstoneTTL.Seconds()), int64(s.cfg.DeviceTTL.Seconds()))
+	for _, uid := range st.users {
+		s.auth.purgeUser(uid)
+	}
+	return st, err
 }
 
 // GCLoop runs RunGC every GCInterval until ctx is cancelled.
@@ -183,8 +191,8 @@ func (s *Server) GCLoop(ctx context.Context) {
 	for {
 		if st, err := s.RunGC(); err != nil {
 			s.cfg.Logger.Printf("gc: %v", err)
-		} else if st.Expired+st.Deleted+st.TombstonesPurged > 0 {
-			s.cfg.Logger.Printf("gc: expired=%d deleted=%d tombstones_purged=%d", st.Expired, st.Deleted, st.TombstonesPurged)
+		} else if st.Expired+st.Deleted+st.TombstonesPurged+st.DevicesRemoved > 0 {
+			s.cfg.Logger.Printf("gc: expired=%d deleted=%d tombstones_purged=%d devices_removed=%d", st.Expired, st.Deleted, st.TombstonesPurged, st.DevicesRemoved)
 		}
 		select {
 		case <-ctx.Done():

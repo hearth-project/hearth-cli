@@ -41,13 +41,19 @@ type env struct {
 	cfg   server.Config // storage of srv
 }
 
+// testDeviceTTL: tests move the clock by weeks without the machines
+// talking to the server; only the test of forgetting machines uses the
+// server's default.
+var testDeviceTTL time.Duration = -1
+
 func newEnv(t *testing.T) *env {
 	isolateAgentHomes(t)
 	KDF = crypto.KDFParams{Time: 1, MemoryKiB: 19 * 1024, Threads: 1}
 	c := &clock{t: time.Unix(1_800_000_000, 0)}
 	data := t.TempDir()
 	dbURL, blobs := servertest.Backends(t)
-	srv, err := server.New(server.Config{DataDir: data, Database: dbURL, Blobs: blobs, Now: c.now, TokenTTL: 3650 * 24 * time.Hour, AuthPerMin: 1000, Logger: log.New(io.Discard, "", 0)})
+	srv, err := server.New(server.Config{DataDir: data, Database: dbURL, Blobs: blobs, Now: c.now, TokenTTL: 3650 * 24 * time.Hour, AuthPerMin: 1000, Logger: log.New(io.Discard, "", 0),
+		DeviceTTL: testDeviceTTL})
 	if err != nil {
 		t.Fatal(err)
 	}

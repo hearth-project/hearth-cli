@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -55,7 +56,7 @@ func serverCmd() *cobra.Command {
 	var addr, tlsCert, tlsKey, registration, publicURL, distDir, quota, siteDir string
 	var identityBroker, identityBrokerKey string
 	var siteAuth, noAutoUpdate, pinInstall, noVersionCheck bool
-	var expireDays, graceDays int
+	var expireDays, graceDays, deviceDays int
 	var gcInterval time.Duration
 	c := &cobra.Command{
 		Use:   "server",
@@ -86,6 +87,10 @@ func serverCmd() *cobra.Command {
 			cfg := sto.config()
 			cfg.Registration = registration
 			cfg.ExpireAfter = time.Duration(expireDays) * 24 * time.Hour
+			cfg.DeviceTTL = time.Duration(deviceDays) * 24 * time.Hour
+			if deviceDays <= 0 {
+				cfg.DeviceTTL = -1 // keep machines forever
+			}
 			cfg.Grace = time.Duration(graceDays) * 24 * time.Hour
 			cfg.GCInterval = gcInterval
 			cfg.Dist = dist
@@ -172,6 +177,7 @@ func serverCmd() *cobra.Command {
 	c.Flags().StringVar(&publicURL, "public-url", os.Getenv("HEARTH_PUBLIC_URL"), "URL clients use to reach this server; enables /install.sh [$HEARTH_PUBLIC_URL]")
 	c.Flags().StringVar(&quota, "quota", envOr("HEARTH_QUOTA", "unlimited"), "default storage quota per user, e.g. 10GiB (per-user: hearth server admin quota) [$HEARTH_QUOTA]")
 	c.Flags().IntVar(&expireDays, "expire-days", 30, "mark sessions expired after N days without access")
+	c.Flags().IntVar(&deviceDays, "device-days", envInt("HEARTH_DEVICE_DAYS", 7), "forget machines not seen for N days (offline, reclaimed or revoked: their entry, health report and login; 0 = keep) [$HEARTH_DEVICE_DAYS]")
 	c.Flags().IntVar(&graceDays, "grace-days", 7, "delete expired sessions after N more days")
 	c.Flags().DurationVar(&gcInterval, "gc-interval", time.Hour, "how often to run expiry")
 	c.AddCommand(inviteCmd(), gencertCmd(), migrateCmd(), backupCmd(), adminCmd(),
@@ -310,4 +316,12 @@ func backupCmd() *cobra.Command {
 	}
 	src.flags(c)
 	return c
+}
+
+// envInt reads an integer environment variable, else def.
+func envInt(name string, def int) int {
+	if v, err := strconv.Atoi(os.Getenv(name)); err == nil {
+		return v
+	}
+	return def
 }
