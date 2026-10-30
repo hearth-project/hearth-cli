@@ -33,6 +33,9 @@ table{border-collapse:collapse;width:100%}td,th{border:1px solid #d0d7de;padding
 <p>{{.T.InstallOnly}}</p>
 <pre>{{.CmdOnly}}</pre>
 <p class="muted">{{.T.Registration}}: <code>{{.Registration}}</code>{{if .Pin}} · {{.T.Pin}}{{end}}</p>
+<h2>{{.T.Then}}</h2>
+<p>{{.T.ThenHint}}</p>
+<pre>{{.T.ThenSay}}</pre>
 
 <h2>{{.T.Downloads}}</h2>
 <table><tr><th>{{.T.Platform}}</th><th>{{.T.File}}</th><th>SHA-256</th></tr>
@@ -54,6 +57,7 @@ table{border-collapse:collapse;width:100%}td,th{border:1px solid #d0d7de;padding
 
 type landingText struct {
 	Tagline, Install, InstallHint, NewUser, InstallOnly, Registration, Pin string
+	Then, ThenHint, ThenSay                                                string
 	Downloads, Platform, File, Manual, More, Script, Manifest, Skill, Info string
 	CA, Console                                                            string
 }
@@ -62,7 +66,10 @@ var landingTexts = map[string]landingText{
 	"zh": {
 		Tagline:      "跨机器备份与恢复 Coding Agent 的会话、技能、凭证和环境（端到端加密）。",
 		Install:      "一键安装（Linux / macOS）",
-		InstallHint:  "在终端执行。脚本按系统和架构选择安装包、校验 SHA-256、安装到 ~/.local/bin、写入 PATH、给本机的 Codex / Claude Code / Comate 装上 hearth skill，然后登录并恢复环境：",
+		InstallHint:  "在终端执行。脚本按系统和架构选择安装包、校验 SHA-256、安装到 ~/.local/bin、写入 PATH、给本机的 Codex / Claude Code / Comate 装上 hearth skill，然后登录、确认这台机器的工作目录（推荐你同类型机器用的目录），并恢复你的会话、skills、凭证和 shell 配置：",
+		Then:         "然后：在另一台机器上恢复软件环境",
+		ThenHint:     "安装结束时会打印这台机器的名字。在任意一台已登录 Hearth 的机器上，把下面这句话告诉它的 agent（Codex / Claude Code / Comate），它会按这类机器的恢复流程，通过 hearth ssh 在新机器上逐步安装并检查 Node、Codex CLI、网关等；需要扫码的步骤会交给你。手边没有别的机器时，在新机器上说「用 hearth 恢复这台机器的环境」。",
+		ThenSay:      "恢复 <机器名> 的 Codex 环境",
 		NewUser:      "第一次使用（创建账号）：",
 		InstallOnly:  "只安装，之后在 agent 里说「用 hearth」由它引导登录：",
 		Registration: "注册方式",
@@ -82,7 +89,10 @@ var landingTexts = map[string]landingText{
 	"en": {
 		Tagline:      "Back up and restore coding-agent sessions, skills, credentials and setup across machines (end-to-end encrypted).",
 		Install:      "One-line install (Linux / macOS)",
-		InstallHint:  "Run in a terminal. The script picks the build for your OS and CPU, checks its SHA-256, installs it to ~/.local/bin, adds it to PATH, installs the hearth skill for Codex / Claude Code / Comate on this machine, then logs in and restores your environment:",
+		InstallHint:  "Run in a terminal. The script picks the build for your OS and CPU, checks its SHA-256, installs it to ~/.local/bin, adds it to PATH, installs the hearth skill for Codex / Claude Code / Comate on this machine, then logs in, asks you to confirm this machine's working directory (proposing the one your machines of the same kind use) and restores your conversations, skills, credentials and shell lines:",
+		Then:         "Then: restore the software from another machine",
+		ThenHint:     "The installer ends with this machine's name. On any other machine with Hearth, tell its agent (Codex / Claude Code / Comate) the sentence below: it installs and checks Node, Codex CLI, gateways and so on there over hearth ssh, following the restore flow for that kind of machine, and hands you the steps that need a QR-code login. No other machine at hand: on the new machine say \"use hearth to restore this machine's environment\".",
+		ThenSay:      "restore the Codex environment of <machine>",
 		NewUser:      "First time (creates the account):",
 		InstallOnly:  "Install only; then ask your agent \"use hearth\" and it guides you through login:",
 		Registration: "Registration",

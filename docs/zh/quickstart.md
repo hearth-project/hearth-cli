@@ -85,11 +85,11 @@ curl -fsSL -k https://<server-host>:8787/install.sh | sh
 4. 把本机 Codex / Claude Code / Comate 里已有的 skills 和 agents 复制进你的个人库（看起来含凭证的不会复制，会列出来；`--no-import` 跳过），下一台机器直接就有；
 5. 启动后台同步：会话 60 秒、skills/配置 20 分钟上传一次。最后一行 `done:` 汇总恢复了多少会话、skills、agents 和凭证文件，并列出下一步。
 
-安装脚本不装其他软件。之后的新机器上，在 agent 里说「用 hearth 恢复这台机器的环境」，agent 按你记录的恢复流程（`hearth recipe plan`）和 [客户端软件环境安装指南](client-env.md) 带你装 Node、Codex CLI、Claude Code、codex-mixin 等。
+安装脚本不装其他软件。之后的新机器上，软件环境由 agent 来装，推荐在另一台机器上发起（见第三步）：agent 按你记录的恢复流程（`hearth recipe plan`）和 [客户端软件环境安装指南](client-env.md) 装 Node、Codex CLI、Claude Code、codex-mixin 等。
 
 > 恢复密钥只显示一次，请保存到密码管理器。忘记主密码时只能靠它找回。不要把主密码或恢复密钥发给任何人或 agent。
 
-多人共用同一个 Linux 账号时，先进入你自己的工作目录：`mkdir -p ~/work/<名字> && cd ~/work/<名字> && hearth init .`，再执行安装命令。
+登录后 setup 会询问这台机器的工作目录（第一台机器推荐用户目录；之后的机器推荐你同类型机器用的目录）。多人共用同一个 Linux 账号时，在这里输入你自己的目录（也可以在安装前 `mkdir -p ~/work/<名字> && cd ~/work/<名字> && hearth init .`）。
 
 ### 记录这台机器的环境
 
@@ -105,21 +105,30 @@ hearth session list           # 已同步的会话
 
 ---
 
-## 第三步：第二台机器（一键恢复）
+## 第三步：第二台机器（先安装，再从另一台机器恢复软件环境）
 
-换机器、新机器被分配下来时，执行同一条安装命令：
+**3.1 在新机器上**执行同一条安装命令：
 
 ```bash
 curl -fsSL -k https://<server-host>:8787/install.sh | sh
 ```
 
-输入主密码后自动恢复：
+输入主密码后，setup 会推荐工作目录：你同类型机器用的目录（先看同 GPU 型号，再看同 GPU 系列如 B 卡、GB 卡，再看同系统同架构），没有同类机器就推荐用户目录。回车采用或输入其他路径，一定由你确认。然后自动恢复：
 
 - 最近活动的 10 条会话（`hearth restore --last 30` 恢复更多，`hearth session restore <id>` 恢复指定的）；
 - skills、agents、MCP 配置；
 - SSH 身份（私用 ssh config + 它引用的私钥，以及 `GIT_SSH_COMMAND` / `sshx` / `scpx` 接线）、git 登录等凭证和认证文件；
 - 之前记录的安装步骤（执行命令前会先给你看、征求确认）；
 - 后台同步。
+
+**3.2 在任意另一台已登录 Hearth 的机器上**恢复软件环境。setup 最后会打印要说的那句话，例如：
+
+```text
+On any other machine with Hearth, tell its agent:
+      "恢复 b-node-gpu-0126 的 Codex 环境"
+```
+
+那台机器的 agent 会找到新机器（`hearth machine list`：环境检查、SSH 主机名），按这类机器的恢复流程，通过 `hearth ssh` 在新机器上逐步安装并检查 Node、Codex CLI、codex-mixin 等；需要你本人操作的步骤（扫码登录）用 `hearth ssh -t <机器> -- <命令>` 交给你。完成后新机器的环境检查在 `hearth machine list` 和 Web 控制台里变绿。手边没有别的机器时，在新机器的 agent 里说「用 hearth 恢复这台机器的环境」。
 
 之后在 agent 里可以直接说：
 

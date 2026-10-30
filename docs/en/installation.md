@@ -40,7 +40,7 @@ curl -fsSL -k https://<server>/install.sh | sh
 2. Installs it to `~/.local/bin/hearth` (`HEARTH_BIN_DIR` to change).
 3. Adds that directory to PATH in `~/.bashrc` and `~/.profile` (and an existing `~/.zshrc` / `~/.bash_profile`), once. If a writable directory is already on PATH (e.g. `/usr/local/bin` as root) it also links `hearth` there so the current terminal finds it.
 4. Fetches the server's organisation defaults (site recipes, login-token locations; no login needed) and installs the `hearth` skill for the Codex, Claude Code and Comate found on the machine.
-5. Unless `--install-only` is given, runs `hearth setup`: reads the master password from the terminal (no echo), logs in or registers, restores the newest 10 conversations (`--sessions N`, 0 = all), skills, credentials and setup steps, and starts background sync.
+5. Unless `--install-only` is given, runs `hearth setup`: reads the master password from the terminal (no echo), logs in or registers, asks for your working directory on this machine (proposing the one your machines of the same kind use, else your home), restores the newest 10 conversations (`--sessions N`, 0 = all), skills, credentials and setup steps, and starts background sync. It ends with the sentence to tell the agent on another machine with Hearth ("恢复 <machine> 的 Codex 环境"), which installs this machine's software over `hearth ssh`.
 
 ### Options
 
