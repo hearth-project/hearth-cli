@@ -74,6 +74,10 @@ type reportedHealth struct {
 
 var envToolOrder = []string{"codex", "codex-mixin", "claude", "node"}
 
+// toolAgent names the agent a tool belongs to; its version and doctor are
+// only judged when the user works with that agent.
+var toolAgent = map[string]string{"codex": "codex", "codex-mixin": "codex", "claude": "claude"}
+
 // machineEnv judges a machine. clientVersion is the Hearth build it runs.
 func (s *Server) machineEnv(healthJSON, clientVersion string) *MachineEnv {
 	var h reportedHealth
@@ -82,6 +86,10 @@ func (s *Server) machineEnv(healthJSON, clientVersion string) *MachineEnv {
 	}
 	env := &MachineEnv{Problems: []EnvProblem{}, CheckedAt: h.CheckedAt}
 	add := func(p EnvProblem) { env.Problems = append(env.Problems, p) }
+	unused := func(tool string) bool {
+		a, ok := h.Agents[toolAgent[tool]]
+		return ok && a.Used != nil && !*a.Used
+	}
 	for _, name := range envToolOrder {
 		t, ok := h.Tools[name]
 		if !ok {
@@ -92,7 +100,7 @@ func (s *Server) machineEnv(healthJSON, clientVersion string) *MachineEnv {
 		if len(releases) > 0 {
 			row.Latest = releases[0]
 		}
-		if t.Expected || t.Installed {
+		if t.Expected || (t.Installed && !unused(name)) {
 			env.Tools = append(env.Tools, row)
 		}
 		switch {
@@ -102,7 +110,7 @@ func (s *Server) machineEnv(healthJSON, clientVersion string) *MachineEnv {
 			}
 		case t.Expected && !t.Installed:
 			add(EnvProblem{Level: "error", Code: "missing", Tool: name})
-		case t.Installed:
+		case t.Installed && !unused(name):
 			if latest, n, more := behind(releases, t.Version); n > 0 {
 				add(EnvProblem{Level: "warn", Code: "outdated", Tool: name, Have: t.Version, Latest: latest, Behind: n, More: more})
 			}
