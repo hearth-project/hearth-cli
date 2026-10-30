@@ -3,7 +3,10 @@ package client
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/hearth-project/hearth-cli/internal/recipe"
 )
 
 // A workspace on a disk several machines mount: the machine that logged in
@@ -61,5 +64,30 @@ func TestWorkspaceHomeOnSharedDisk(t *testing.T) {
 	}
 	if _, err := LoadConfig(own); err != nil {
 		t.Fatal("login not moved")
+	}
+}
+
+// Moving a login moves the rc-file blocks that sourced its scripts.
+func TestMoveHomeRehomesRC(t *testing.T) {
+	h := t.TempDir()
+	t.Setenv("HOME", h)
+	from := filepath.Join(h, ".hearth")
+	os.MkdirAll(filepath.Join(from, "shell"), 0o700)
+	hook := filepath.Join(from, "shell", "bashrc.hook.sh")
+	os.WriteFile(hook, []byte("echo hi\n"), 0o600)
+	saveJSON(filepath.Join(from, "config.json"), Config{DeviceName: hostKey(), Email: "a@x"})
+	rc := filepath.Join(h, ".bashrc")
+	os.WriteFile(rc, []byte("alias x=y\n"), 0o644)
+	if _, err := recipe.InstallRC(rc, hook); err != nil {
+		t.Fatal(err)
+	}
+	ws := filepath.Join(h, "ws")
+	to, err := MoveHome(from, ws)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(rc)
+	if strings.Contains(string(b), hook) || !strings.Contains(string(b), filepath.Join(to, "shell", "bashrc.hook.sh")) || !strings.Contains(string(b), "alias x=y") {
+		t.Fatalf("rc after the move:\n%s", b)
 	}
 }
