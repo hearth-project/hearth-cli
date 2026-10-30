@@ -259,15 +259,28 @@ func (e *Engine) bundleItem(typ, name string, allowSecrets bool) (data []byte, s
 	default:
 		return nil, "", "", fmt.Errorf("type must be skill or agent")
 	}
+	// Credential files a skill ships (CLI credentials, keys) stay with the
+	// user (synced encrypted for them): the team copy goes without them,
+	// and members bring their own. A credential in SKILL.md or an agent
+	// still refuses the share.
+	exclude := map[string]bool{}
 	if !allowSecrets {
 		fs, err := library.ScanSecrets(root)
 		if err != nil {
 			return nil, "", "", err
 		}
-		if len(fs) > 0 {
-			return nil, "", "", &SecretsError{Findings: fs}
+		var block []library.Finding
+		for _, f := range fs {
+			if rel := filepath.ToSlash(f.File); typ == "skill" && rel != "SKILL.md" {
+				exclude[rel] = true
+			} else {
+				block = append(block, f)
+			}
+		}
+		if len(block) > 0 {
+			return nil, "", "", &SecretsError{Findings: block}
 		}
 	}
-	data, sum, err = library.Library{Root: root}.Bundle()
+	data, sum, err = library.Library{Root: root, Exclude: exclude}.Bundle()
 	return data, sum, desc, err
 }

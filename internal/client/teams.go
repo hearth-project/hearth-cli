@@ -51,6 +51,15 @@ func (a *API) Publish(team, typ, name, desc, sum string, data []byte) (api.Publi
 	return r, err
 }
 
+// Unpublish removes a package and all its versions from a team.
+func (a *API) Unpublish(team, typ, name string) (int, error) {
+	var r struct {
+		Versions int `json:"versions"`
+	}
+	_, err := a.do("DELETE", fmt.Sprintf("%s/packages/%s/%s", op(team), typ, name), nil, nil, nil, &r)
+	return r.Versions, err
+}
+
 // GetPackage downloads one version (0 = latest).
 func (a *API) GetPackage(team, typ, name string, version int64) (data []byte, v int64, sum string, err error) {
 	ver := "latest"

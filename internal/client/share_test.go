@@ -1,6 +1,7 @@
 package client
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/hearth-project/hearth-cli/internal/adapter"
 	"github.com/hearth-project/hearth-cli/internal/api"
+	"github.com/hearth-project/hearth-cli/internal/library"
 	"github.com/hearth-project/hearth-cli/internal/mcpserver"
 )
 
@@ -349,4 +351,52 @@ func must[T any](v T, err error) T {
 		panic(err)
 	}
 	return v
+}
+
+// A skill shipping its CLI credentials is shared without them; unshare
+// removes the package with every version.
+func TestTeamShareWithoutCredentialsAndUnshare(t *testing.T) {
+	en := newEnv(t)
+	alice := en.machine("alice-laptop")
+	bob := en.user("bob@example.com", "bob-box")
+	if err := alice.API.CreateTeam("ops"); err != nil {
+		t.Fatal(err)
+	}
+	if err := alice.API.SetMember("ops", "bob@example.com", "member"); err != nil {
+		t.Fatal(err)
+	}
+	libWrite(t, alice, "skills/bos/SKILL.md", "---\nname: bos\ndescription: upload\n---\nrun scripts/up.sh\n")
+	libWrite(t, alice, "skills/bos/scripts/up.sh", "#!/bin/sh\nbcecmd --conf-path assets/conf\n")
+	libWrite(t, alice, "skills/bos/assets/conf/credentials", "[Defaults]\nAk = 0123456789abcdef0123\nSk = fedcba9876543210fedc\n")
+	if _, _, err := alice.Publish("ops", "skill", "bos", false); err != nil {
+		t.Fatal(err)
+	}
+	data, _, _, err := bob.API.GetPackage("ops", "skill", "bos", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(t.TempDir(), "x")
+	if _, err := library.Extract(data, dir); err != nil {
+		t.Fatal(err)
+	}
+	if fileExists(filepath.Join(dir, "assets/conf/credentials")) || !fileExists(filepath.Join(dir, "scripts/up.sh")) {
+		t.Fatal("team copy carries the credentials, or lost the scripts")
+	}
+	libWrite(t, alice, "skills/leak/SKILL.md", "---\nname: leak\ndescription: d\n---\napi_key = \"abcd1234efgh5678ijkl\"\n")
+	var se *SecretsError
+	if _, _, err := alice.Publish("ops", "skill", "leak", false); !errors.As(err, &se) {
+		t.Fatalf("credential in SKILL.md shared: %v", err)
+	}
+	if _, err := bob.API.Unpublish("ops", "skill", "bos"); StatusOf(err) != 403 {
+		t.Fatalf("member unpublish: %v", err)
+	}
+	if n, err := alice.API.Unpublish("ops", "skill", "bos"); err != nil || n != 1 {
+		t.Fatalf("unpublish: %d %v", n, err)
+	}
+	if _, _, _, err := bob.API.GetPackage("ops", "skill", "bos", 0); StatusOf(err) != 404 {
+		t.Fatalf("package still there: %v", err)
+	}
+	if _, err := alice.API.Unpublish("ops", "skill", "bos"); StatusOf(err) != 404 {
+		t.Fatalf("second unpublish: %v", err)
+	}
 }

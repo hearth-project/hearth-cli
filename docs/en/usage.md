@@ -171,7 +171,8 @@ hearth lib usage prune                # delete counts of deleted / renamed / tes
 hearth team create <team>                     # you become owner
 hearth team invite <team>                     # an invite code (default maintainer = can share; --role member = use only; --days 7, --uses N)
 hearth team join <code>                       # join; on a new machine also: hearth setup --team <code>
-hearth team share <team> <skill|agent> ...    # share from your library
+hearth team share <team> <skill|agent> ...    # share from your library (credential files of a skill stay with you)
+hearth team unshare <team> <name> ...         # remove from the team, every version
 hearth team share-with <team> <other-team>    # owners: let another team use them (read-only; --off to stop)
 hearth team list                              # your teams, role, how many skills / agents each shares
 hearth team share-top [--dry-run]             # share your 5 most used skills and 5 most used agents now (the daemon does it every 20 min)

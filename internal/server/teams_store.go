@@ -288,6 +288,52 @@ func (s *store) publish(teamID, uid int64, typ, name, desc, sum string, data []b
 	return next, true, tx.Commit()
 }
 
+// unpublish deletes a package with all its versions and their objects.
+func (s *store) unpublish(teamID int64, typ, name string) (int, error) {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+	var pid int64
+	if err := tx.QueryRow(`SELECT id FROM packages WHERE team_id=? AND type=? AND name=?`, teamID, typ, name).Scan(&pid); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return 0, errNotFound
+		}
+		return 0, err
+	}
+	rows, err := tx.Query(`SELECT object FROM package_versions WHERE package_id=?`, pid)
+	if err != nil {
+		return 0, err
+	}
+	var objs []string
+	for rows.Next() {
+		var o string
+		if err := rows.Scan(&o); err != nil {
+			rows.Close()
+			return 0, err
+		}
+		objs = append(objs, o)
+	}
+	rows.Close()
+	if _, err := tx.Exec(`DELETE FROM package_versions WHERE package_id=?`, pid); err != nil {
+		return 0, err
+	}
+	if _, err := tx.Exec(`DELETE FROM packages WHERE id=?`, pid); err != nil {
+		return 0, err
+	}
+	if err := bumpTeamRev(tx, teamID); err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	for _, o := range objs {
+		_ = s.blobs.del(o)
+	}
+	return len(objs), nil
+}
+
 type searchRow struct {
 	Type, Name, Description, Text string
 	Version                       int64
