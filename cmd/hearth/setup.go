@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -131,6 +132,9 @@ func setupCmd() *cobra.Command {
 					_ = client.AutoEnableIdentityLogin(home)
 				}
 				fmt.Printf("      device %s (%s) registered\n", cfg.DeviceName, cfg.DeviceID)
+				// Where this person works on this machine: proposed from their
+				// machines of the same kind, confirmed (or changed) by them.
+				home = chooseSetupWorkspace(home, cfg)
 			default:
 				return err
 			}
@@ -425,4 +429,56 @@ func factsMap() map[string]any {
 	var m map[string]any
 	_ = json.Unmarshal(b, &m)
 	return m
+}
+
+// chooseSetupWorkspace asks, on a fresh login in ~/.hearth, for this
+// machine's working directory: the one the user's machines of the same
+// kind use, else their home. Another directory than the home moves the
+// new login there (<dir>/.hearth). Returns the home to continue with.
+func chooseSetupWorkspace(home string, cfg *client.Config) string {
+	if client.WorkspaceOf(home) != "" || (os.Getenv("HEARTH_WORKSPACE") != "" && os.Getenv("HEARTH_WORKSPACE_FROM_PROFILE") == "") {
+		return home // chosen already (hearth init, --workspace)
+	}
+	h, _ := os.UserHomeDir()
+	sug := client.WorkspaceSuggestion{}
+	if e, err := client.NewEngine(home); err == nil {
+		if ds, err := e.API.Devices(); err == nil {
+			sug = client.SuggestWorkspace(ds, cfg.DeviceID, client.Facts())
+		}
+	}
+	def := h
+	if sug.Path != "" {
+		def = sug.Path
+		fmt.Printf("      workspace: your machines like this one (%s) work in %s (e.g. %s)\n", sug.Kind, sug.Path, shortHost(sug.Machine))
+	} else {
+		fmt.Printf("      workspace: none of your machines is like this one; proposing your home %s\n", h)
+	}
+	if !isTTY() {
+		if sug.Path != "" {
+			fmt.Printf("      kept in your home; to work in %s instead:  hearth init --move-login %s\n", sug.Path, sug.Path)
+		}
+		return home
+	}
+	ans, ok := askLine(fmt.Sprintf("      your working directory on this machine (Enter = %s, or type another): ", def))
+	if !ok {
+		return home
+	}
+	choice := def
+	if ans != "" {
+		choice = client.ExpandUserDir(ans)
+	}
+	if filepath.Clean(choice) == filepath.Clean(h) {
+		fmt.Println("      workspace: your home (state in ~/.hearth)")
+		return home
+	}
+	nh, err := client.MoveHome(home, choice)
+	if err != nil {
+		fmt.Printf("      workspace %s: %v; staying in your home (later: hearth init --move-login <dir>)\n", choice, err)
+		return home
+	}
+	os.Setenv("HEARTH_HOME", nh)
+	os.Setenv("HEARTH_WORKSPACE", choice)
+	os.Unsetenv("HEARTH_WORKSPACE_FROM_PROFILE")
+	fmt.Printf("      workspace: %s (this login lives in %s; run hearth inside it)\n", choice, nh)
+	return nh
 }

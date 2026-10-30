@@ -143,7 +143,7 @@ hearth learn --accept id1,id2 --here id3 --never id4 \
 - `never`：不再询问。
 - `--step` 写命令（新机器上经确认后执行）或文字提醒。
 
-新机器上 `hearth setup` 只恢复其中的文件（凭证、配置）和环境变量；装软件、执行命令、扫码登录这些步骤组成这台机器的**恢复流程**（`hearth recipe plan`），由 agent 用 hearth skill 带着你一步步完成（说「用 hearth 恢复这台机器的环境」）：先跑每步的检查命令，按 [客户端软件环境安装指南](client-env.md)（`hearth docs env`）安装，再检查，完成后 `hearth recipe done <key>`。这台机器需要不同做法时，agent 会把新做法记回流程（`--here-step` 只给同类机器）。自己在终端执行也可以：`hearth recipe run <key>`，或整体 `hearth recipe apply`（列出全部命令、只问一次）。在任意一台机器上批准过的命令，在你的其他机器上直接执行，不再询问；批准记录端到端加密，服务器无法伪造，命令内容一改就会重新询问。不想共享批准时在 config.toml 设置 `[recipes] share_approvals = false`。机器档案：`hearth machine`（查看）、`hearth machine add <名字> --here`、`hearth machine use <名字>`。
+新机器上 `hearth setup` 只恢复其中的文件（凭证、配置）和环境变量；装软件、执行命令、扫码登录这些步骤组成这台机器的**恢复流程**（`hearth recipe plan`），由 agent 用 hearth skill 带着你一步步完成：推荐在另一台已登录 Hearth 的机器上说「恢复 <机器> 的 Codex 环境」（通过 `hearth ssh` 远程执行；`hearth machine list` 能看到每台机器的环境检查），也可以在这台机器上说「用 hearth 恢复这台机器的环境」：先跑每步的检查命令，按 [客户端软件环境安装指南](client-env.md)（`hearth docs env`）安装，再检查，完成后 `hearth recipe done <key>`。这台机器需要不同做法时，agent 会把新做法记回流程（`--here-step` 只给同类机器）。自己在终端执行也可以：`hearth recipe run <key>`，或整体 `hearth recipe apply`（列出全部命令、只问一次）。在任意一台机器上批准过的命令，在你的其他机器上直接执行，不再询问；批准记录端到端加密，服务器无法伪造，命令内容一改就会重新询问。不想共享批准时在 config.toml 设置 `[recipes] share_approvals = false`。机器档案：`hearth machine`（查看）、`hearth machine add <名字> --here`、`hearth machine use <名字>`。
 
 ### 组织默认配置
 

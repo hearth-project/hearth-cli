@@ -126,7 +126,7 @@ func serverCmd() *cobra.Command {
 				first := map[string]string{server.RegistrationOpen: "nothing to add, setup creates the account",
 					server.RegistrationInvite: "append -s -- --invite <code> to sh (hearth server invite) to create the account",
 					server.RegistrationClosed: "registration is closed: only existing accounts"}[cfg.Registration]
-				log.Printf("new machines can install and restore with:\n  %s\n  (first machine of a new user: %s)", cmdline, first)
+				log.Printf("new machines can install and restore their files with:\n  %s\n  (first machine of a new user: %s)\n  then the software, from any other machine with Hearth: tell its agent \"恢复 <machine> 的 Codex 环境\"", cmdline, first)
 			}
 			ln, err := net.Listen("tcp", addr)
 			if err != nil {

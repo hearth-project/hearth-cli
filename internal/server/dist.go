@@ -216,6 +216,7 @@ fi
 # drives the rest and has the user log in from their own terminal).
 if [ "${1:-}" = "--install-only" ]; then
   echo "next: hearth setup --server $URL   (account from this machine's identity; --email to choose)"
+  echo "then: on any other machine with Hearth, tell its agent \"恢复 <this machine> 的 Codex 环境\" to set up this machine's software"
   exit 0
 fi
 

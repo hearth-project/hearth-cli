@@ -78,7 +78,10 @@ func (e *Engine) MachineHealth() HealthReport {
 	if m, err := Machine(e.Home); err == nil {
 		b, _ := json.Marshal(m.Facts)
 		_ = json.Unmarshal(b, &r.Machine)
-		r.Profiles, r.Workspace = m.Names(), m.Workspace()
+		r.Profiles, r.Workspace = m.Names(), WorkspaceOf(e.Home)
+		if r.Workspace == "" {
+			r.Workspace = m.Workspace() // a profile's
+		}
 	}
 	enabled := EnabledAgents(e.Home)
 	used := enabled

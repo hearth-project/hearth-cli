@@ -99,25 +99,37 @@ curl -fsSL -k https://<服务器>:8787/install.sh | sh -s -- --invite <邀请码
 
 `-k` 只用于第一次从自签名服务器下载；之后客户端只信任这台服务器的证书。
 
-安装脚本会把 `hearth` 装到 `~/.local/bin`，给 Codex / Claude Code / Comate 装上 `hearth` skill，询问主密码，然后恢复这台机器：
+安装脚本会把 `hearth` 装到 `~/.local/bin`，给 Codex / Claude Code / Comate 装上 `hearth` skill，询问主密码和这台机器的工作目录，然后恢复你的文件：
 
 ```text
 [1/3] logging in to https://<server>:8787 as you@example.com
+      workspace: your machines like this one (GPU h800) work in /data/you (e.g. gpu-node-12)
+      your working directory on this machine (Enter = /data/you, or type another):
 [2/3] restoring sessions, the skills/agents library and credentials
 [3/3] starting background sync
 
 done: 10 conversation(s) restored; library: 42 skill(s), 3 agent(s); 6 credential / config file(s) written; background sync on.
+next:
+  - software of this machine (4 step(s): codex, codex-mixin, ...). On any other machine with Hearth, tell its agent:
+      "恢复 h800-gpu-node-13 的 Codex 环境"
 ```
+
+推荐的工作目录来自你同类型的机器：先看同 GPU 型号，再看同 GPU 系列，再看同系统同架构；没有同类机器就推荐用户目录。直接回车采用，也可以输入其他路径。
+
+### 3. 在另一台机器上恢复软件环境
+
+新机器上已经有你的文件；软件环境（Node、Codex CLI、网关……）由 agent 来装。在**任意一台已登录 Hearth 的机器**上，把 setup 最后打印的那句话告诉它的 agent，例如「恢复 h800-gpu-node-13 的 Codex 环境」。它会查看新机器（`hearth machine list`），按这类机器的恢复流程，通过 `hearth ssh` 在新机器上逐步安装并检查；需要你本人操作的步骤（扫码登录）用 `hearth ssh -t` 交给你。手边没有别的机器时，也可以在新机器上直接说「用 hearth 恢复这台机器的环境」。Web 控制台的「我的机器」页能看到每台机器的环境检查结果。
 
 新账号会打印一次**恢复密钥**，请离线保存（例如密码管理器），忘记主密码时只能靠它找回。不要把主密码或恢复密钥贴到任何对话里。
 
-### 3. 开始使用
+### 4. 开始使用
 
 直接用自己的话跟 agent 说：
 
 | 你说 | 会发生什么 |
 | --- | --- |
-| 「用 hearth 恢复这台机器的环境」 | 按这台机器记录下来的恢复流程（Node、Codex CLI、网关……）带你一步步装，每步都检查 |
+| 「恢复 <机器> 的 Codex 环境」 | 按那类机器的恢复流程，通过 `hearth ssh` 给另一台机器装软件，每步都检查 |
+| 「用 hearth 恢复这台机器的环境」 | 对当前这台机器做同样的事 |
 | 「恢复上一台机器的会话」 | 按时间从新到旧列出，恢复你选的那几条（也能直接出现在打开的 Codex Desktop 窗口里） |
 | 「不要上传 Claude Code 的会话」 | 修改上传选择，你所有机器都生效 |
 
@@ -127,6 +139,7 @@ done: 10 conversation(s) restored; library: 42 skill(s), 3 agent(s); 6 credentia
 hearth status                        # 登录、同步、存储、还有什么没做
 hearth session list                  # 所有机器的会话，从新到旧
 hearth session restore <id> …        # 恢复选中的会话
+hearth machine list                  # 你的机器：环境检查、SSH 主机名
 hearth recipe plan                   # 这台机器的软件环境恢复步骤
 hearth config --edit                 # 所有设置都在这一个文件里
 ```

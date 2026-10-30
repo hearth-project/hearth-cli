@@ -40,14 +40,17 @@ Keep the curl options exactly as given (a self-signed server's command has `-k`,
 
 ## B. Log in and restore this machine
 
+The standard flow has two parts. **(1) On the new machine**: install, log in, choose the working directory, and Hearth restores the user's files (conversations, skills, credentials, shell lines). **(2) From any other machine with Hearth**: the user tells that machine's agent "恢复 <machine> 的 Codex 环境", and it installs and checks the software over `hearth ssh` following the restore flow for this kind of machine (see "Discover and restore a newly online machine" in C). Part 2 can also run here (D) when no other machine is at hand.
+
 1. Collect in one message (skip what `onboard status` already knows):
    - server URL only if `onboard status` has none (the installer remembers it); account email only if `onboard status` shows no `email` (it is detected from this machine's identity). Ask for an invite code only if `registration` is `invite`; open servers create a missing account during setup.
-   - workspace: where this person keeps their work on this machine (propose the current repo's parent or `$HOME/work`; required if several people share the Unix account).
+   - workspace: `hearth setup` proposes it itself after the login, from the user's machines of the same kind (same GPU model, else the same GPU family such as B / GB series, else the same OS and CPU; none alike: the home), and the user confirms or types another in the terminal. Ask here only when setup cannot ask (no terminal): then propose the same and run `hearth init <dir>` first.
    - which agents to integrate (default: the installed ones among codex, claude, comate).
    - team (optional): an invite code from a colleague to join their team, or a name to create a new team; skip if they work alone. Pass it as `--team <code-or-name>` to setup (setup also asks in the terminal when the user has no team).
 2. You run:
 
    ```bash
+   # only when setup cannot ask (no terminal), or the user already said where:
    mkdir -p <workspace> && hearth init <workspace> && cd <workspace>
    # already logged in without a workspace (~/.hearth) and it is this person's: hearth init --move-login <workspace>
    hearth agents enable codex      # / claude / comate; disable the unwanted ones
@@ -64,7 +67,7 @@ Keep the curl options exactly as given (a self-signed server's command has `-k`,
 4. Finish, following `next` in `onboard status`:
    - skill search MCP: `setup` registers it with Codex and Claude Code automatically; if it is missing (agent installed later) run `hearth lib mcp-install`;
    - skills live once in the library (`hearth lib skills-dir` shows it); move them with `hearth lib skills-dir '<path>'` (e.g. `${WORKSPACE}/.agents/skills`) — it moves the files, rewrites the agent links and saves `skills.dir` in `<library>/config.toml`, which syncs to other machines;
-   - this machine's software: **D. Restore this machine's environment**;
+   - this machine's software: tell the user to say, on any other machine with Hearth, "恢复 <ssh host> 的 Codex 环境" (setup prints the sentence with this machine's name); or do **D** here;
    - `hearth daemon start` if the daemon is not running.
 5. Upload choices, asked once: show `hearth backup status`. Everything is uploaded by default (every agent's sessions and memory, workspace files, credentials). Ask whether to turn anything off (see C).
 6. Record this machine's setup so the next one needs nothing: see **Learn** in C.

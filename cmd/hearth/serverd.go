@@ -151,7 +151,8 @@ func serverStartCmd() *cobra.Command {
 					if u, err := os.ReadFile(urlFile(data)); err == nil && healthy(strings.TrimSpace(string(u))) {
 						fmt.Printf("hearth server running at %s (supervisor %d, server %d); log %s\n", strings.TrimSpace(string(u)), st.SupervisorPID, st.ServerPID, logPath)
 						if cmd := lastInstallCommand(logPath); cmd != "" {
-							fmt.Printf("new machines install and restore with (download page: %s/):\n  %s\n", strings.TrimSpace(string(u)), cmd)
+							fmt.Printf("new machines install and restore their files with (download page: %s/):\n  %s\n"+
+								"then, on any other machine with Hearth, tell its agent \"恢复 <machine> 的 Codex 环境\" to set up the software\n", strings.TrimSpace(string(u)), cmd)
 						}
 						return nil
 					}
