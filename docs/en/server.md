@@ -70,6 +70,7 @@ Company-specific setup (internal git hosts, proxies, model-gateway install recip
   files/...          files those recipes install (e.g. an ssh config template)
   files/client-env.md   your notes for the client software guide (mirrors, proxies, gateway presets); `hearth docs env` prints them after the guide
   learn.json         {"token_files": ["~/.config/sso/token_*"], "identity": {"email_domain": "example.com"}}: login-token globs and local-identity settings
+  net.json           {"proxies": ["http://proxy.example.com:3128"]}: proxies for machines without a direct route to the server
 ```
 
 - **The installer fetches it before login** (`hearth site pull --server <url>`); `hearth setup`, `hearth recipe apply` and the background library sync (20 min) refresh it. `GET /v1/site` needs no login by default (304 when unchanged); the copy lives in `<hearth home>/site`. `--site-auth` restricts it to logged-in users (then it applies only after login). Edits apply within 10 s without restarting the server.
@@ -77,7 +78,8 @@ Company-specific setup (internal git hosts, proxies, model-gateway install recip
 - Steps that run commands need the user's approval on each machine (`--yes`), as with personal recipes.
 - Site recipes are for everyone: do not assume a user's secret names; guard such steps with `when_secret = "<name>"`.
 - Site content is served in plaintext to everyone who can reach the server (every logged-in user with `--site-auth`): **no credentials** there; users keep theirs with `hearth secret`.
-- `learn.json` `token_files` are also where `hearth login` / `hearth whoami` look for a local identity. `identity.email_domain` turns a user name found in one of those tokens into the account email, and `identity.username_claim` names the JWT claim to read (default `username`). Without a domain, the mail domain of the user's git email is used.
+- `learn.json` `token_files` are also where `hearth login` / `hearth whoami` look for a local identity. `identity.email_domain` turns a user name found in one of those tokens into the account email, and `identity.username_claim` names the JWT claim to read (default `username`). Without a domain, the mail domain of the user's git email is used. Set it: a new machine then takes the account from its Comate login or SSO token without asking.
+- `net.json` `proxies`: machines that reach the server only through a proxy. The install command shown on the download page falls back to the first one (`{ curl --connect-timeout 5 … || curl -x <proxy> …; } | sh`), `install.sh` tries each when the server does not answer directly, and every client does the same when its shell has no proxy set; the proxy that worked is remembered (`<home>/net.json`). `HEARTH_NO_AUTO_PROXY=1` turns the client side off.
 
 ### Passwordless login through a platform broker
 

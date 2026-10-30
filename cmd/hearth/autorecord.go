@@ -87,19 +87,17 @@ func askAutoCredentials(e *client.Engine) {
 	if n == 0 {
 		return
 	}
-	fmt.Printf("%d credential(s) here are not recorded (SSH keys, agent / git logins, token files).\n", n)
-	a, ok := askLine("Keep new credentials of your machines automatically (end-to-end encrypted, restored on every new machine)? [Y/n] ")
+	a, ok := askLine(fmt.Sprintf("  %-12s %s here not recorded yet (SSH keys, agent and git logins, token files).\n%15sKeep new credentials of your machines automatically (end-to-end encrypted)? [Y/n] ",
+		"credentials", plural(n, "credential", "credentials"), ""))
 	if !ok {
 		return
 	}
 	on := !strings.EqualFold(a, "n") && !strings.EqualFold(a, "no")
 	if err := client.SetAutoCredentials(e.Home, on); err != nil {
-		fmt.Println("      config:", err)
+		fmt.Println("  config      ", err)
 		return
 	}
-	if on {
-		fmt.Println("      credentials are recorded automatically (off: hearth learn --auto-credentials=false)")
-	} else {
-		fmt.Println("      credentials only when you choose: hearth learn (on: hearth learn --auto-credentials=true)")
+	if !on {
+		fmt.Printf("%15sonly when you choose: hearth learn\n", "")
 	}
 }

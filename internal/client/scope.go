@@ -117,7 +117,7 @@ func otherWorkspace(dir, home string) bool {
 		ws = FindWorkspace(dir)
 		wsCache.Store(dir, wsEntry{ws, time.Now()})
 	}
-	return ws != "" && filepath.Clean(filepath.Join(ws, ".hearth")) != filepath.Clean(home)
+	return ws != "" && filepath.Clean(WorkspaceHome(ws)) != filepath.Clean(home)
 }
 
 // firstJSONField scans the first lines of a JSONL file for a value.

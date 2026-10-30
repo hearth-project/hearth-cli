@@ -24,7 +24,7 @@ func Home() string {
 		return h
 	}
 	if ws := FindWorkspace("."); ws != "" {
-		return filepath.Join(ws, ".hearth")
+		return WorkspaceHome(ws)
 	}
 	h, err := os.UserHomeDir()
 	if err != nil {
@@ -67,7 +67,18 @@ func InitWorkspace(dir string) (string, error) {
 	if fi, err := os.Stat(abs); err != nil || !fi.IsDir() {
 		return "", fmt.Errorf("%s is not a directory", abs)
 	}
-	home := filepath.Join(abs, ".hearth")
+	base := filepath.Join(abs, ".hearth")
+	if err := os.MkdirAll(base, 0o700); err != nil {
+		return "", err
+	}
+	// The marker FindWorkspace looks for, also when this machine's home is
+	// another one (a shared disk where another machine owns <ws>/.hearth).
+	if WorkspaceOf(base) == "" {
+		if err := saveJSON(filepath.Join(base, workspaceMarker), workspaceFile{Path: abs}); err != nil {
+			return "", err
+		}
+	}
+	home := WorkspaceHome(abs)
 	if err := os.MkdirAll(home, 0o700); err != nil {
 		return "", err
 	}
@@ -250,7 +261,13 @@ func LoadConfig(home string) (*Config, error) {
 }
 
 // SaveConfig writes config.json with 0600 permissions.
-func SaveConfig(home string, c *Config) error { return saveJSON(filepath.Join(home, "config.json"), c) }
+func SaveConfig(home string, c *Config) error {
+	if err := saveJSON(filepath.Join(home, "config.json"), c); err != nil {
+		return err
+	}
+	claimHost(home)
+	return nil
+}
 
 // The decrypted vault key is cached locally (0600) so the daemon can run
 // without the password. Anyone with root on this machine can read it; see

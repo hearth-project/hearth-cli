@@ -97,6 +97,7 @@ func HTTPClient(home string) (*http.Client, error) {
 		pemData = append(append(pemData, b...), '\n')
 	}
 	useRememberedProxy(home)
+	autoProxyFor(home)
 	if len(pemData) == 0 {
 		return &http.Client{Timeout: 60 * time.Second, Transport: fastTransport()}, nil
 	}
