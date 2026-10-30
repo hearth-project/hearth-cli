@@ -16,7 +16,12 @@ import (
 //	skills/<name>/SKILL.md (+ any references/, scripts/ ...)
 //	agents/<name>.md
 //	instructions/AGENTS.md
-type Library struct{ Root string }
+type Library struct {
+	Root string
+	// Exclude lists bundle paths (skills/<name>/..., slash separated) left
+	// out of Bundle: credential files that travel encrypted instead.
+	Exclude map[string]bool
+}
 
 // SkillsDir is where the single copy of the skills lives: skills.dir from
 // config.toml when set, else <library>/skills.

@@ -305,3 +305,29 @@ func SaveTools(home string, m *tools.Manifest) error {
 	os.Remove(filepath.Join(LibraryDir(home), "tools.json"))
 	return nil
 }
+
+// AddResident keeps newly added skills in the agents' own skill lists: a
+// skill the user just imported should show up there now, not only through
+// skill search. With no resident list every skill is resident already.
+// Returns the names added.
+func AddResident(home string, names ...string) ([]string, error) {
+	c, err := UserConfig(home)
+	if err != nil || c.Skills == nil || len(c.Skills.Resident) == 0 || len(names) == 0 {
+		return nil, err
+	}
+	have := map[string]bool{}
+	for _, n := range c.Skills.Resident {
+		have[n] = true
+	}
+	var added []string
+	for _, n := range names {
+		if n != "" && !have[n] {
+			c.Skills.Resident, have[n] = append(c.Skills.Resident, n), true
+			added = append(added, n)
+		}
+	}
+	if len(added) == 0 {
+		return nil, nil
+	}
+	return added, SaveUserConfig(home, c)
+}

@@ -27,8 +27,9 @@ func RenderManifest(home string) string { return filepath.Join(home, "render.jso
 func BackupDir(home string) string { return filepath.Join(home, "backup") }
 
 type libState struct {
-	Version int64  `json:"version"`
-	SHA256  string `json:"sha256"`
+	Version    int64  `json:"version"`
+	SHA256     string `json:"sha256"`
+	SecretsSHA string `json:"secrets_sha256,omitempty"` // credential files of skills (encrypted secrets)
 }
 
 func libStatePath(home string) string { return filepath.Join(home, "library-state.json") }
@@ -83,6 +84,8 @@ type LibResult struct {
 }
 
 // LibPush uploads the local library if it changed since the last sync.
+// Credential files inside skills go up as encrypted secrets instead of in
+// the bundle. When the server changed too, the two are merged.
 func (e *Engine) LibPush(allowSecrets bool) (LibResult, error) {
 	if _, err := EnsureUserConfig(e.Home); err != nil {
 		return LibResult{}, err
@@ -92,54 +95,66 @@ func (e *Engine) LibPush(allowSecrets bool) (LibResult, error) {
 		return LibResult{}, err
 	}
 	lib := library.Library{Root: LibraryDir(e.Home)}
-	data, sum, err := lib.Bundle()
+	data, sum, secSum, secrets, err := e.libBundle()
 	if err != nil {
 		return LibResult{}, err
 	}
-	if sum == st.SHA256 {
+	if sum == st.SHA256 && secSum == st.SecretsSHA {
 		return LibResult{Op: "up-to-date", Version: st.Version}, nil
 	}
 	if !allowSecrets {
+		// Outside the skills (config, recipes, files) a credential is a
+		// mistake to fix, not a file to keep encrypted.
 		fs, err := library.ScanSecrets(lib.Root)
 		if err != nil {
 			return LibResult{}, err
 		}
-		if sd := lib.SkillsDir(); filepath.Clean(sd) != filepath.Clean(filepath.Join(lib.Root, "skills")) {
-			more, err := library.ScanSecrets(sd)
-			if err != nil {
-				return LibResult{}, err
+		var bad []library.Finding
+		for _, f := range fs {
+			if !strings.HasPrefix(filepath.ToSlash(f.File), "skills/") {
+				bad = append(bad, f)
 			}
-			fs = append(fs, more...)
 		}
-		if len(fs) > 0 {
-			return LibResult{}, &SecretsError{Findings: fs}
+		if len(bad) > 0 {
+			return LibResult{}, &SecretsError{Findings: bad}
 		}
+	}
+	if secSum != st.SecretsSHA {
+		if _, err := e.pushLibSecrets(secrets); err != nil {
+			return LibResult{}, fmt.Errorf("credential files of skills: %w", err)
+		}
+	}
+	if sum == st.SHA256 {
+		st.SecretsSHA = secSum
+		return LibResult{Op: "pushed", Version: st.Version}, saveJSON(libStatePath(e.Home), st)
 	}
 	v, err := e.API.PutLibrary(st.Version, sum, data)
 	if StatusOf(err) == 409 {
-		return LibResult{}, fmt.Errorf("%w: server has a newer version; run `hearth lib pull` (local changes are backed up)", ErrLibraryConflict)
+		return e.libMerge()
 	}
 	if err != nil {
 		return LibResult{}, err
 	}
-	return LibResult{Op: "pushed", Version: v}, saveJSON(libStatePath(e.Home), libState{Version: v, SHA256: sum})
+	e.saveLibBase(data)
+	return LibResult{Op: "pushed", Version: v}, saveJSON(libStatePath(e.Home), libState{Version: v, SHA256: sum, SecretsSHA: secSum})
 }
 
-// LibPull replaces the local library with the server's latest version. If
-// the local library has unsynced changes it refuses unless force is set;
-// the replaced library is always moved to BackupDir first.
+// LibPull brings the server's latest library here. Local changes that
+// were not pushed yet are merged with it (force: replaced); the replaced
+// library is always moved to BackupDir first.
 func (e *Engine) LibPull(force bool) (LibResult, error) {
 	st, err := loadLibState(e.Home)
 	if err != nil {
 		return LibResult{}, err
 	}
 	lib := library.Library{Root: LibraryDir(e.Home)}
-	_, localSum, err := lib.Bundle()
+	_, localSum, secSum, _, err := e.libBundle()
 	if err != nil {
 		return LibResult{}, err
 	}
+	localChanged := localSum != st.SHA256 || secSum != st.SecretsSHA
 	known := st.Version
-	if localSum != st.SHA256 {
+	if localChanged {
 		known = -1 // always fetch when local differs, to report precisely
 	}
 	data, v, sum, err := e.API.GetLibrary(known)
@@ -152,12 +167,12 @@ func (e *Engine) LibPull(force bool) (LibResult, error) {
 	if err != nil {
 		return LibResult{}, err
 	}
-	if sum == localSum {
-		return LibResult{Op: "up-to-date", Version: v}, saveJSON(libStatePath(e.Home), libState{Version: v, SHA256: sum})
+	if sum == localSum && !localChanged {
+		return LibResult{Op: "up-to-date", Version: v}, nil
 	}
 	_, statErr := os.Stat(lib.Root)
-	if localSum != st.SHA256 && !force && !os.IsNotExist(statErr) {
-		return LibResult{}, fmt.Errorf("%w: push first, or pull with --force (local copy is backed up)", ErrLibraryConflict)
+	if localChanged && !force && !os.IsNotExist(statErr) {
+		return e.libMerge()
 	}
 	tmp := lib.Root + ".incoming-" + strconv.FormatInt(time.Now().UnixNano(), 36)
 	got, err := library.Extract(data, tmp)
@@ -169,8 +184,20 @@ func (e *Engine) LibPull(force bool) (LibResult, error) {
 		os.RemoveAll(tmp)
 		return LibResult{}, fmt.Errorf("library bundle hash mismatch")
 	}
-	// The bundle always carries skills/; config.toml decides whether they
-	// live in the library or in the user's own directory.
+	if err := e.installLibrary(tmp); err != nil {
+		return LibResult{}, err
+	}
+	e.saveLibBase(data)
+	_, _ = e.restoreLibSecrets()
+	_, _, secSum, _, _ = e.libBundle()
+	return LibResult{Op: "pulled", Version: v}, saveJSON(libStatePath(e.Home), libState{Version: v, SHA256: sum, SecretsSHA: secSum})
+}
+
+// installLibrary makes the extracted tree tmp the local library. The
+// bundle always carries skills/; config.toml decides whether they live in
+// the library or in the user's own directory.
+func (e *Engine) installLibrary(tmp string) error {
+	lib := library.Library{Root: LibraryDir(e.Home)}
 	newLib := library.Library{Root: tmp}
 	newSkills := newLib.SkillsDir()
 	extracted := filepath.Join(tmp, "skills")
@@ -179,7 +206,7 @@ func (e *Engine) LibPull(force bool) (LibResult, error) {
 		if _, err := os.Stat(extracted); err == nil {
 			if err := moveSkills(extracted, newSkills, filepath.Join(BackupDir(e.Home), time.Now().Format("20060102-150405"))); err != nil {
 				os.RemoveAll(tmp)
-				return LibResult{}, err
+				return err
 			}
 		}
 		if filepath.Clean(oldSkills) != filepath.Clean(newSkills) {
@@ -192,17 +219,17 @@ func (e *Engine) LibPull(force bool) (LibResult, error) {
 	}
 	if _, err := os.Stat(lib.Root); err == nil {
 		bak := filepath.Join(BackupDir(e.Home), time.Now().Format("20060102-150405"), "library")
+		for i := 2; fileExists(bak); i++ { // two syncs within a second
+			bak = filepath.Join(BackupDir(e.Home), time.Now().Format("20060102-150405")+"-"+strconv.Itoa(i), "library")
+		}
 		if err := os.MkdirAll(filepath.Dir(bak), 0o700); err != nil {
-			return LibResult{}, err
+			return err
 		}
 		if err := os.Rename(lib.Root, bak); err != nil {
-			return LibResult{}, err
+			return err
 		}
 	}
-	if err := os.Rename(tmp, lib.Root); err != nil {
-		return LibResult{}, err
-	}
-	return LibResult{Op: "pulled", Version: v}, saveJSON(libStatePath(e.Home), libState{Version: v, SHA256: sum})
+	return os.Rename(tmp, lib.Root)
 }
 
 // SetSkillsDir moves the single skills copy to dir (portable path) and
@@ -302,7 +329,7 @@ func copyTree(src, dst string) error {
 }
 
 // LibAuto is run periodically by the daemon: push local edits, pull and
-// render remote edits, and report (not resolve) conflicts.
+// render remote edits; when both changed, merge them.
 func (e *Engine) LibAuto() (LibResult, error) {
 	r, err := e.libAuto()
 	e.recordLibError(err)
@@ -314,19 +341,24 @@ func (e *Engine) libAuto() (LibResult, error) {
 	if err != nil {
 		return LibResult{}, err
 	}
-	_, localSum, err := library.Library{Root: LibraryDir(e.Home)}.Bundle()
+	_, localSum, secSum, _, err := e.libBundle()
 	if err != nil {
 		return LibResult{}, err
 	}
 	_, statErr := os.Stat(LibraryDir(e.Home))
 	neverSynced := st.SHA256 == "" && os.IsNotExist(statErr)
-	if localSum != st.SHA256 && !neverSynced {
-		return e.LibPush(false) // 409 surfaces as ErrLibraryConflict
+	var r LibResult
+	if (localSum != st.SHA256 || secSum != st.SecretsSHA) && !neverSynced {
+		r, err = e.LibPush(false) // a conflict is merged
+	} else {
+		r, err = e.LibPull(false)
 	}
-	r, err := e.LibPull(false)
-	if err == nil && r.Op == "pulled" {
-		_, err = e.Render(false)
+	if err != nil {
+		return r, err
 	}
+	// Every pass: agent homes may have moved (hearth agents isolate) and
+	// residents changed; rendering an unchanged library changes nothing.
+	_, err = e.Render(false)
 	return r, err
 }
 

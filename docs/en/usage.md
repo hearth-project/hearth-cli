@@ -118,7 +118,7 @@ hearth secret restore                                  # write every file secret
 hearth secret exec -- <command>                        # UPPER_CASE secrets as environment variables
 ```
 
-When a skill or script needs a token, do not put the value in the skill: keep it in a local auth file (e.g. `${WORKSPACE}/.config/<tool>/…`), back that file up with `secret set --file`, and have the skill read the file. The library is scanned for likely secrets before upload and refused if any are found; mark documented examples with a `hearth:allow-secret` comment.
+When a skill or script needs a token, do not put the value in the skill: keep it in a local auth file (e.g. `${WORKSPACE}/.config/<tool>/…`), back that file up with `secret set --file`, and have the skill read the file. A credential file a skill ships with (a cloud CLI's `credentials`, a key, a file only you may read) is kept out of the plaintext library: it syncs end-to-end encrypted and comes back into the skill on your other machines. Likely secrets elsewhere in the library (config, recipes, agents) still block the upload; mark documented examples with a `hearth:allow-secret` comment.
 
 ## 5. Recording this machine's setup (learn)
 

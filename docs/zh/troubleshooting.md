@@ -47,7 +47,7 @@ Desktop 运行时 `hearth session restore` 会通过它的后端让会话立即�
 ## library 与凭证
 
 **`library: refusing to upload: N likely secret(s) in the library`。**
-library（skills、agents、配置）在服务器上明文保存，发现疑似凭证会拒绝上传，后续 library 同步（包括 `config.toml` `[backup]`）都会停住。把真实值移到本地认证文件，用 `hearth secret set <名字> --file <文件> --restore-to <路径>` 加密备份，skill 从文件读取；确实是文档示例的行加注释 `hearth:allow-secret`。
+library（skills、agents、配置）在服务器上明文保存。skill 里的凭证文件会自动加密同步；其他位置（配置、recipes、agent 文件）发现疑似凭证会拒绝上传，后续 library 同步（包括 `config.toml` `[backup]`）都会停住。把真实值移到本地认证文件，用 `hearth secret set <名字> --file <文件> --restore-to <路径>` 加密备份，skill 从文件读取；确实是文档示例的行加注释 `hearth:allow-secret`。
 
 **新机器上缺少某个认证文件。** `hearth secret list` 确认已保存，`hearth secret restore` 写回；没有保存过就在原机器 `hearth learn` 或 `hearth secret set --file`。
 
