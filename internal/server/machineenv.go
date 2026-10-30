@@ -58,6 +58,7 @@ type reportedHealth struct {
 			Gateway  bool   `json:"gateway"`
 			Reach    *bool  `json:"reach"`
 			Detail   string `json:"detail"`
+			Shared   bool   `json:"shared"`
 		} `json:"route"`
 	} `json:"tools"`
 	Client     string   `json:"client"` // Hearth build that made the report (newer than the stored one right after an update)
@@ -120,6 +121,11 @@ func (s *Server) machineEnv(healthJSON, clientVersion string) *MachineEnv {
 			add(EnvProblem{Level: "error", Code: "bypass", Tool: "codex", Detail: d})
 		case ro.Reach != nil && !*ro.Reach:
 			add(EnvProblem{Level: "error", Code: "unreachable", Tool: "codex", Have: ro.BaseURL, Detail: ro.Detail})
+		}
+		// The gateway login sits in the account-wide default: everybody on
+		// this account whose shell does not set CODEX_HOME uses it.
+		if ro.Shared && ro.Gateway {
+			add(EnvProblem{Level: "warn", Code: "shared_home", Tool: "codex", Detail: ro.Home})
 		}
 	}
 	for _, name := range []string{"codex", "claude"} {

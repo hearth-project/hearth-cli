@@ -258,6 +258,11 @@ func collectOnboard() onboardStatus {
 	if !st.DaemonRunning {
 		add(nextStep{ID: "daemon", Why: "background sync is not running", Command: "hearth daemon start"})
 	}
+	// Shared account: the Codex config everybody falls back to is this person's.
+	if client.SharedDefaultHome(home, "codex") && st.Agents["codex"].Enabled {
+		add(nextStep{ID: "isolate-codex", Why: "Codex uses the shared ~/.codex: if your codex-mixin login is there, everyone on this account whose shell does not set CODEX_HOME uses it",
+			AskUser: "Move your Codex config and conversations from ~/.codex into your workspace?", Command: "hearth agents isolate codex --yes"})
+	}
 	// Machines this one can SSH to but that the user's apps do not list.
 	if missing := sshConfigMissing(e); len(missing) > 0 {
 		add(nextStep{ID: "ssh-config", Why: fmt.Sprintf("%d of your machines are not in ~/.ssh/config, so Codex Desktop / VS Code / Cursor do not list them (%s)", len(missing), joinMax(missing, 3)),

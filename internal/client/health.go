@@ -173,6 +173,9 @@ func (e *Engine) MachineHealth() HealthReport {
 		} else if ro.Reach != nil && !*ro.Reach {
 			r.Issues = append(r.Issues, "codex cannot reach "+ro.BaseURL+": "+ro.Detail)
 		}
+		if ro.Shared && ro.Gateway {
+			r.Issues = append(r.Issues, "your codex-mixin login is in the shared "+ro.Home+": everyone on this account falls back to it (hearth agents isolate codex)")
+		}
 	}
 	if r.RecipeTodo > 0 {
 		r.Issues = append(r.Issues, "restore flow has "+strconv.Itoa(r.RecipeTodo)+" pending step(s)")
