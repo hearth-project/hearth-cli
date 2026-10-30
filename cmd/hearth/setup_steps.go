@@ -87,8 +87,15 @@ func printSetupSummary(e *client.Engine, conversations, secretFiles int, envLeft
 		where = strings.Join(withSkill, " / ")
 	}
 	if len(envLeft) > 0 {
-		next = append(next, fmt.Sprintf("software of this machine (%d step(s): %s): in %s ask \"用 hearth 恢复这台机器的环境\"; it goes through hearth recipe plan with you",
-			len(envLeft), joinMax(envLeft, 4), where))
+		agent := "Codex"
+		if ma := client.MachineAgents(home); len(ma) > 0 && ma[0] != "codex" {
+			agent = map[string]string{"claude": "Claude Code", "comate": "Comate"}[ma[0]]
+		}
+		alias := client.MachineAlias(e.Cfg.DeviceName, factsMap())
+		next = append(next, fmt.Sprintf("software of this machine (%d step(s): %s). On any other machine with Hearth, tell its agent:\n"+
+			"      \"恢复 %s 的 %s 环境\"\n"+
+			"    it picks the restore flow for this kind of machine and sets it up here over hearth ssh, checking each step (or here, in %s: \"用 hearth 恢复这台机器的环境\")",
+			len(envLeft), joinMax(envLeft, 4), alias, agent, where))
 	}
 	if len(withSkill) > 0 {
 		next = append(next, fmt.Sprintf("in %s, ask \"用 hearth\" for anything else (e.g. \"恢复上一台机器的会话\"); restart the agent if it was open", where))

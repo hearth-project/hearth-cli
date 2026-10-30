@@ -40,7 +40,7 @@ curl -fsSL -k https://<server>/install.sh | sh
 2. 安装到 `~/.local/bin/hearth`（`HEARTH_BIN_DIR` 可改）。
 3. 把该目录写入 `~/.bashrc`、`~/.profile`（以及已存在的 `~/.zshrc`、`~/.bash_profile`），只写一次；PATH 中已有可写目录（如以 root 运行时的 `/usr/local/bin`）时，再建一个软链接，当前终端也能直接用。
 4. 从服务器获取组织默认配置（站点配方、登录 token 位置等，不需要登录），给本机已有的 Codex、Claude Code、Comate 安装 `hearth` skill。
-5. 除非指定 `--install-only`，运行 `hearth setup`：在终端读取主密码（不回显），登录或注册，恢复最近 10 条会话（`--sessions N` 改条数，0 为全部）、skills、凭证和安装步骤，启动后台同步。
+5. 除非指定 `--install-only`，运行 `hearth setup`：在终端读取主密码（不回显），登录或注册，询问这台机器的工作目录（推荐你同类型机器用的目录，没有就推荐用户目录），恢复最近 10 条会话（`--sessions N` 改条数，0 为全部）、skills、凭证和安装步骤，启动后台同步。最后打印一句话（「恢复 <机器> 的 Codex 环境」），在另一台已登录 Hearth 的机器上告诉 agent，它会通过 `hearth ssh` 给这台机器装好软件。
 
 ### 安装选项
 

@@ -85,11 +85,11 @@ The installer:
 4. copies the skills and agents your Codex / Claude Code / Comate already have into your library (items that look like they hold a credential are listed and left out; `--no-import` skips), so the next machine has them;
 5. starts background sync: sessions every 60 s, skills / settings every 20 min. A final `done:` line sums up the conversations, skills, agents and credential files restored, followed by the next steps.
 
-The installer installs no other software. On later machines, ask your agent "use hearth to restore this machine's environment": it follows your recorded restore flow (`hearth recipe plan`) and the [client software setup guide](client-env.md) to install Node, Codex CLI, Claude Code, codex-mixin and so on with you.
+The installer installs no other software. On later machines the software is set up by your agent, preferably from another machine (Step 3): it follows your recorded restore flow (`hearth recipe plan`) and the [client software setup guide](client-env.md) to install Node, Codex CLI, Claude Code, codex-mixin and so on.
 
 > The recovery key is shown once: store it in a password manager. It is the only way back if you forget the master password. Never send the password or the key to anyone, or to an agent.
 
-Several people on one Unix account: first go to your own directory, `mkdir -p ~/work/<you> && cd ~/work/<you> && hearth init .`, then run the install command.
+After the login setup asks for your working directory on this machine (your home on the first machine; later machines get the one your machines of the same kind use). Several people on one Unix account: type your own directory there (or `mkdir -p ~/work/<you> && cd ~/work/<you> && hearth init .` before installing).
 
 ### Record this machine's setup
 
@@ -105,21 +105,30 @@ hearth session list           # synced conversations
 
 ---
 
-## Step 3: a second machine (one-line restore)
+## Step 3: a second machine (install, then restore the software from another machine)
 
-On a new or replacement machine run the same install command:
+**3.1 On the new machine**, run the same install command:
 
 ```bash
 curl -fsSL -k https://<server-host>:8787/install.sh | sh
 ```
 
-After the master password it restores:
+After the master password setup proposes the working directory: the one your machines of the same kind use (same GPU model, else the same GPU family such as B or GB series, else the same OS and CPU), or your home when none is alike. Press Enter or type another; you always confirm it. Then it restores:
 
 - the 10 most recently active conversations (`hearth restore --last 30` for more, `hearth session restore <id>` for specific ones);
 - skills, agents, MCP configuration;
 - SSH keys, git logins and other credentials and auth files;
 - the setup steps you recorded (commands are shown and need your yes first);
 - background sync.
+
+**3.2 From any other machine with Hearth**, restore the software. Setup ends with the sentence to say, e.g.:
+
+```text
+On any other machine with Hearth, tell its agent:
+      "恢复 b-node-gpu-0126 的 Codex 环境"      (restore the Codex environment of b-node-gpu-0126)
+```
+
+That agent finds the new machine (`hearth machine list`: environment check and SSH host name), picks the restore flow for its kind, and installs and checks Node, Codex CLI, codex-mixin, … there over `hearth ssh`; steps that need you (a QR-code login) it hands to you with `hearth ssh -t <machine> -- <command>`. The new machine's environment check turns green in `hearth machine list` and the web console. No other machine at hand: ask the agent on the new machine "use hearth to restore this machine's environment".
 
 From then on, just ask your agent:
 

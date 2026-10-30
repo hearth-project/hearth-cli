@@ -99,25 +99,37 @@ curl -fsSL -k https://<server>:8787/install.sh | sh -s -- --invite <code>    # f
 
 `-k` is only for the first download from a self-signed server; after that the client trusts exactly that server's certificate.
 
-The installer puts `hearth` in `~/.local/bin`, adds the `hearth` skill to Codex / Claude Code / Comate, asks for your master password, and restores the machine:
+The installer puts `hearth` in `~/.local/bin`, adds the `hearth` skill to Codex / Claude Code / Comate, asks for your master password and your working directory on this machine, and restores your files:
 
 ```text
 [1/3] logging in to https://<server>:8787 as you@example.com
+      workspace: your machines like this one (GPU h800) work in /data/you (e.g. gpu-node-12)
+      your working directory on this machine (Enter = /data/you, or type another):
 [2/3] restoring sessions, the skills/agents library and credentials
 [3/3] starting background sync
 
 done: 10 conversation(s) restored; library: 42 skill(s), 3 agent(s); 6 credential / config file(s) written; background sync on.
+next:
+  - software of this machine (4 step(s): codex, codex-mixin, ...). On any other machine with Hearth, tell its agent:
+      "恢复 h800-gpu-node-13 的 Codex 环境"
 ```
+
+The working directory proposed is the one your machines of the same kind use (same GPU model, else the same GPU family, else the same OS and CPU); with none alike it is your home. Press Enter to take it or type another.
+
+### 3. Restore the software from another machine
+
+The new machine has your files; its software (Node, Codex CLI, gateways, …) is set up by your agent. On **any other machine with Hearth**, tell its agent the sentence setup printed, e.g. *"restore the Codex environment of h800-gpu-node-13"*. It looks at the new machine (`hearth machine list`), picks the restore flow for that kind of machine, and installs and checks each step there over `hearth ssh`; steps that need you (a QR-code login) it hands to you with `hearth ssh -t`. No other machine at hand: say *"use hearth to restore this machine's environment"* on the new machine itself. The web console's Machines page shows each machine's environment check.
 
 A new account prints a **recovery key** once. Keep it offline; it is the only way back if you forget the password. Never paste the password or the key into a chat.
 
-### 3. Use it
+### 4. Use it
 
 Ask your agent, in your own words:
 
 | Say | What happens |
 | --- | --- |
-| *"use hearth to restore this machine's environment"* | goes through this machine's recorded setup (Node, Codex CLI, gateways, …) with you, checking each step |
+| *"restore the Codex environment of <machine>"* | sets up another machine's software over `hearth ssh`, following the restore flow for its kind, checking each step |
+| *"use hearth to restore this machine's environment"* | the same for the machine you are on |
 | *"restore my conversations from the last machine"* | lists them newest first and restores the ones you pick (into the open Codex Desktop window too) |
 | *"don't upload Claude Code sessions"* | changes your upload selection for all your machines |
 
@@ -127,6 +139,7 @@ Or the CLI:
 hearth status                        # login, sync, storage, what is left to do
 hearth session list                  # conversations of all machines, newest first
 hearth session restore <id> …        # restore chosen ones
+hearth machine list                  # your machines: environment check, SSH host names
 hearth recipe plan                   # this machine's software setup steps
 hearth config --edit                 # every setting, in one file
 ```
