@@ -283,6 +283,7 @@ func daemonCmd() *cobra.Command {
 				log.Printf("ssh key: %v", err)
 			}
 			var lastSSH string
+			lastStale := 0
 			skillTargetsSeen := fmt.Sprint(len(skillTargets()), skillTargets()) // setup installed it for these
 			var lastHealth time.Time
 			proxySaved := false
@@ -346,6 +347,14 @@ func daemonCmd() *cobra.Command {
 						log.Printf("identity block: %v", err)
 					} else if len(ch) > 0 {
 						log.Printf("identity block placed at the end of %s", strings.Join(ch, ", "))
+					}
+					// Codex app-servers started before a switch keep the old home;
+					// reported once per change (the environment check lists them).
+					if n := len(client.StaleAppServers(e.Home, e.Cfg.Email)); n != lastStale {
+						if n > 0 {
+							log.Printf("%d codex app-server process(es) of yours still use an old CODEX_HOME: hearth agents restart-app-server", n)
+						}
+						lastStale = n
 					}
 				}
 				if time.Since(lastMemory) >= memoryInterval {
@@ -1014,6 +1023,9 @@ func selfUpdateCmd() *cobra.Command {
 					state = "off"
 				}
 				fmt.Printf("version %s; automatic updates by the daemon: %s (every %s)\n", version, state, defaultUpdateInterval)
+				if client.DevBuild(version) {
+					fmt.Println("this is a development build: the daemon keeps it until you run hearth self-update")
+				}
 				return nil
 			default:
 				return fmt.Errorf("--auto takes on, off or status")
@@ -1036,6 +1048,9 @@ func selfUpdateCmd() *cobra.Command {
 			if !r.Updated {
 				fmt.Printf("%s is up to date (%s)\n", r.Path, describeBuild(r))
 				return nil
+			}
+			if why := client.AutoUpdateSkip(version, r.Version); why != "" {
+				fmt.Printf("note: replaced %s; the daemon would have kept it: %s\n", version, why)
 			}
 			fmt.Printf("updated %s to %s (%s)\n", r.Path, client.PlatformBinary(), describeBuild(r))
 			if client.DaemonPID(home) != 0 {
@@ -1065,6 +1080,9 @@ func selfUpdateCmd() *cobra.Command {
 // small manifest request; the binary is downloaded only when it changed).
 const defaultUpdateInterval = 30 * time.Minute
 
+// lastUpdateSkip: the daemon logs why it keeps this build once, not every check.
+var lastUpdateSkip string
+
 func describeBuild(r client.UpdateResult) string {
 	if r.Version != "" {
 		return r.Version + ", " + r.SHA256[:12]
@@ -1089,11 +1107,15 @@ func refreshSkills(exe string) (string, error) {
 // daemonUpdate installs a new build published on the server. It returns
 // true when the binary was replaced and the daemon should re-exec.
 func daemonUpdate(e *client.Engine, exe string) bool {
-	r, err := client.SelfUpdateWith(e.Home, e.Cfg.Server, exe, client.UpdateOptions{Auto: true})
+	r, err := client.SelfUpdateWith(e.Home, e.Cfg.Server, exe, client.UpdateOptions{Auto: true, Current: version})
 	if err != nil {
 		log.Printf("self-update: %v", err)
 		return false
 	}
+	if r.Skipped != lastUpdateSkip && r.Skipped != "" {
+		log.Printf("self-update: not installing the server's build: %s", r.Skipped)
+	}
+	lastUpdateSkip = r.Skipped
 	if !r.Updated {
 		return false
 	}

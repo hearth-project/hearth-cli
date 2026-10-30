@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -60,6 +61,9 @@ type ToolHealth struct {
 	// a login shell of this person sets it) and whether it reaches it.
 	Route  *CodexRoute `json:"route,omitempty"`
 	Detail string      `json:"detail,omitempty"` // why the check failed
+	// StaleAppServers: for codex, this person's app-servers still on a
+	// CODEX_HOME Hearth no longer sets (started before a switch).
+	StaleAppServers []AppServer `json:"stale_app_servers,omitempty"`
 }
 
 var semverRE = regexp.MustCompile(`\d+\.\d+\.\d+`)
@@ -140,7 +144,12 @@ func (e *Engine) MachineHealth() HealthReport {
 				th.OK, th.Detail = cachedMixinDoctor(bin)
 			}
 			if t.name == "codex" && r.Agents["codex"].Used {
-				th.Route = cachedCodexRoute(e.Home, e.Cfg.Email)
+				if ro := cachedCodexRoute(e.Home, e.Cfg.Email); ro != nil {
+					c := *ro
+					c.Missing = codexLoginMissing(c.Home) // cheap: fresh, not from the cache
+					th.Route = &c
+				}
+				th.StaleAppServers = StaleAppServers(e.Home, e.Cfg.Email)
 			}
 		}
 		if t.name == "codex-mixin" {
@@ -168,7 +177,9 @@ func (e *Engine) MachineHealth() HealthReport {
 		r.Issues = append(r.Issues, "codex-mixin doctor: "+m.Detail)
 	}
 	if ro := r.Tools["codex"].Route; ro != nil {
-		if r.Tools["codex-mixin"].Installed && !ro.Gateway {
+		if len(ro.Missing) > 0 {
+			r.Issues = append(r.Issues, "codex has no login: CODEX_HOME="+ro.Home+" has no "+strings.Join(ro.Missing, ", ")+" (Codex Desktop asks to log in)"+strings.TrimRight(" "+ro.SetBy, " "))
+		} else if r.Tools["codex-mixin"].Installed && !ro.Gateway {
 			r.Issues = append(r.Issues, "codex does not go through codex-mixin: CODEX_HOME="+ro.Home+" "+ro.SetBy)
 		} else if ro.Reach != nil && !*ro.Reach {
 			r.Issues = append(r.Issues, "codex cannot reach "+ro.BaseURL+": "+ro.Detail)
@@ -176,6 +187,10 @@ func (e *Engine) MachineHealth() HealthReport {
 		if ro.Shared && ro.Gateway {
 			r.Issues = append(r.Issues, "your codex-mixin login is in the shared "+ro.Home+": everyone on this account falls back to it (hearth agents isolate codex)")
 		}
+	}
+	if st := r.Tools["codex"].StaleAppServers; len(st) > 0 {
+		r.Issues = append(r.Issues, fmt.Sprintf("%d codex app-server process(es) of yours still use CODEX_HOME=%s from before the switch to %s: hearth agents restart-app-server",
+			len(st), st[0].CodexHome, AgentHomeOf(e.Home, "codex")))
 	}
 	if r.RecipeTodo > 0 {
 		r.Issues = append(r.Issues, "restore flow has "+strconv.Itoa(r.RecipeTodo)+" pending step(s)")

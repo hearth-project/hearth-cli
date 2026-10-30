@@ -84,7 +84,13 @@ key are removed). A backup of the shared default's config goes to
 			for _, n := range r.Notes {
 				fmt.Println("note:", n)
 			}
-			fmt.Println("Your sessions through Hearth's sshd (hearth ssh, Codex Desktop over its ssh alias) use it; restart open Codex windows / app-servers on this machine.")
+			fmt.Println("Your sessions through Hearth's sshd (hearth ssh, Codex Desktop over its ssh alias) use it.")
+			if agent == "codex" {
+				// --yes approved the move, not ending running sessions: ask (or print the command).
+				if err := restartStaleAppServers(home, e.Cfg.Email, false); err != nil {
+					fmt.Fprintln(os.Stderr, "app-servers:", err)
+				}
+			}
 			if r.Sessions > 0 {
 				fmt.Printf("Your old conversation files are still in %s (readable by everyone on the account); delete them there when the new home works.\n", r.From)
 			}
@@ -101,6 +107,76 @@ func orDefault(s, d string) string {
 		return d
 	}
 	return s
+}
+
+// restartStaleAppServers stops this person's Codex app-servers that still
+// use the CODEX_HOME from before a switch (asking first unless yes). Codex
+// Desktop starts a new one when it reconnects, and that one gets the new home.
+func restartStaleAppServers(home, email string, yes bool) error {
+	st := client.StaleAppServers(home, email)
+	if len(st) == 0 {
+		return nil
+	}
+	want := client.AgentHomeOf(home, "codex")
+	fmt.Printf("%d Codex app-server process(es) of yours still use the old CODEX_HOME (they keep the home they started with):\n", len(st))
+	inside := false
+	for _, a := range st {
+		mark := ""
+		if a.Ancestor {
+			mark, inside = "  (this session runs inside it)", true
+		}
+		fmt.Printf("  pid %-7d CODEX_HOME=%s  %s%s\n", a.PID, a.CodexHome, a.Command, mark)
+	}
+	if !yes {
+		if !isTTY() {
+			fmt.Println("stop them with: hearth agents restart-app-server --yes (Codex Desktop reconnects and starts one on " + want + ")")
+			return nil
+		}
+		q := "Stop them? Codex Desktop reconnects and starts a new one on " + want
+		if inside {
+			q += "; this session ends and reconnects too"
+		}
+		fmt.Print(q + " [y/N] ")
+		line, _ := stdinLines.ReadString('\n')
+		if l := strings.ToLower(strings.TrimSpace(line)); l != "y" && l != "yes" {
+			fmt.Println("left running: hearth agents restart-app-server stops them later")
+			return nil
+		}
+	}
+	left, err := client.StopAppServers(st, 5*time.Second)
+	fmt.Printf("stopped %d of %d; reconnect Codex Desktop to this machine if it does not by itself\n", len(st)-len(left), len(st))
+	for _, a := range left {
+		fmt.Printf("  still running: pid %d (kill %d)\n", a.PID, a.PID)
+	}
+	return err
+}
+
+func agentsRestartAppServerCmd() *cobra.Command {
+	var yes bool
+	c := &cobra.Command{
+		Use:   "restart-app-server",
+		Short: "Stop your Codex app-servers that still use the CODEX_HOME from before Hearth switched it (Codex Desktop starts new ones)",
+		Long: `Codex Desktop starts a long-running codex app-server on a remote machine and
+it keeps the CODEX_HOME of the session that started it. After Hearth changes
+your agent home (hearth agents isolate, a new identity block), those servers
+still use the old home until they restart. This stops the ones of your
+sessions (HEARTH_USER) whose CODEX_HOME is the account-wide ~/.codex or a home
+Hearth set before; other people's processes are not touched.`,
+		Args: cobra.NoArgs,
+		RunE: func(*cobra.Command, []string) error {
+			e, err := engine()
+			if err != nil {
+				return err
+			}
+			if len(client.StaleAppServers(e.Home, e.Cfg.Email)) == 0 {
+				fmt.Println("no app-server of yours uses an old CODEX_HOME (now " + client.AgentHomeOf(e.Home, "codex") + ")")
+				return nil
+			}
+			return restartStaleAppServers(e.Home, e.Cfg.Email, yes)
+		},
+	}
+	c.Flags().BoolVarP(&yes, "yes", "y", false, "do not ask")
+	return c
 }
 
 func agentsWhereCmd() *cobra.Command {

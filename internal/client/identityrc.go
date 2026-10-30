@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -20,6 +21,58 @@ import (
 // Everyone else's sessions are left as they are.
 
 func identityScript(home string) string { return filepath.Join(shellDir(home), "identity.sh") }
+
+// replacedHomesPath lists agent homes an earlier identity block exported
+// (what processes started before a switch may still use).
+func replacedHomesPath(home string) string {
+	return filepath.Join(shellDir(home), "identity-replaced.json")
+}
+
+// ReplacedAgentHomes returns, per variable (CODEX_HOME, ...), the dirs
+// earlier identity blocks exported and the current one no longer does.
+func ReplacedAgentHomes(home string) map[string][]string {
+	out := map[string][]string{}
+	loadJSON(replacedHomesPath(home), &out)
+	return out
+}
+
+var exportRE = regexp.MustCompile(`(?m)^\s*export ([A-Z_]+)='((?:[^']|'"'"')*)'$`)
+
+// noteReplacedHomes records the agent homes of the block oldBody that the
+// block newBody changes.
+func noteReplacedHomes(home, oldBody, newBody string) error {
+	exports := func(b string) map[string]string {
+		m := map[string]string{}
+		for _, x := range exportRE.FindAllStringSubmatch(b, -1) {
+			m[x[1]] = strings.ReplaceAll(x[2], `'"'"'`, "'")
+		}
+		return m
+	}
+	was, now := exports(oldBody), exports(newBody)
+	rep := ReplacedAgentHomes(home)
+	changed := false
+	for _, v := range agentHomeEnv {
+		old := was[v]
+		if old == "" || old == now[v] {
+			continue
+		}
+		list := []string{old}
+		for _, p := range rep[v] {
+			if p != old && p != now[v] && len(list) < 8 {
+				list = append(list, p)
+			}
+		}
+		rep[v], changed = list, true
+	}
+	if !changed {
+		return nil
+	}
+	b, err := jsonIndent(rep)
+	if err != nil {
+		return err
+	}
+	return writeFileAtomic(replacedHomesPath(home), b, 0o600)
+}
 
 // agentHomeExports are the agent config dirs this person uses: the ones
 // configured (hearth agents home) and the defaults of the enabled agents.
@@ -101,6 +154,9 @@ func EnsureIdentityRC(home, email string) ([]string, error) {
 	}
 	body := identityBody(home, email)
 	if cur, _ := os.ReadFile(script); string(cur) != body {
+		if err := noteReplacedHomes(home, string(cur), body); err != nil {
+			return nil, err
+		}
 		if err := writeFileAtomic(script, []byte(body), 0o600); err != nil {
 			return nil, err
 		}
