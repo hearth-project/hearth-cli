@@ -30,6 +30,11 @@ type libState struct {
 	Version    int64  `json:"version"`
 	SHA256     string `json:"sha256"`
 	SecretsSHA string `json:"secrets_sha256,omitempty"` // credential files of skills (encrypted secrets)
+	// SecretFiles are the credential files this library had at the last
+	// sync: only those, when gone, delete their secret (a machine that never
+	// got a file must not delete another machine's upload), and only those
+	// still unchanged here are updated from the server.
+	SecretFiles map[string]string `json:"secret_files,omitempty"` // bundle path -> sha256
 }
 
 func libStatePath(home string) string { return filepath.Join(home, "library-state.json") }
@@ -125,12 +130,12 @@ func (e *Engine) libPush(allowSecrets bool) (LibResult, error) {
 		}
 	}
 	if secSum != st.SecretsSHA {
-		if _, err := e.pushLibSecrets(secrets); err != nil {
+		if _, err := e.pushLibSecrets(secrets, st.SecretFiles); err != nil {
 			return LibResult{}, fmt.Errorf("credential files of skills: %w", err)
 		}
 	}
 	if sum == st.SHA256 {
-		st.SecretsSHA = secSum
+		st.SecretsSHA, st.SecretFiles = secSum, fileSums(secrets)
 		return LibResult{Op: "pushed", Version: st.Version}, saveJSON(libStatePath(e.Home), st)
 	}
 	v, err := e.API.PutLibrary(st.Version, sum, data)
@@ -141,7 +146,7 @@ func (e *Engine) libPush(allowSecrets bool) (LibResult, error) {
 		return LibResult{}, err
 	}
 	e.saveLibBase(data)
-	return LibResult{Op: "pushed", Version: v}, saveJSON(libStatePath(e.Home), libState{Version: v, SHA256: sum, SecretsSHA: secSum})
+	return LibResult{Op: "pushed", Version: v}, saveJSON(libStatePath(e.Home), libState{Version: v, SHA256: sum, SecretsSHA: secSum, SecretFiles: fileSums(secrets)})
 }
 
 // LibPull brings the server's latest library here. Local changes that
@@ -199,8 +204,8 @@ func (e *Engine) libPull(force bool) (LibResult, error) {
 	}
 	e.saveLibBase(data)
 	_, _ = e.restoreLibSecrets()
-	_, _, secSum, _, _ = e.libBundle()
-	return LibResult{Op: "pulled", Version: v}, saveJSON(libStatePath(e.Home), libState{Version: v, SHA256: sum, SecretsSHA: secSum})
+	_, _, secSum, secrets, _ := e.libBundle()
+	return LibResult{Op: "pulled", Version: v}, saveJSON(libStatePath(e.Home), libState{Version: v, SHA256: sum, SecretsSHA: secSum, SecretFiles: fileSums(secrets)})
 }
 
 // installLibrary makes the extracted tree tmp the local library. The
@@ -348,6 +353,12 @@ func (e *Engine) LibAuto() (LibResult, error) {
 
 func (e *Engine) libAuto() (LibResult, error) {
 	defer lockLibrary(e.Home)()
+	// Credential files uploaded by another machine after this one pulled.
+	if _, err := os.Stat(LibraryDir(e.Home)); err == nil {
+		if n, err := e.restoreLibSecrets(); err == nil && n > 0 && e.Logf != nil {
+			e.Logf("library: %d credential file(s) of skills restored", n)
+		}
+	}
 	st, err := loadLibState(e.Home)
 	if err != nil {
 		return LibResult{}, err

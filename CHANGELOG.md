@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Credential files of skills: a machine whose library never had one (it pulled before another machine uploaded it) no longer deletes that upload when it pushes; only files this library had at its last sync and has lost since are deleted (`secret_files` in the library state). Every daemon pass restores missing ones and updates copies unchanged here from newer uploads. An owner-only `SKILL.md` (codex-mixin installs its own that way) is judged by its content, not treated as a credential file.
 - One library sync at a time per home (`<home>/library.lock`): the daemon and a `hearth lib pull` in a terminal merged the same conflict together and the second one reported "the server changed again during a merge".
 - Team copies of a skill leave its credential files out (the ones synced encrypted for its owner: CLI `credentials`, keys, owner-only files); members bring their own. A credential in `SKILL.md` or an agent still refuses the share. Before, a `credentials` file with `ak`/`sk` lines was not recognised and went into the team package.
 - `hearth team unshare <team> <name>...` removes shared skills or agents from a team with every version and its stored objects (maintainers; `DELETE /v1/teams/{team}/packages/{type}/{name}`).

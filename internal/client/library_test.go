@@ -370,3 +370,52 @@ func TestLargeLibraryPulls(t *testing.T) {
 		t.Fatalf("tool not pulled whole: %v", err)
 	}
 }
+
+// A machine that pulled before another one uploaded a skill's credentials
+// must not delete them when it pushes, and gets them on its next pass. An
+// owner-only SKILL.md is the skill's text, not a credential file.
+func TestLibraryCredentialsSurviveOtherMachines(t *testing.T) {
+	en := newEnv(t)
+	a, c := en.machine("a"), en.machine("c")
+	libWrite(t, a, "skills/bos/SKILL.md", "---\nname: bos\ndescription: d\n---\nupload\n")
+	if _, err := a.LibPush(false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.LibPull(false); err != nil {
+		t.Fatal(err)
+	}
+	libWrite(t, a, "skills/bos/assets/credentials", "[Defaults]\nAk = 0123456789abcdef0123\n")
+	if _, err := a.LibAuto(); err != nil {
+		t.Fatal(err)
+	}
+	// c changes something else and syncs (its library never had the file).
+	libWrite(t, c, "skills/other/SKILL.md", "---\nname: other\ndescription: d\n---\nx\n")
+	os.Chmod(filepath.Join(LibraryDir(c.Home), "skills/other/SKILL.md"), 0o600)
+	if _, err := c.LibAuto(); err != nil {
+		t.Fatal(err)
+	}
+	if fs := LibSecretFiles(c.Home); len(fs) != 1 || fs[0] != "skills/bos/assets/credentials" {
+		t.Fatalf("credential files on c: %v (an owner-only SKILL.md is not one)", fs)
+	}
+	ss, _ := a.Secrets()
+	n := 0
+	for _, s := range ss {
+		if strings.HasPrefix(s.RestoreTo, libRestorePrefix) {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Fatalf("a's credential secret deleted by c: %d left", n)
+	}
+	// A newer upload replaces a copy unchanged here.
+	libWrite(t, a, "skills/bos/assets/credentials", "[Defaults]\nAk = 9999999999abcdef0123\n")
+	if _, err := a.LibAuto(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.LibAuto(); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(filepath.Join(LibraryDir(c.Home), "skills/bos/assets/credentials")); !strings.Contains(string(b), "9999") {
+		t.Fatalf("c kept the old credential: %s", b)
+	}
+}
