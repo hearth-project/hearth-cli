@@ -340,6 +340,13 @@ func daemonCmd() *cobra.Command {
 						log.Print(msg)
 					}
 					lastSSH = msg
+					// Shared account: this person's sessions get their own
+					// agent homes back at the end of the rc files.
+					if ch, err := client.EnsureIdentityRC(e.Home, e.Cfg.Email); err != nil {
+						log.Printf("identity block: %v", err)
+					} else if len(ch) > 0 {
+						log.Printf("identity block placed at the end of %s", strings.Join(ch, ", "))
+					}
 				}
 				if time.Since(lastMemory) >= memoryInterval {
 					lastMemory = time.Now()

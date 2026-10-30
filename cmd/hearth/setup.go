@@ -281,6 +281,9 @@ func setupCmd() *cobra.Command {
 				fmt.Println("      ssh key:", err)
 			}
 			if client.SSHOn(home) {
+				if _, err := client.EnsureIdentityRC(e.Home, e.Cfg.Email); err != nil {
+					fmt.Println("      identity block:", err)
+				}
 				if ss, err := e.EnsureSSHD(); err != nil {
 					fmt.Println("      ssh:", err, "(hearth ssh status)")
 				} else if ss.Running {

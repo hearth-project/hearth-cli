@@ -56,7 +56,10 @@ type ToolHealth struct {
 	Version   string `json:"version,omitempty"` // x.y.z
 	Path      string `json:"path,omitempty"`    // where it was found
 	OK        *bool  `json:"ok,omitempty"`      // its own check (codex-mixin doctor); nil = none
-	Detail    string `json:"detail,omitempty"`  // why the check failed
+	// Route: for codex, the config its sessions really use (CODEX_HOME as
+	// a login shell of this person sets it) and whether it reaches it.
+	Route  *CodexRoute `json:"route,omitempty"`
+	Detail string      `json:"detail,omitempty"` // why the check failed
 }
 
 var semverRE = regexp.MustCompile(`\d+\.\d+\.\d+`)
@@ -136,6 +139,9 @@ func (e *Engine) MachineHealth() HealthReport {
 			if t.name == "codex-mixin" {
 				th.OK, th.Detail = cachedMixinDoctor(bin)
 			}
+			if t.name == "codex" && r.Agents["codex"].Used {
+				th.Route = cachedCodexRoute(e.Home, e.Cfg.Email)
+			}
 		}
 		if t.name == "codex-mixin" {
 			th.Expected = (mixinInFlow && r.Agents["codex"].Used) || th.Installed // a Codex gateway
@@ -160,6 +166,13 @@ func (e *Engine) MachineHealth() HealthReport {
 		r.Issues = append(r.Issues, "codex-mixin is not installed")
 	} else if m.OK != nil && !*m.OK {
 		r.Issues = append(r.Issues, "codex-mixin doctor: "+m.Detail)
+	}
+	if ro := r.Tools["codex"].Route; ro != nil {
+		if r.Tools["codex-mixin"].Installed && !ro.Gateway {
+			r.Issues = append(r.Issues, "codex does not go through codex-mixin: CODEX_HOME="+ro.Home+" "+ro.SetBy)
+		} else if ro.Reach != nil && !*ro.Reach {
+			r.Issues = append(r.Issues, "codex cannot reach "+ro.BaseURL+": "+ro.Detail)
+		}
 	}
 	if r.RecipeTodo > 0 {
 		r.Issues = append(r.Issues, "restore flow has "+strconv.Itoa(r.RecipeTodo)+" pending step(s)")
@@ -386,6 +399,13 @@ func mixinDoctor(bin string) (ok bool, detail string, known bool) {
 		return false, "", false // slow provider: no verdict rather than a false alarm
 	}
 	text := string(out)
+	for _, l := range strings.Split(text, "\n") {
+		// "Codex is not using a codex-mixin managed config" means Codex
+		// does not go through the gateway at all: not a mere warning.
+		if l = strings.TrimSpace(l); strings.HasPrefix(l, "⚠") && strings.Contains(l, "Codex integration") {
+			return false, truncHealth(strings.TrimSpace(strings.TrimLeft(l, "⚠ ")), 160), true
+		}
+	}
 	if err == nil && strings.Contains(text, "doctor: ok") {
 		return true, "", true
 	}
