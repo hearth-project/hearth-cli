@@ -71,7 +71,7 @@ func TestIsolateCodexHome(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	dst := filepath.Join(ws, ".codex")
+	dst := filepath.Join(home, "agent-homes", "codex")
 	if r.To != dst || r.Sessions != 1 {
 		t.Fatalf("%+v", r)
 	}
@@ -80,6 +80,9 @@ func TestIsolateCodexHome(t *testing.T) {
 	}
 	if fileExists(filepath.Join(dst, "state_5.sqlite")) || fileExists(filepath.Join(dst, "auth.json")) || !fileExists(filepath.Join(dst, "rules/default.rules")) {
 		t.Fatal("state and codex-mixin's placeholder login stay, rules move")
+	}
+	if !fileExists(filepath.Join(dst, "config.toml.codex-mixin.absent")) {
+		t.Fatal("codex-mixin's restore marker travels with the config (uninstall-codex works there too)")
 	}
 	cfg, _ := os.ReadFile(filepath.Join(dst, "config.toml"))
 	for _, s := range []string{dst + "/model-catalogs/m.json", "newkey", `model = "x"`, "[mcp_servers.foo]"} {
@@ -145,7 +148,7 @@ func TestPreferOwnCodexHome(t *testing.T) {
 	day := filepath.Join(h, ".codex/sessions/2026/10/23")
 	os.MkdirAll(day, 0o700)
 	os.WriteFile(filepath.Join(day, "rollout-a.jsonl"), []byte(`{"type":"session_meta","payload":{"id":"y","cwd":"/root/jobs/someone"}}`+"\n"), 0o600)
-	if got := PreferOwnCodexHome(home); got != filepath.Join(ws, ".codex") || os.Getenv("CODEX_HOME") != got {
+	if got := PreferOwnCodexHome(home); got != filepath.Join(home, "agent-homes", "codex") || os.Getenv("CODEX_HOME") != got {
 		t.Fatalf("fresh: %q", got)
 	}
 	if PreferOwnCodexHome(home) != "" {

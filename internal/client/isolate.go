@@ -57,6 +57,15 @@ func AgentHomeOf(home, agent string) string {
 	return defaultAgentHome(agent)
 }
 
+// OwnAgentHome is where isolate puts an agent's home: inside this person's
+// Hearth home, so it is per machine even when the workspace is on a disk
+// several machines mount, and it is not the workspace's own project
+// config dir (<workspace>/.codex holds project skills and agents that
+// Codex loads as a project layer).
+func OwnAgentHome(home, agent string) string {
+	return filepath.Join(home, "agent-homes", agent)
+}
+
 func defaultAgentHome(agent string) string {
 	h, _ := os.UserHomeDir()
 	switch agent {
@@ -107,7 +116,9 @@ func skipEntry(agent, name string, src string) bool {
 			return true
 		}
 	}
-	for _, suf := range []string{".sqlite", ".sqlite-shm", ".sqlite-wal", ".lock", ".codex-mixin.absent", ".codex-mixin.backup"} {
+	// codex-mixin's .absent / .backup markers travel with the config: they
+	// say what to restore on uninstall-codex in the new home too.
+	for _, suf := range []string{".sqlite", ".sqlite-shm", ".sqlite-wal", ".lock"} {
 		if strings.HasSuffix(name, suf) {
 			return true
 		}
@@ -128,7 +139,7 @@ func mixinProvider(dir string) (provider string, ok bool) {
 }
 
 // IsolateAgentHome moves this person's agent home on a shared account to
-// dir (default <workspace>/.<agent>). logf reports progress.
+// dir (default OwnAgentHome). logf reports progress.
 func (e *Engine) IsolateAgentHome(agent, dir string, logf func(string, ...any)) (IsolateResult, error) {
 	r := IsolateResult{Agent: agent}
 	ws := WorkspaceOf(e.Home)
@@ -139,7 +150,7 @@ func (e *Engine) IsolateAgentHome(agent, dir string, logf func(string, ...any)) 
 		return r, fmt.Errorf("supported agents: codex, claude")
 	}
 	if dir == "" {
-		dir = filepath.Join(ws, "."+agent)
+		dir = OwnAgentHome(e.Home, agent)
 	}
 	dst, err := filepath.Abs(expandWorkspace(dir))
 	if err != nil {
@@ -429,7 +440,7 @@ func copyFile(p, out string, info fs.FileInfo, from, to string) error {
 }
 
 // PreferOwnCodexHome gives a new workspace login its own Codex home
-// (<workspace>/.codex) unless the shared default already holds
+// (OwnAgentHome) unless the shared default already holds
 // conversations of this person, which `hearth agents isolate codex` moves.
 // Returns the dir chosen ("" = unchanged).
 func PreferOwnCodexHome(home string) string {
@@ -450,7 +461,7 @@ func PreferOwnCodexHome(home string) string {
 			return "" // theirs already: moving them is the user's call
 		}
 	}
-	dst := filepath.Join(ws, ".codex")
+	dst := OwnAgentHome(home, "codex")
 	if err := os.MkdirAll(dst, 0o700); err != nil {
 		return ""
 	}

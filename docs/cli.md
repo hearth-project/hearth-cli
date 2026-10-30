@@ -518,7 +518,8 @@ everyone whose shell does not set CODEX_HOME uses your login.
 
 isolate copies your config (skills, rules, plugins, MCP servers, model
 settings) and your conversations (the session scope decides which are yours)
-to <workspace>/.codex, has codex-mixin connect the new home with a client key
+to <home>/agent-homes/codex (inside your Hearth home: per machine, and apart
+from the workspace's project .codex), has codex-mixin connect the new home with a client key
 of its own, makes this machine's Hearth sessions use it, then hands the shared
 default back to codex-mixin (uninstall-codex; else the gateway provider and
 key are removed). A backup of the shared default's config goes to
@@ -528,7 +529,7 @@ key are removed). A backup of the shared default's config goes to
 hearth agents isolate <codex|claude> [flags]
 
 Flags:
-      --dir string   new home (default <workspace>/.<agent>)
+      --dir string   new home (default <hearth home>/agent-homes/<agent>)
   -y, --yes          do not ask
 ```
 

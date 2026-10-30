@@ -25,7 +25,8 @@ everyone whose shell does not set CODEX_HOME uses your login.
 
 isolate copies your config (skills, rules, plugins, MCP servers, model
 settings) and your conversations (the session scope decides which are yours)
-to <workspace>/.codex, has codex-mixin connect the new home with a client key
+to <home>/agent-homes/codex (inside your Hearth home: per machine, and apart
+from the workspace's project .codex), has codex-mixin connect the new home with a client key
 of its own, makes this machine's Hearth sessions use it, then hands the shared
 default back to codex-mixin (uninstall-codex; else the gateway provider and
 key are removed). A backup of the shared default's config goes to
@@ -42,7 +43,7 @@ key are removed). A backup of the shared default's config goes to
 				if !isTTY() {
 					return fmt.Errorf("moves %s's home %s into your workspace and removes your gateway login from it; run again with --yes", agent, from)
 				}
-				fmt.Printf("Move your %s home %s into your workspace (dir: %s) and remove your login from %s? [y/N] ", agent, from, orDefault(dir, "<workspace>/."+agent), from)
+				fmt.Printf("Move your %s home %s into your workspace (dir: %s) and remove your login from %s? [y/N] ", agent, from, orDefault(dir, client.OwnAgentHome(home, agent)), from)
 				line, _ := stdinLines.ReadString('\n')
 				if l := strings.ToLower(strings.TrimSpace(line)); l != "y" && l != "yes" {
 					return fmt.Errorf("cancelled")
@@ -90,7 +91,7 @@ key are removed). A backup of the shared default's config goes to
 			return nil
 		},
 	}
-	c.Flags().StringVar(&dir, "dir", "", "new home (default <workspace>/.<agent>)")
+	c.Flags().StringVar(&dir, "dir", "", "new home (default <hearth home>/agent-homes/<agent>)")
 	c.Flags().BoolVarP(&yes, "yes", "y", false, "do not ask")
 	return c
 }
