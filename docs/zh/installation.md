@@ -70,6 +70,8 @@ hearth setup --server https://<server> --email you@example.com
 
 如果之前已经在没有工作目录的情况下登录过（`~/.hearth`），请把这份登录移进工作目录，而不是再登录一次（那样会多出一台设备，两边的后台同步互相抢同一批会话）：`hearth init --move-login <目录> && cd <目录> && hearth daemon start`。`~/.hearth` 的账号与工作目录的身份一致时，`hearth onboard status` 会给出这一步；`hearth setup` 不会在同一台机器上把同一账号再登录一次。
 
+大家的配置都在同一个 `~/.bashrc` 里，同事的一行 `export CODEX_HOME=…` 就会决定你的会话用哪份 Codex 配置。有工作目录时，Hearth 会运行你自己的 sshd（这种情况下不接管手动启动的 sshd），它给你的会话打上标记（`SetEnv HEARTH_USER`）；rc 文件最末尾有一段由 Hearth 维护的配置，只对这些会话重新设置你的 `HEARTH_HOME`、`CODEX_HOME` 等 agent 目录，同事的会话不受影响。请通过它连接：`hearth ssh <机器>`，或 Hearth 写进 `~/.ssh/config` 的主机（Codex Desktop、VS Code、Cursor）。Codex 没走你的 codex-mixin 网关时，环境检查会报出来，并指出是哪个文件哪一行设置了 `CODEX_HOME`。
+
 机器上能找到多个人的身份（SSO token、Comate 登录）时，`hearth setup` 会把他们列出来，让你选自己是哪一个。各 agent 的配置目录（`~/.codex`、`~/.claude`）仍是大家共用的：注册在里面的 Hearth 记忆 hook 和 MCP 服务按 agent 会话所在的工作目录取数据，每个人拿到的都是自己的记忆和 skills。
 
 ## 手动安装

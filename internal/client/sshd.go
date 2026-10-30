@@ -33,7 +33,7 @@ const defaultSSHPort = 8022
 
 // sshdFlags versions the options startSSHD passes; an sshd Hearth started
 // with older ones is restarted (sessions already open stay).
-const sshdFlags = 2
+const sshdFlags = 3
 
 type sshState struct {
 	Disabled bool   `json:"disabled,omitempty"` // this machine only
@@ -42,7 +42,8 @@ type sshState struct {
 	PID      int    `json:"pid,omitempty"`
 	External bool   `json:"external,omitempty"` // an sshd Hearth did not start (left running when SSH is turned off)
 	HostKey  string `json:"host_key,omitempty"`
-	Flags    int    `json:"flags,omitempty"` // sshdFlags the running sshd was started with
+	Shared   bool   `json:"shared,omitempty"` // Hearth's own sshd for a workspace on a shared account
+	Flags    int    `json:"flags,omitempty"`  // sshdFlags the running sshd was started with
 	KeysHash string `json:"keys_hash,omitempty"`
 	Endpoint string `json:"endpoint,omitempty"` // published value, to skip unchanged uploads
 	LastErr  string `json:"last_error,omitempty"`
@@ -246,9 +247,26 @@ func (e *Engine) EnsureSSHD() (SSHStatus, error) {
 	if addr == "" {
 		return fail(errors.New("no IPv4 address to listen on; set [ssh] address in config.toml"))
 	}
+	// On an account several people share (a workspace), sessions through
+	// this person's own sshd are marked as theirs (SetEnv HEARTH_USER), so
+	// the end of the shared rc file restores their agent homes over
+	// whatever a colleague's lines exported. An sshd started by hand is
+	// not adopted there: it cannot say whose session it is.
+	shared := WorkspaceOf(home) != ""
+	sshdAuth := authPath
+	setEnv := ""
+	if shared {
+		if sshdAuth, err = privateAuthorizedKeys(home, lines); err != nil {
+			return fail(err)
+		}
+		setEnv = "HEARTH_USER=" + e.Cfg.Email
+		if !strings.ContainsAny(home, " \t\"'") {
+			setEnv += " HEARTH_HOME=" + home
+		}
+	}
 	want := sshPortWanted(home)
-	ours := !s.External && alive(s.PID) && s.Flags == sshdFlags && s.Address == addr && s.Port >= want && s.Port < want+20 && listening(addr, s.Port)
-	adopted := s.External && s.Address == addr && s.Port == want && listening(addr, s.Port)
+	ours := !s.External && alive(s.PID) && s.Flags == sshdFlags && s.Shared == shared && s.Address == addr && s.Port >= want && s.Port < want+20 && listening(addr, s.Port)
+	adopted := !shared && s.External && s.Address == addr && s.Port == want && listening(addr, s.Port)
 	hostKey := s.HostKey
 	if !ours && !adopted {
 		hostKey = ""
@@ -259,7 +277,7 @@ func (e *Engine) EnsureSSHD() (SSHStatus, error) {
 			}
 		}
 		s.PID, s.External, s.Port = 0, false, 0
-		if hk, err := probeHostKey(addr, want); err == nil {
+		if hk, err := probeHostKey(addr, want); err == nil && !shared {
 			// An sshd is already there (started by hand): use it.
 			s.External, s.Address, s.Port, hostKey = true, addr, want, hk
 		} else {
@@ -273,11 +291,11 @@ func (e *Engine) EnsureSSHD() (SSHStatus, error) {
 			if port == 0 {
 				return fail(fmt.Errorf("no free port from %d on %s", want, addr))
 			}
-			pid, err := startSSHD(home, authPath, addr, port)
+			pid, err := startSSHD(home, sshdAuth, addr, port, setEnv)
 			if err != nil {
 				return fail(err)
 			}
-			s.PID, s.Address, s.Port, s.Flags = pid, addr, port, sshdFlags
+			s.PID, s.Address, s.Port, s.Flags, s.Shared = pid, addr, port, sshdFlags, shared
 		}
 	}
 	if hostKey == "" {
@@ -311,7 +329,7 @@ func (e *Engine) EnsureSSHD() (SSHStatus, error) {
 // startSSHD runs the system sshd detached, with the flags of the usual
 // manual setup: the system config and host keys when running as root,
 // else a config of its own with Hearth's host key.
-func startSSHD(home, authPath, addr string, port int) (int, error) {
+func startSSHD(home, authPath, addr string, port int, setEnv string) (int, error) {
 	bin, err := exec.LookPath("sshd")
 	if err != nil {
 		if _, err2 := os.Stat("/usr/sbin/sshd"); err2 != nil {
@@ -345,6 +363,9 @@ func startSSHD(home, authPath, addr string, port int) (int, error) {
 		// Some images set LogLevel DEBUG; with -e the session's debug
 		// lines would end up in the user's terminal.
 		"-o", "LogLevel=INFO")
+	if setEnv != "" {
+		args = append(args, "-o", "SetEnv="+setEnv) // whose sessions these are (shared accounts)
+	}
 	if authPath != filepath.Join(u.HomeDir, ".ssh", "authorized_keys") {
 		args = append(args, "-o", "AuthorizedKeysFile="+authPath) // $HOME is not the account's home
 	}
@@ -491,4 +512,28 @@ func setManagedKeys(text string, keys []string) string {
 		text += "\n"
 	}
 	return text + akBegin + "\n" + strings.Join(keys, "\n") + "\n" + akEnd + "\n"
+}
+
+// privateAuthorizedKeys writes the keys of this person's devices to a file
+// of their own (~/.ssh/hearth/<id>/authorized_keys, where sshd's strict
+// modes accept it), for their own sshd on a shared account.
+func privateAuthorizedKeys(home string, keys []string) (string, error) {
+	h, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	p := filepath.Join(h, ".ssh", "hearth", sha(home)[:12], "authorized_keys")
+	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
+		return "", err
+	}
+	body := strings.Join(keys, "\n")
+	if body != "" {
+		body += "\n"
+	}
+	if cur, _ := os.ReadFile(p); string(cur) != body {
+		if err := writeFileAtomic(p, []byte(body), 0o600); err != nil {
+			return "", err
+		}
+	}
+	return p, nil
 }

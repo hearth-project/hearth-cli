@@ -215,6 +215,8 @@ hearth ssh <machine> -- hearth onboard status --json
 hearth ssh <machine> -- hearth recipe plan --json
 ```
 
+On a shared account, a Codex that hangs or bypasses the gateway is usually a colleague's `export CODEX_HOME` in the shared rc files: `hearth machine inspect <machine>` names the file and line. Fix it by connecting through Hearth's sshd (`hearth ssh <machine>` or the `~/.ssh/config` host), whose sessions get the user's own agent homes from the block at the end of the rc files; never edit a colleague's file.
+
 Steps that need the user's own terminal (`interactive: true`: a QR-code login, a prompt) can run from here with a terminal: `hearth ssh -t <machine> -- '<command>'`; tell the user to run it in their own terminal, and wait. A step is done only when its check passes on the target (for codex-mixin: `codex-mixin doctor --no-tui` says `doctor: ok`, not just "imported").
 
 When the user says “恢复这台机器的 Codex 环境” or “恢复 Claude Code 环境”, first use `hearth machine list` and inspect the target. Choose its matching profile from OS, architecture, GPU and labels; then use the target's SSH connection to run the restore flow there. On the target, show the pending recipe steps and follow **D. Restore this machine's environment** in order, checking each step and recording it with `hearth recipe done <key>`. Use `hearth agents enable <agent>` and `hearth agents pull <agent>` only for the requested agent. Finish with `hearth onboard status --json`, `hearth machine check` (on the target: reports its environment at once instead of within 5 minutes) and `hearth machine inspect <machine>`; the target should report `ready`, or clearly list the remaining issue.

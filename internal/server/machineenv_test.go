@@ -1,6 +1,7 @@
 package server
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -51,5 +52,22 @@ func TestMachineEnv(t *testing.T) {
 	ok := s.machineEnv(`{"checked_at":1,"tools":{"codex":{"expected":true,"installed":true,"version":"0.165.0"}}}`, "")
 	if ok.Status != "ok" || len(ok.Problems) != 0 {
 		t.Fatalf("%+v", ok)
+	}
+}
+
+func TestMachineEnvCodexBypass(t *testing.T) {
+	s := &Server{versions: newToolVersions()}
+	health := `{"checked_at":1,"tools":{"codex":{"expected":true,"installed":true,"version":"0.1.0",
+	  "route":{"home":"/shared/x/codex_home","set_by":"/shared/x/bashrc:15 (sourced from /root/.bashrc:483)","provider":"openai","base_url":"https://api.openai.com/v1","gateway":false,"reach":false,"detail":"timeout"}},
+	  "codex-mixin":{"expected":true,"installed":true,"version":"0.7.3","ok":true}}}`
+	env := s.machineEnv(health, "")
+	found := false
+	for _, p := range env.Problems {
+		if p.Code == "bypass" && p.Level == "error" && strings.Contains(p.Detail, "/root/.bashrc:483") {
+			found = true
+		}
+	}
+	if !found || env.Status != "error" {
+		t.Fatalf("%+v", env)
 	}
 }

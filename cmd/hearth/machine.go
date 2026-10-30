@@ -323,6 +323,10 @@ func envProblemText(p map[string]any) string {
 		return fmt.Sprintf("%d restore step(s) left", int(n))
 	case "hearth":
 		return "hearth " + s("have") + " → " + s("latest")
+	case "bypass":
+		return "codex does not go through codex-mixin: " + s("detail")
+	case "unreachable":
+		return "codex cannot reach " + s("have") + ": " + s("detail")
 	}
 	return s("code")
 }

@@ -70,6 +70,8 @@ Hearth commands run inside that directory use `<dir>/.hearth` and only upload yo
 
 Already logged in without a workspace (`~/.hearth`)? Move that login into the workspace instead of logging in again, which would make a second device whose sync competes with the first: `hearth init --move-login <dir> && cd <dir> && hearth daemon start`. `hearth onboard status` proposes it when `~/.hearth`'s account is the workspace's identity, and `hearth setup` refuses to log in the same account a second time.
 
+Everyone's lines end up in the same `~/.bashrc`, so a colleague's `export CODEX_HOME=…` would decide which Codex config your sessions use. With a workspace Hearth runs your own sshd (it does not adopt one started by hand there) that marks your sessions (`SetEnv HEARTH_USER`), and keeps a block at the very end of the rc files that sets your `HEARTH_HOME`, `CODEX_HOME` and other agent homes for those sessions only; colleagues' sessions stay as they are. Connect through it: `hearth ssh <machine>`, or the `~/.ssh/config` hosts Hearth writes (Codex Desktop, VS Code, Cursor). The environment check reports a Codex that does not use your codex-mixin gateway, with the file and line that set its `CODEX_HOME`.
+
 When the machine knows several people (SSO tokens, Comate logins), `hearth setup` lists them and asks which one you are. The agents' config dirs (`~/.codex`, `~/.claude`) stay shared: Hearth's memory hook and MCP server registered there answer from the workspace the agent session runs in, so each person gets their own memories and skills.
 
 ## Manual install

@@ -50,6 +50,15 @@ type reportedHealth struct {
 		Version             string
 		OK                  *bool
 		Detail              string
+		Route               *struct {
+			Home     string `json:"home"`
+			SetBy    string `json:"set_by"`
+			Provider string `json:"provider"`
+			BaseURL  string `json:"base_url"`
+			Gateway  bool   `json:"gateway"`
+			Reach    *bool  `json:"reach"`
+			Detail   string `json:"detail"`
+		} `json:"route"`
 	} `json:"tools"`
 	Client     string   `json:"client"` // Hearth build that made the report (newer than the stored one right after an update)
 	RecipeTodo int      `json:"recipe_todo"`
@@ -94,6 +103,23 @@ func (s *Server) machineEnv(healthJSON, clientVersion string) *MachineEnv {
 			if t.OK != nil && !*t.OK {
 				add(EnvProblem{Level: "error", Code: "doctor", Tool: name, Detail: t.Detail})
 			}
+		}
+	}
+	// Codex sessions that do not reach their model: another config wins
+	// (a colleague's CODEX_HOME on a shared account), or its endpoint is
+	// unreachable from here.
+	if c, ok := h.Tools["codex"]; ok && c.Route != nil {
+		ro := c.Route
+		mixin := h.Tools["codex-mixin"]
+		switch {
+		case mixin.Installed && !ro.Gateway:
+			d := "CODEX_HOME=" + ro.Home + " (" + ro.Provider + ")"
+			if ro.SetBy != "" {
+				d += ", set by " + ro.SetBy
+			}
+			add(EnvProblem{Level: "error", Code: "bypass", Tool: "codex", Detail: d})
+		case ro.Reach != nil && !*ro.Reach:
+			add(EnvProblem{Level: "error", Code: "unreachable", Tool: "codex", Have: ro.BaseURL, Detail: ro.Detail})
 		}
 	}
 	for _, name := range []string{"codex", "claude"} {
