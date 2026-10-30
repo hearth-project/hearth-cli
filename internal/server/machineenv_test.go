@@ -55,6 +55,24 @@ func TestMachineEnv(t *testing.T) {
 	}
 }
 
+// Tools of agents the user does not work with are not judged.
+func TestMachineEnvUnusedAgents(t *testing.T) {
+	s := &Server{versions: newToolVersions()}
+	s.versions.set("claude", []string{"2.1.314", "2.1.313", "2.1.293"})
+	s.versions.set("codex", []string{"0.166.0", "0.165.0"})
+	env := s.machineEnv(`{"checked_at":1,
+	 "agents":{"claude":{"enabled":true,"installed":true,"used":false},"codex":{"enabled":true,"installed":true,"ready":true,"used":true}},
+	 "tools":{"claude":{"installed":true,"version":"2.1.293","ok":false},"codex":{"expected":true,"installed":true,"version":"0.165.0"}}}`, "")
+	for _, p := range env.Problems {
+		if p.Tool == "claude" {
+			t.Fatalf("unused claude judged: %+v", p)
+		}
+	}
+	if len(env.Problems) != 1 || env.Problems[0].Code != "outdated" || env.Problems[0].Tool != "codex" {
+		t.Fatalf("%+v", env.Problems)
+	}
+}
+
 func TestMachineEnvCodexBypass(t *testing.T) {
 	s := &Server{versions: newToolVersions()}
 	health := `{"checked_at":1,"tools":{"codex":{"expected":true,"installed":true,"version":"0.1.0",
