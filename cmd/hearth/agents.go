@@ -53,6 +53,8 @@ func agentsCmd() *cobra.Command {
 				return nil
 			}},
 		agentsPullCmd(),
+		agentsIsolateCmd(),
+		agentsWhereCmd(),
 		&cobra.Command{Use: "disable <agent>", Short: "Disable an agent", Args: cobra.ExactArgs(1), RunE: func(_ *cobra.Command, a []string) error {
 			return report(client.SetAgentEnabled(client.Home(), a[0], false), "disabled "+a[0]+"; now: "+strings.Join(client.EnabledAgents(client.Home()), ", "))
 		}},

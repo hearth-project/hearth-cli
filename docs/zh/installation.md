@@ -72,6 +72,10 @@ hearth setup --server https://<server> --email you@example.com
 
 大家的配置都在同一个 `~/.bashrc` 里，同事的一行 `export CODEX_HOME=…` 就会决定你的会话用哪份 Codex 配置。有工作目录时，Hearth 会运行你自己的 sshd（这种情况下不接管手动启动的 sshd），它给你的会话打上标记（`SetEnv HEARTH_USER`）；rc 文件最末尾有一段由 Hearth 维护的配置，只对这些会话重新设置你的 `HEARTH_HOME`、`CODEX_HOME` 等 agent 目录，同事的会话不受影响。请通过它连接：`hearth ssh <机器>`，或 Hearth 写进 `~/.ssh/config` 的主机（Codex Desktop、VS Code、Cursor）。Codex 没走你的 codex-mixin 网关时，环境检查会报出来，并指出是哪个文件哪一行设置了 `CODEX_HOME`。
 
+在这种账号上，你的 Codex 配置不应该放在 `~/.codex`：它是所有 Codex 会话的默认配置，你的 codex-mixin 网关和 client key 放在那里，凡是 shell 没设置 `CODEX_HOME` 的人都会用到你的账户。在工作目录里新登录时，Hearth 会给你单独的 Codex 目录 `<工作目录>/.hearth/agent-homes/codex`（按机器区分，也不和工作目录里项目自己的 `.codex`（项目 skills、agents）混在一起）。如果 `~/.codex` 里已经是你的配置和会话，运行 `hearth agents isolate codex` 迁移：它把配置（skills、rules、插件、MCP、模型设置）和你的会话（按会话范围判断哪些是你的）复制到这个目录，让 codex-mixin 给新目录单独签发一个 client key，再把 `~/.codex` 交还给 codex-mixin（`uninstall-codex`；做不了时删掉网关 provider 和 key），清理前先备份到你的 Hearth 目录。这个选择按机器生效。之后 Hearth 命令和 daemon 不管 shell 继承了什么 `CODEX_HOME`，都用你自己的目录；`hearth agents where codex` 会打印它，例如 `CODEX_HOME="$(hearth agents where codex)" codex-mixin setup …`。你的网关登录还在共用的 `~/.codex` 时，环境检查会提醒。同一个账号下的人仍然能读到你的文件：这只能防误用，防不了有意为之。要真正隔离，只能用不同的 Unix 用户或容器。
+
+**工作目录在多台机器共同挂载的盘上**（集群存储）：同一个工作目录在集群每台机器上都一样，但 Hearth 目录属于一台机器（它的设备登录、daemon、sshd）。`<工作目录>/.hearth` 归第一台在那里登录的机器，其他机器各用 `<工作目录>/.hearth/hosts/<主机名>`，在工作目录里任何位置运行 hearth 都会找到自己的那份。setup 遇到这种情况会说明，不需要额外操作。
+
 机器上能找到多个人的身份（SSO token、Comate 登录）时，`hearth setup` 会把他们列出来，让你选自己是哪一个。各 agent 的配置目录（`~/.codex`、`~/.claude`）仍是大家共用的：注册在里面的 Hearth 记忆 hook 和 MCP 服务按 agent 会话所在的工作目录取数据，每个人拿到的都是自己的记忆和 skills。
 
 ## 手动安装

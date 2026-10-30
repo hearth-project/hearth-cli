@@ -33,7 +33,7 @@ func main() {
 	root.PersistentFlags().StringVar(&workspace, "workspace", "", "your working directory (state goes to <dir>/.hearth; default: found from the current directory)")
 	root.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error {
 		if workspace != "" {
-			home := filepath.Join(workspace, ".hearth")
+			home := client.WorkspaceHome(workspace)
 			if client.WorkspaceOf(home) == "" {
 				var err error
 				if home, err = client.InitWorkspace(workspace); err != nil {
@@ -120,7 +120,7 @@ func initCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			target := filepath.Join(abs, ".hearth")
+			target := client.WorkspaceHome(abs)
 			def := client.DefaultHome()
 			_, defErr := client.LoadConfig(def)
 			_, tgtErr := client.LoadConfig(target)
@@ -142,6 +142,7 @@ func initCmd() *cobra.Command {
 					}
 				}
 				_ = os.RemoveAll(target)
+				_ = os.MkdirAll(filepath.Dir(target), 0o700)
 				if err := os.Rename(def, target); err != nil {
 					return fmt.Errorf("move %s to %s: %w (on another disk: log in inside the workspace instead)", def, target, err)
 				}
@@ -167,7 +168,10 @@ func initCmd() *cobra.Command {
 				}
 				_, _ = client.SyncMemoryHooks(home, client.MemoryHooksOn(home))
 			}
-			fmt.Printf("workspace %s (state %s)\n", filepath.Dir(home), home)
+			fmt.Printf("workspace %s (state %s)\n", abs, home)
+			if dev, other := client.OtherHostHome(abs); other {
+				fmt.Printf("this disk is shared: %s/.hearth is machine %s's, this machine keeps its own in %s\n", abs, orDefault(dev, "another machine"), home)
+			}
 			if _, err := client.LoadConfig(home); err != nil {
 				if movable {
 					cfg, _ := client.LoadConfig(def)
@@ -177,8 +181,8 @@ func initCmd() *cobra.Command {
 					fmt.Printf("not logged in here yet:  cd %s && hearth setup\n", abs)
 				}
 			}
-			fmt.Println("hearth commands run anywhere inside it use this state. Keep agent configs there too, e.g.:")
-			fmt.Println("  hearth agents home codex '${WORKSPACE}/.codex'")
+			fmt.Println("hearth commands run anywhere inside it use this state. On an account several people share,")
+			fmt.Println("keep your Codex config apart from the shared ~/.codex too:  hearth agents isolate codex")
 			return nil
 		},
 	}

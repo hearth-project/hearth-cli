@@ -5,9 +5,11 @@ import (
 
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -120,8 +122,44 @@ func newDist(d *Distribution) (*distState, error) {
 	return ds, nil
 }
 
-// InstallCommand is the one-liner to run on a new machine.
+// siteProxies are the proxies the organisation lists in the site defaults
+// (<site>/net.json {"proxies": [...]}), for machines that reach the server
+// only through one.
+func (s *Server) siteProxies() []string {
+	var n struct {
+		Proxies []string `json:"proxies"`
+	}
+	if s.cfg.SiteDir == "" {
+		return nil
+	}
+	b, err := os.ReadFile(filepath.Join(s.cfg.SiteDir, "net.json"))
+	if err != nil || json.Unmarshal(b, &n) != nil {
+		return nil
+	}
+	var out []string
+	for _, p := range n.Proxies {
+		if u, err := url.Parse(p); err == nil && (u.Scheme == "http" || u.Scheme == "https") && u.Host != "" && !strings.ContainsAny(p, "'\" \\$`;|&") {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// InstallCommand is the one-liner to run on a new machine. With site
+// proxies it falls back to the first one when the server does not answer
+// directly within a few seconds.
 func (s *Server) InstallCommand() string {
+	cmd := s.installCommand()
+	if ps := s.siteProxies(); cmd != "" && len(ps) > 0 {
+		get, _, _ := strings.Cut(cmd, " | sh")
+		retry := strings.Replace(get, "curl -fsSL", "curl -fsSL -x "+ps[0], 1)
+		get = strings.Replace(get, "curl -fsSL", "curl -fsSL --connect-timeout 5", 1)
+		return "{ " + get + " || " + retry + "; } | sh"
+	}
+	return cmd
+}
+
+func (s *Server) installCommand() string {
 	d := s.dist
 	if d == nil {
 		return ""
@@ -159,6 +197,19 @@ mkdir -p "$BIN_DIR" "$AS_HOME"
 chmod 700 "$AS_HOME"
 CURL="curl -fsSL"
 @CA_BLOCK@
+# No direct route to the server (a proxy missing in this shell): try the
+# organisation's proxies; the first that reaches it is used from here on.
+PROXIES='@PROXIES@'
+if [ -n "$PROXIES" ] && [ -z "${https_proxy:-}${HTTPS_PROXY:-}" ] && ! $CURL --connect-timeout 5 -o /dev/null "$URL/healthz" 2>/dev/null; then
+  for p in $PROXIES; do
+    if $CURL --connect-timeout 5 -x "$p" -o /dev/null "$URL/healthz" 2>/dev/null; then
+      https_proxy="$p"; http_proxy="$p"; no_proxy="${no_proxy:+$no_proxy,}127.0.0.1,localhost,::1"
+      export https_proxy http_proxy no_proxy
+      echo "network: the server is not reachable directly; using proxy $p"
+      break
+    fi
+  done
+fi
 tmp=$(mktemp)
 trap 'rm -f "$tmp"' EXIT
 $CURL -o "$tmp" "$URL/download/$BIN"
@@ -170,7 +221,7 @@ fi
 chmod 755 "$tmp"
 mv "$tmp" "$BIN_DIR/hearth"
 trap - EXIT
-echo "hearth installed to $BIN_DIR/hearth"
+echo "hearth $("$BIN_DIR/hearth" --version 2>/dev/null | sed 's/^hearth version //') installed to $BIN_DIR/hearth"
 
 # Make "hearth" available in new terminals: a link in a directory already on
 # PATH when possible (works at once, also for non-interactive shells), and
@@ -183,7 +234,7 @@ if [ "${HEARTH_NO_PATH:-}" != "1" ]; then
       for d in ${HEARTH_LINK_DIRS:-/usr/local/bin /opt/homebrew/bin "$HOME/bin"}; do
         case ":$PATH:" in *":$d:"*) ;; *) continue ;; esac
         if [ -d "$d" ] && [ -w "$d" ] && { [ ! -e "$d/hearth" ] || [ -L "$d/hearth" ]; }; then
-          ln -sf "$BIN_DIR/hearth" "$d/hearth" && linked="$d" && echo "linked $d/hearth -> $BIN_DIR/hearth" && break
+          ln -sf "$BIN_DIR/hearth" "$d/hearth" && linked="$d" && break
         fi
       done ;;
   esac
@@ -194,12 +245,9 @@ if [ "${HEARTH_NO_PATH:-}" != "1" ]; then
       *) [ -f "$rc" ] || continue ;;     # only extend existing zsh / bash_profile
     esac
     if ! grep -qsF "added by the hearth installer" "$rc"; then
-      printf '\n%s\n' "$line" >> "$rc" && echo "added $BIN_DIR to PATH in $rc"
+      printf '\n%s\n' "$line" >> "$rc"
     fi
   done
-  if [ -z "$linked" ]; then
-    echo "note: open a new terminal, or run now:  export PATH=\"$BIN_DIR:\$PATH\""
-  fi
 fi
 
 # Organisation defaults published on this server (recipes, files, login-token
@@ -215,6 +263,7 @@ fi
 # --install-only: just install (an agent running the hearth skill
 # drives the rest and has the user log in from their own terminal).
 if [ "${1:-}" = "--install-only" ]; then
+  [ -n "${linked:-}" ] || echo "note: open a new terminal, or run now:  export PATH=\"$BIN_DIR:\$PATH\""
   echo "next: hearth setup --server $URL   (account from this machine's identity; --email to choose)"
   echo "then: on any other machine with Hearth, tell its agent \"恢复 <this machine> 的 Codex 环境\" to set up this machine's software"
   exit 0
@@ -243,7 +292,7 @@ func (s *Server) handleInstall(w http.ResponseWriter, _ *http.Request) {
 		fmt.Fprintf(&cases, "  %s) SHA256='%s' ;;\n", n, d.bins[n].sha256)
 	}
 	script := strings.NewReplacer("@URL@", d.PublicURL, "@CASES@", strings.TrimRight(cases.String(), "\n"),
-		"@NAMES@", strings.Join(d.names(), " "), "@CA_BLOCK@", caBlock).Replace(installTemplate)
+		"@NAMES@", strings.Join(d.names(), " "), "@CA_BLOCK@", caBlock, "@PROXIES@", strings.Join(s.siteProxies(), " ")).Replace(installTemplate)
 	w.Header().Set("Content-Type", "text/x-shellscript; charset=utf-8")
 	io.WriteString(w, script)
 }

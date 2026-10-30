@@ -64,7 +64,7 @@ func MoveHome(from, ws string) (string, error) {
 	if err := os.MkdirAll(abs, 0o755); err != nil {
 		return "", err
 	}
-	target := filepath.Join(abs, ".hearth")
+	target := WorkspaceHome(abs)
 	if filepath.Clean(target) == filepath.Clean(from) {
 		return target, nil
 	}
@@ -72,6 +72,9 @@ func MoveHome(from, ws string) (string, error) {
 		return "", fmt.Errorf("%s already holds hearth state (%s); move it away first", target, name)
 	}
 	_ = os.RemoveAll(target)
+	if err := os.MkdirAll(filepath.Dir(target), 0o700); err != nil {
+		return "", err
+	}
 	if err := os.Rename(from, target); err != nil {
 		var le *os.LinkError
 		if !errors.As(err, &le) || !errors.Is(le.Err, syscall.EXDEV) {

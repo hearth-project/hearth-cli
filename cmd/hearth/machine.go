@@ -327,6 +327,8 @@ func envProblemText(p map[string]any) string {
 		return "codex does not go through codex-mixin: " + s("detail")
 	case "unreachable":
 		return "codex cannot reach " + s("have") + ": " + s("detail")
+	case "shared_home":
+		return "your codex-mixin login is in the shared " + s("detail") + ", everyone on this account falls back to it: hearth agents isolate codex"
 	}
 	return s("code")
 }

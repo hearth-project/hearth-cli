@@ -258,6 +258,11 @@ func collectOnboard() onboardStatus {
 	if !st.DaemonRunning {
 		add(nextStep{ID: "daemon", Why: "background sync is not running", Command: "hearth daemon start"})
 	}
+	// Shared account: the Codex config everybody falls back to is this person's.
+	if client.SharedDefaultHome(home, "codex") && st.Agents["codex"].Enabled {
+		add(nextStep{ID: "isolate-codex", Why: "Codex uses the shared ~/.codex: if your codex-mixin login is there, everyone on this account whose shell does not set CODEX_HOME uses it",
+			AskUser: "Move your Codex config and conversations from ~/.codex into your workspace?", Command: "hearth agents isolate codex --yes"})
+	}
 	// Machines this one can SSH to but that the user's apps do not list.
 	if missing := sshConfigMissing(e); len(missing) > 0 {
 		add(nextStep{ID: "ssh-config", Why: fmt.Sprintf("%d of your machines are not in ~/.ssh/config, so Codex Desktop / VS Code / Cursor do not list them (%s)", len(missing), joinMax(missing, 3)),
@@ -407,11 +412,14 @@ func onboardCmd() *cobra.Command {
 				fmt.Print(skills.Hearth)
 				return nil
 			}
-			quiet, _ := cmd.Flags().GetBool("quiet")
-			return installSetupSkill(!quiet)
+			if quiet, _ := cmd.Flags().GetBool("quiet"); quiet {
+				_, err := installSetupSkillTo(false, false)
+				return err
+			}
+			return installSetupSkill(true)
 		}}
 	install.Flags().Bool("print", false, "print the skill instead of installing it")
-	install.Flags().Bool("quiet", false, "only print the hint")
+	install.Flags().Bool("quiet", false, "print nothing (setup tells the user about the skill)")
 	c.AddCommand(status, install)
 	return c
 }

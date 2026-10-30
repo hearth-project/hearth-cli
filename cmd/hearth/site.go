@@ -58,14 +58,14 @@ func siteCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if !quiet || r.Op == "pulled" {
+			if !quiet {
 				fmt.Println("site defaults:", r.Op)
 			}
 			return nil
 		},
 	}
 	pull.Flags().StringVar(&server, "server", "", "server URL (default: the one you are logged in to)")
-	pull.Flags().BoolVar(&quiet, "quiet", false, "only report when something was fetched")
+	pull.Flags().BoolVar(&quiet, "quiet", false, "print nothing unless it fails")
 	c.AddCommand(pull, &cobra.Command{
 		Use: "status", Short: "List the site defaults on this machine",
 		RunE: func(*cobra.Command, []string) error {
