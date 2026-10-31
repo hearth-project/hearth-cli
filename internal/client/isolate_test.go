@@ -81,6 +81,9 @@ func TestIsolateCodexHome(t *testing.T) {
 	if fileExists(filepath.Join(dst, "state_5.sqlite")) || fileExists(filepath.Join(dst, "auth.json")) || !fileExists(filepath.Join(dst, "rules/default.rules")) {
 		t.Fatal("state and codex-mixin's placeholder login stay, rules move")
 	}
+	if fileExists(filepath.Join(dst, "auth.json.codex-mixin.absent")) {
+		t.Fatal("the restore point of an auth.json left behind was copied (codex-mixin connect refuses then)")
+	}
 	if !fileExists(filepath.Join(dst, "config.toml.codex-mixin.absent")) {
 		t.Fatal("codex-mixin's restore marker travels with the config (uninstall-codex works there too)")
 	}

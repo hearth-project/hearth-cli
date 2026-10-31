@@ -123,8 +123,11 @@ func skipEntry(agent, name string, src string) bool {
 			return true
 		}
 	}
-	// codex-mixin wrote auth.json (a placeholder): connect writes the new one.
-	if agent == "codex" && name == "auth.json" && fileExists(filepath.Join(src, "auth.json.codex-mixin.absent")) {
+	// codex-mixin wrote auth.json (a placeholder): connect writes the new
+	// one. Its markers stay behind with it: a restore point for an auth.json
+	// that is not there makes connect refuse ("Codex auth changed").
+	if agent == "codex" && fileExists(filepath.Join(src, "auth.json.codex-mixin.absent")) &&
+		(name == "auth.json" || strings.HasPrefix(name, "auth.json.codex-mixin.")) {
 		return true
 	}
 	return false
