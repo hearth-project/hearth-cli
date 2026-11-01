@@ -30,6 +30,10 @@ type UpdateResult struct {
 	// Skipped: why an automatic update left this build in place (a
 	// development build, or the server's build is not newer).
 	Skipped string
+	// OnDisk: the server's build was already at exe (put there by the
+	// installer, `hearth self-update` in a terminal, or a server deploy)
+	// while an older one runs; Updated is set so the daemon restarts on it.
+	OnDisk bool
 }
 
 // UpdateOptions tunes SelfUpdateWith.
@@ -137,6 +141,11 @@ func SelfUpdateWith(home, server, exe string, o UpdateOptions) (UpdateResult, er
 	}
 	res.SHA256 = want
 	if cur, err := fileSum(exe); err == nil && cur == want {
+		// The file is the server's build, but the running daemon may be an
+		// older one: the file was replaced under it. Restart on it.
+		if o.Auto && o.Current != "" && m.Version != "" && o.Current != m.Version && AutoUpdateSkip(o.Current, m.Version) == "" {
+			res.Updated, res.OnDisk = true, true
+		}
 		return res, nil
 	}
 	if o.Auto {

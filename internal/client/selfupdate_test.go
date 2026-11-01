@@ -165,6 +165,17 @@ func TestAutoUpdateKeepsBranchBuild(t *testing.T) {
 	if r, err := SelfUpdateWith(home, ts.URL, exe, UpdateOptions{Auto: true, Current: "0.1.0-20261029.0900"}); err != nil || !r.Updated {
 		t.Fatalf("older release kept: %+v %v", r, err)
 	}
+	// The release is on disk now (the line above): a daemon still running
+	// an older release restarts on it, the release itself and a branch build
+	// do not.
+	if r, err := SelfUpdateWith(home, ts.URL, exe, UpdateOptions{Auto: true, Current: "0.1.0-20261029.0900"}); err != nil || !r.Updated || !r.OnDisk {
+		t.Fatalf("older daemon on a replaced binary: %+v %v", r, err)
+	}
+	for _, cur := range []string{"0.1.0-20261030.1156", "0.1.0-20261030.1156+isolate", ""} {
+		if r, err := SelfUpdateWith(home, ts.URL, exe, UpdateOptions{Auto: true, Current: cur}); err != nil || r.Updated {
+			t.Fatalf("%q restarted: %+v %v", cur, r, err)
+		}
+	}
 	os.WriteFile(exe, []byte("branch build"), 0o755)
 	if r, err := SelfUpdate(home, ts.URL, exe); err != nil || !r.Updated {
 		t.Fatalf("manual: %+v %v", r, err)

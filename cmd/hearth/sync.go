@@ -1148,6 +1148,10 @@ func daemonUpdate(e *client.Engine, exe string) bool {
 	if !r.Updated {
 		return false
 	}
+	if r.OnDisk {
+		log.Printf("self-update: %s is already in %s (replaced while this daemon ran %s); restarting on it", describeBuild(r), exe, version)
+		return true
+	}
 	log.Printf("self-update: installed %s; restarting on it", describeBuild(r))
 	if out, err := refreshSkills(exe); err != nil {
 		log.Printf("skills: %v %s", err, strings.TrimSpace(out))
