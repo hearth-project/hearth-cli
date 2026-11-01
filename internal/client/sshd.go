@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"os/user"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -33,7 +34,7 @@ const defaultSSHPort = 8022
 
 // sshdFlags versions the options startSSHD passes; an sshd Hearth started
 // with older ones is restarted (sessions already open stay).
-const sshdFlags = 3
+const sshdFlags = 4
 
 type sshState struct {
 	Disabled bool   `json:"disabled,omitempty"` // this machine only
@@ -75,6 +76,58 @@ func SSHOn(home string) bool {
 		return *c.SSH.Enabled
 	}
 	return runtime.GOOS == "linux"
+}
+
+// keyExpiry is the expiry-time option for accepted device keys: today
+// plus [ssh] key_days (default 7), day granularity so the file changes
+// once a day; "" when off or this sshd is older than OpenSSH 8.2 (it
+// would reject the option and with it the key).
+func keyExpiry(home string, now time.Time) string {
+	days := 7
+	if c, err := UserConfig(home); err == nil && c.SSH != nil && c.SSH.KeyDays != nil {
+		days = *c.SSH.KeyDays
+	}
+	if days <= 0 || !sshdSupportsExpiry() {
+		return ""
+	}
+	return now.AddDate(0, 0, days).Format("20060102")
+}
+
+var sshdVersionRE = regexp.MustCompile(`OpenSSH_(\d+)\.(\d+)`)
+
+// sshdSupportsExpiry: expiry-time came with OpenSSH 8.2.
+func sshdSupportsExpiry() bool {
+	out, _ := exec.Command("ssh", "-V").CombinedOutput() // sshd has no -V; the client ships with it
+	m := sshdVersionRE.FindStringSubmatch(string(out))
+	if m == nil {
+		return false
+	}
+	maj, _ := strconv.Atoi(m[1])
+	min, _ := strconv.Atoi(m[2])
+	return maj > 8 || (maj == 8 && min >= 2)
+}
+
+// keyLines are the authorized_keys lines of the device keys.
+func keyLines(keys []SSHKey, expiry string) []string {
+	var out []string
+	for _, k := range keys {
+		if expiry != "" {
+			out = append(out, `expiry-time="`+expiry+`" `+k.Key)
+		} else {
+			out = append(out, k.Key)
+		}
+	}
+	return out
+}
+
+// SSHForwardAgent reports whether sessions to the user's machines forward
+// this device's ssh-agent ([ssh] forward_agent, default on).
+func SSHForwardAgent(home string) bool {
+	c, err := UserConfig(home)
+	if err == nil && c.SSH != nil && c.SSH.ForwardAgent != nil {
+		return *c.SSH.ForwardAgent
+	}
+	return true
 }
 
 // SSHClientConfigOn reports whether this machine keeps Host entries for the
@@ -229,10 +282,7 @@ func (e *Engine) EnsureSSHD() (SSHStatus, error) {
 	if err != nil {
 		return fail(err)
 	}
-	var lines []string
-	for _, k := range keys {
-		lines = append(lines, k.Key)
-	}
+	lines := keyLines(keys, keyExpiry(home, time.Now()))
 	authPath, err := authorizedKeysPath()
 	if err != nil {
 		return fail(err)
@@ -359,6 +409,7 @@ func startSSHD(home, authPath, addr string, port int, setEnv string) (int, error
 		"-o", "AuthenticationMethods=publickey", "-o", "PubkeyAuthentication=yes",
 		"-o", "PasswordAuthentication=no", "-o", "KbdInteractiveAuthentication=no",
 		"-o", "PermitRootLogin=prohibit-password", "-o", "AllowUsers="+u.Username,
+		"-o", "AllowAgentForwarding=yes", // the client decides (ForwardAgent)
 		"-o", "ClientAliveInterval=60",
 		// Some images set LogLevel DEBUG; with -e the session's debug
 		// lines would end up in the user's terminal.

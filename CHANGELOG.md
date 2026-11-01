@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- SSH: accepted device keys expire after 7 days unless the machine's daemon renews them (OpenSSH `expiry-time`, day granularity; `[ssh] key_days`, `0` = never; skipped on OpenSSH older than 8.2). A key revoked while a machine's daemon was down no longer works there forever.
+- SSH: sessions to your machines forward this device's ssh-agent (`hearth ssh`, and `ForwardAgent yes` in the `~/.ssh/config` entries; `[ssh] forward_agent = false` turns it off); Hearth's sshd allows agent forwarding. Git on the machine uses the keys loaded on your device, with no private key stored there.
 - `hearth agents isolate codex`: codex-mixin's restore marker of an `auth.json` that is not copied stays behind too; with it, `codex-mixin connect` in the new home refused ("Codex auth changed while a codex-mixin custom-mode restore point exists") and the copied config kept the old client key. A login that lives in `~/.hearth` while a machine profile names the workspace now gets the `hearth init --move-login <workspace>` command instead of "no workspace here".
 - Moving a home (`hearth init --move-login`, setup's workspace choice) leaves `<home>/opt` where it is: restore flows install Node and agent CLIs there, and their wrappers (`~/.local/bin/codex`) point at it; after a move Codex was "not found".
 - Library merge without a common base (the first merge after an upgrade): where both sides differ, the server's copy now wins and this machine's goes to `<home>/backup/<time>/merge-other-copies`. A machine stuck for hours on the old conflict won with its old files, e.g. a `config.toml` without the `[skills] resident` list.

@@ -207,3 +207,10 @@ hearth recovery-key rotate             # 恢复密钥泄露时换新
 ```
 
 任何设备只要用主密码登录就能解密全部凭证，没有旧设备审批，所以主密码是凭证的唯一保护：请使用强密码，疑似泄露时立即 `device revoke`、`passwd` 并轮换相关凭证。
+
+### 机器之间的 SSH
+
+已登录的 Linux 机器只接受你自己设备的 SSH 连接：只认公钥、不开密码登录，只放行你未吊销设备的公钥；host key 从端到端加密发布的连接信息里校验，不需要手动确认"信任这台主机"。`hearth ssh <机器>` 和 Hearth 在 Mac 上写的 `~/.ssh/config` 条目，都用本设备的 Hearth 密钥连接。
+
+- **公钥定期过期、自动续期。** 每台机器对一把设备公钥只放行 7 天（`[ssh] key_days`，`0` 表示不过期；需要 OpenSSH 8.2 及以上），daemon 每天续期。设备被吊销后，在下一轮同步时失效；daemon 没在运行的机器上，最晚 7 天后失效。
+- **ssh-agent 转发**（`[ssh] forward_agent`，默认开启）：连接时转发本设备的 ssh-agent，机器上 `git push` 用的是本机已加载的 key（`ssh-add`，Mac 上 `ssh-add --apple-use-keychain`），私钥不用放到那台机器上。连接期间，那台机器上的 root 能借用转发过去的 agent（拿不走私钥）；不信任的机器请关掉。

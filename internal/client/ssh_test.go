@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/hearth-project/hearth-cli/internal/api"
 )
@@ -104,5 +105,31 @@ func TestFindDevice(t *testing.T) {
 	}
 	if _, err := FindDevice(ds, "gpu-f04"); err == nil {
 		t.Error("ambiguous name accepted")
+	}
+}
+
+// Accepted device keys carry an expiry the daemon renews ([ssh] key_days).
+func TestKeyLinesExpiry(t *testing.T) {
+	keys := []SSHKey{{Key: "ssh-ed25519 AAAA1 a"}}
+	if got := keyLines(keys, "20261108"); len(got) != 1 || got[0] != `expiry-time="20261108" ssh-ed25519 AAAA1 a` {
+		t.Fatalf("%v", got)
+	}
+	if got := keyLines(keys, ""); got[0] != "ssh-ed25519 AAAA1 a" {
+		t.Fatalf("%v", got)
+	}
+	home := t.TempDir()
+	now := time.Date(2026, 11, 1, 23, 0, 0, 0, time.UTC)
+	if sshdSupportsExpiry() {
+		if e := keyExpiry(home, now); e != "20261108" {
+			t.Fatalf("default 7 days: %q", e)
+		}
+	}
+	os.MkdirAll(LibraryDir(home), 0o755)
+	os.WriteFile(filepath.Join(LibraryDir(home), "config.toml"), []byte("[ssh]\nkey_days = 0\nforward_agent = false\n"), 0o644)
+	if e := keyExpiry(home, now); e != "" {
+		t.Fatalf("key_days = 0: %q", e)
+	}
+	if SSHForwardAgent(home) {
+		t.Fatal("forward_agent = false ignored")
 	}
 }

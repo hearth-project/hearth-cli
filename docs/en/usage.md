@@ -207,3 +207,10 @@ hearth recovery-key rotate             # the recovery key was exposed
 ```
 
 Any device that logs in with the master password can decrypt every credential (no approval by an existing device), so the master password is their only protection: use a strong one, and after a suspected leak run `device revoke`, `passwd` and rotate the affected credentials.
+
+### SSH between your machines
+
+Logged-in Linux machines accept SSH from your own devices only: public keys only (no passwords), the keys of your active devices, the host keys checked from the end-to-end encrypted endpoints (no "trust this host?"). `hearth ssh <machine>` and the `~/.ssh/config` entries Hearth writes on a Mac connect with this device's Hearth key.
+
+- **Keys expire unless renewed.** Each machine accepts a device key for 7 days (`[ssh] key_days`, `0` = no expiry; OpenSSH 8.2 or newer) and its daemon renews that every day. A revoked device loses access at the next daemon pass, and at the latest after 7 days on a machine whose daemon is down.
+- **Agent forwarding** (`[ssh] forward_agent`, default on): sessions forward this device's ssh-agent, so `git push` on the machine uses the keys loaded here (`ssh-add`, on a Mac `ssh-add --apple-use-keychain`) and no private key needs to be stored there. While you are connected, root on that machine can use the forwarded agent (not copy the keys); turn it off for machines you do not trust.
