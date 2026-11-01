@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/hearth-project/hearth-cli/internal/crypto"
 )
 
 // Admin panel authentication. An admin is a user listed in the admins
@@ -30,7 +32,8 @@ const (
 type adminClaims struct {
 	UID     int64  `json:"u"`
 	Exp     int64  `json:"e"`
-	Purpose string `json:"p"` // link | session
+	Purpose string `json:"p"`           // link | session
+	Nonce   string `json:"n,omitempty"` // sessions: makes each one (and its console wrap key) unique
 }
 
 func (s *Server) signAdmin(c adminClaims) string {
@@ -177,7 +180,8 @@ func (s *Server) handleAdminLogin(w http.ResponseWriter, r *http.Request) {
 // the panel derived in the browser from the master password (the same key
 // the client sends to /v1/auth/login; the password itself never arrives).
 // The answer carries the password-wrapped vault key, as for the client: the
-// console unwraps it in the browser to make one-time install commands.
+// console unwraps it in the browser to make one-time install commands, and
+// the session's wrap key to keep it for the session.
 func (s *Server) handleAdminPasswordLogin(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Email    string `json:"email"`
@@ -201,11 +205,33 @@ func (s *Server) handleAdminPasswordLogin(w http.ResponseWriter, r *http.Request
 	if req.Remember {
 		ttl = rememberTTL
 	}
-	s.setSessionCookie(w, r, u.ID, ttl)
+	tok := s.setSessionCookie(w, r, u.ID, ttl)
 	if s.isAdmin(u.ID) {
 		s.Audit(email, "panel-login", "", "password "+clientIP(r))
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"enc_vault_key": u.EncVaultKey})
+	writeJSON(w, http.StatusOK, map[string]any{"enc_vault_key": u.EncVaultKey, "wrap_key": s.consoleWrapKey(tok)})
+}
+
+// consoleWrapKey is the key the console seals the vault key with in the
+// browser's storage, so it need not ask for the password again during the
+// session. It is derived from the session cookie (HttpOnly), so it differs
+// per session and ends with it; the server never sees what it seals, and
+// the sealed copy in the browser opens only with the cookie's session.
+func (s *Server) consoleWrapKey(sessionTok string) []byte {
+	m := hmac.New(sha256.New, s.adminKey)
+	m.Write([]byte("hearth-console-vault:" + sessionTok))
+	return m.Sum(nil)
+}
+
+// apiConsoleWrapKey hands the console its session's wrap key (see
+// consoleWrapKey).
+func (s *Server) apiConsoleWrapKey(w http.ResponseWriter, r *http.Request, _ userCtx) {
+	c, err := r.Cookie(adminCookie)
+	if err != nil {
+		writeErr(w, http.StatusUnauthorized, "not signed in")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"wrap_key": s.consoleWrapKey(c.Value)})
 }
 
 func (s *Server) setAdminCookie(w http.ResponseWriter, r *http.Request, uid int64) {
@@ -215,10 +241,11 @@ func (s *Server) setAdminCookie(w http.ResponseWriter, r *http.Request, uid int6
 // rememberTTL: "remember this computer" on the sign-in page.
 const rememberTTL = 7 * 24 * time.Hour
 
-func (s *Server) setSessionCookie(w http.ResponseWriter, r *http.Request, uid int64, ttl time.Duration) {
-	tok := s.signAdmin(adminClaims{UID: uid, Exp: s.now() + int64(ttl.Seconds()), Purpose: "session"})
+func (s *Server) setSessionCookie(w http.ResponseWriter, r *http.Request, uid int64, ttl time.Duration) string {
+	tok := s.signAdmin(adminClaims{UID: uid, Exp: s.now() + int64(ttl.Seconds()), Purpose: "session", Nonce: base64.RawURLEncoding.EncodeToString(crypto.RandomBytes(12))})
 	http.SetCookie(w, &http.Cookie{Name: adminCookie, Value: tok, Path: "/", MaxAge: int(ttl.Seconds()),
 		HttpOnly: true, Secure: r.TLS != nil, SameSite: http.SameSiteStrictMode})
+	return tok
 }
 
 func (s *Server) handleAdminLogout(w http.ResponseWriter, r *http.Request) {

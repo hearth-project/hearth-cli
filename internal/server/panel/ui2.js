@@ -19,28 +19,35 @@ function cmdLine(text) { return h("div", { class: "cmd" }, h("code", {}, text), 
 // installBox: the "add a machine" commands. The main one is a one-time
 // install command: it carries a token that logs the new machine in without
 // the master password (works once, for 30 minutes). The page wraps the
-// vault key for it, so it needs the vault key: from the sign-in, else the
-// user types the password once here (checked in this browser). The plain
-// command, which asks for the password on the new machine, stays below.
+// vault key for it: the one kept since sign-in (loadVault), else the user
+// types the password once for this session (checked in this browser). The
+// plain command, which asks for the password on the new machine, stays below.
 function installBox(plain) {
   var out = h("div", {}), err = h("p", { class: "err" });
   var make = h("button", { class: "pri", type: "button" }, t("Make a one-time install command"));
   var pw = h("input", { type: "password", autocomplete: "current-password", placeholder: t("Master password") });
   var unlock = h("form", { class: "row hidden", onsubmit: function (ev) { ev.preventDefault(); go(); } },
-    h("span", { class: "muted small" }, t("Type your master password to make the command. It is checked in this browser and not sent.")), pw,
+    h("span", { class: "muted small" }, t("Type your master password once for this session. It is checked in this browser and not sent.")), pw,
     h("button", { class: "pri", type: "submit" }, t("Continue")));
   var result = h("div", {});
   make.addEventListener("click", function () { go(); });
   function busy(on) { make.disabled = on; unlock.querySelectorAll("button").forEach(function (b) { b.disabled = on; }); }
   function go() {
     err.textContent = "";
-    if (!VAULT_KEY && !pw.value) { unlock.classList.remove("hidden"); pw.focus(); return; }
     busy(true);
-    var vk = VAULT_KEY ? Promise.resolve(VAULT_KEY) : deriveKeys(ME, pw.value).then(function (k) {
-      return me("POST", "/vault-key", { auth_key: k.authKey }).then(function (r) { return unwrapVault(k.kek, r.enc_vault_key); });
-    });
-    vk.then(function (key) {
-      VAULT_KEY = key; pw.value = ""; unlock.classList.add("hidden");
+    loadVault().then(function (kept) {
+      if (kept) return kept;
+      if (!pw.value) { unlock.classList.remove("hidden"); pw.focus(); return null; }
+      return deriveKeys(ME, pw.value).then(function (k) {
+        return me("POST", "/vault-key", { auth_key: k.authKey }).then(function (r) {
+          var vk = unwrapVault(k.kek, r.enc_vault_key);
+          if (r.wrap_key) keepVault(vk, r.wrap_key); else VAULT_KEY = vk;
+          return vk;
+        });
+      });
+    }).then(function (key) {
+      if (!key) return;
+      pw.value = ""; unlock.classList.add("hidden");
       var secret = HC.random(32);
       return me("POST", "/install-tokens", {
         auth_hash: HC.b64enc(HC.sha256(HC.hkdf(secret, "hearth-install-auth"))),

@@ -84,7 +84,7 @@ window.I18N = {
     "Each user's 5 most used skills and agents are shared with their teams automatically.": "每个用户使用最多的 5 个 skills 和 5 个 agents 会自动共享给其所在团队。", "Clients installed before Oct 24 do not update by themselves: run hearth self-update once on that machine.": "10 月 24 日之前安装的客户端不会自动升级：在该机器上执行一次 hearth self-update，之后就会自动升级。", "Clients online": "在线客户端", "New team": "新建团队", "Owner": "Owner", "Add member": "添加成员", "Remove": "移除", "Click a team to manage its members.": "点击团队名管理成员。", "Team name": "团队名", "member": "成员（只能用）", "maintainer": "maintainer（可共享）", "owner": "owner（管理成员）", "Remove from team?": "从团队移除？", "Lowercase letters, digits, . _ -": "小写字母、数字、. _ -", "online": "在线", "IP": "IP", "User": "用户", "Active devices (30 days)": "活跃设备（30 天）",
     "not reported (older client)": "未上报（旧版客户端，升级后显示）", "Hover a skill to see who uses it.": "鼠标移到 skill 上查看使用者。",
     "Make a one-time install command": "生成一次性安装命令", "Make another one": "再生成一个",
-    "Type your master password to make the command. It is checked in this browser and not sent.": "输入主密码以生成命令。密码只在本浏览器里校验，不会发送。",
+    "Type your master password once for this session. It is checked in this browser and not sent.": "输入一次主密码（本次登录期间不再询问）。密码只在本浏览器里校验，不会发送。",
     "Continue": "继续", "Valid until": "有效期至", "works once. The new machine logs in without the master password.": "只能用一次。新机器无需输入主密码即可登录。",
     "Or the plain command, which asks for the master password on the new machine": "或使用普通命令（新机器上需要输入主密码）",
     "wrong password": "密码不对", "too many unused install commands; they expire 30 minutes after they were made": "未使用的安装命令太多；它们在生成 30 分钟后失效",

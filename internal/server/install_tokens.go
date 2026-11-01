@@ -73,9 +73,10 @@ func (s *Server) apiCreateInstallToken(w http.ResponseWriter, r *http.Request, c
 	writeJSON(w, http.StatusCreated, map[string]any{"id": id, "email": c.email, "expires_at": exp})
 }
 
-// apiUnlockVault hands the console the password-wrapped vault key again
-// (after a reload, or a session opened with a link), once it proves the
-// password with the login key. Body: {"auth_key": ...}.
+// apiUnlockVault hands the console the password-wrapped vault key (a
+// session opened with a link, or one whose browser lost its sealed copy),
+// once it proves the password with the login key, and the session's wrap
+// key. Body: {"auth_key": ...}.
 func (s *Server) apiUnlockVault(w http.ResponseWriter, r *http.Request, c userCtx) {
 	var req struct {
 		AuthKey []byte `json:"auth_key"`
@@ -92,7 +93,11 @@ func (s *Server) apiUnlockVault(w http.ResponseWriter, r *http.Request, c userCt
 		writeErr(w, http.StatusForbidden, "wrong password") // not 401: the console treats that as a lost session
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"enc_vault_key": u.EncVaultKey})
+	out := map[string]any{"enc_vault_key": u.EncVaultKey}
+	if ck, err := r.Cookie(adminCookie); err == nil {
+		out["wrap_key"] = s.consoleWrapKey(ck.Value)
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 // handleInstallLogin redeems an install command: the token is deleted

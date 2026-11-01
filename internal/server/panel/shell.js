@@ -12,7 +12,7 @@ function showShell(on) {
 }
 
 function showLogin() {
-  VAULT_KEY = null;
+  forgetVault();
   showShell(false);
   var auth = document.getElementById("auth");
   if (auth) auth.remove();
@@ -71,14 +71,33 @@ function deriveKeys(email, password, onProgress) {
 
 // VAULT_KEY: the account's vault key, unwrapped in this page from the
 // password typed into it (sign-in, or the install-command prompt). Only
-// used to make one-time install commands; kept in memory, and across the
-// reload right after sign-in in sessionStorage, which the next load empties.
-var VAULT_KEY = null;
-try {
-  var vk0 = sessionStorage.getItem("hearth-vk");
-  sessionStorage.removeItem("hearth-vk");
-  if (vk0) VAULT_KEY = HC.b64dec(vk0);
-} catch (e) { VAULT_KEY = null; }
+// used to make one-time install commands. The page keeps it for the whole
+// session: sealed with the session's wrap key (derived by the server from
+// the HttpOnly session cookie, GET /v1/me/vault-wrap) in localStorage. The
+// sealed copy is useless without the session, and the server never sees it.
+// Signing out (or an expired session) removes it.
+var VAULT_KEY = null, VAULT_AAD = "hearth/console-vault/v1";
+try { sessionStorage.removeItem("hearth-vk"); } catch (e) { /* older pages */ }
+
+function keepVault(vk, wrapKey) {
+  VAULT_KEY = vk;
+  try { localStorage.setItem("hearth-vk", HC.b64enc(HC.seal(HC.b64dec(wrapKey), vk, HC.utf8(VAULT_AAD)))); } catch (e) { /* asked again after a reload */ }
+}
+function forgetVault() {
+  VAULT_KEY = null;
+  try { localStorage.removeItem("hearth-vk"); } catch (e) { /* nothing kept */ }
+}
+// loadVault resolves to the vault key kept for this session, or null.
+function loadVault() {
+  if (VAULT_KEY) return Promise.resolve(VAULT_KEY);
+  var sealed = null;
+  try { sealed = localStorage.getItem("hearth-vk"); } catch (e) { sealed = null; }
+  if (!sealed) return Promise.resolve(null);
+  return me("GET", "/vault-wrap").then(function (r) {
+    try { VAULT_KEY = HC.open(HC.b64dec(r.wrap_key), HC.b64dec(sealed), HC.utf8(VAULT_AAD)); } catch (e) { forgetVault(); }
+    return VAULT_KEY;
+  }, function () { return null; });
+}
 
 function unwrapVault(kek, encVaultKey) {
   return HC.open(HC.b64dec(kek), HC.b64dec(encVaultKey), HC.utf8("hearth/vault-key/kek/v1"));
@@ -97,8 +116,8 @@ function passwordLogin(email, password, remember, onProgress) {
         var j = {};
         try { j = txt ? JSON.parse(txt) : {}; } catch (e) { j = {}; }
         if (!r.ok) throw new Error(t(j.error || r.statusText));
-        if (j.enc_vault_key) {
-          try { sessionStorage.setItem("hearth-vk", HC.b64enc(unwrapVault(keys.kek, j.enc_vault_key))); } catch (e) { /* install commands ask again */ }
+        if (j.enc_vault_key && j.wrap_key) {
+          try { keepVault(unwrapVault(keys.kek, j.enc_vault_key), j.wrap_key); } catch (e) { /* install commands ask for the password */ }
         }
       });
     });

@@ -64,6 +64,7 @@ func TestInstallToken(t *testing.T) {
 	}
 	var lr struct {
 		EncVaultKey []byte `json:"enc_vault_key"`
+		WrapKey     []byte `json:"wrap_key"`
 	}
 	if err := json.Unmarshal(body, &lr); err != nil || cookie == nil {
 		t.Fatalf("web login answer %s (%v)", body, err)
@@ -72,7 +73,37 @@ func TestInstallToken(t *testing.T) {
 	if err != nil || !bytes.Equal(vk, want.Key()) {
 		t.Fatalf("console vault key: %v", err)
 	}
-	// After a reload the console asks for the password again.
+	// The console keeps the vault key sealed with the session's wrap key: the
+	// same key comes back for this session, another session gets another.
+	get := func(path string, cookie *http.Cookie) (int, []byte) {
+		req, _ := http.NewRequest("GET", en.url+path, nil)
+		req.AddCookie(cookie)
+		r, err := hc.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer r.Body.Close()
+		b, _ := io.ReadAll(r.Body)
+		return r.StatusCode, b
+	}
+	var wk struct {
+		WrapKey []byte `json:"wrap_key"`
+	}
+	if code, b := get("/v1/me/vault-wrap", cookie); code != 200 || json.Unmarshal(b, &wk) != nil || len(lr.WrapKey) != 32 || !bytes.Equal(wk.WrapKey, lr.WrapKey) {
+		t.Fatalf("wrap key: %d %s", code, b)
+	}
+	_, _, resp2 := post("/v1/web/login", map[string]any{"email": "dev@example.com", "auth_key": uk.AuthKey}, nil)
+	for _, c := range resp2.Cookies() {
+		if c.Name == "hearth_session" {
+			if _, b := get("/v1/me/vault-wrap", c); json.Unmarshal(b, &wk) != nil || bytes.Equal(wk.WrapKey, lr.WrapKey) {
+				t.Fatalf("another session got the same wrap key: %s", b)
+			}
+		}
+	}
+	if code, _ := get("/v1/me/vault-wrap", &http.Cookie{Name: "hearth_session", Value: "forged"}); code != 401 {
+		t.Fatalf("wrap key without a session: %d", code)
+	}
+	// A session without the sealed copy (opened with a link) asks for the password.
 	if code, _, _ := post("/v1/me/vault-key", map[string]any{"auth_key": bytes.Repeat([]byte{1}, 32)}, cookie); code != 403 {
 		t.Fatalf("vault key with a wrong password: %d", code)
 	}
