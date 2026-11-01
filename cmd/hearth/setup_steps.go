@@ -77,7 +77,7 @@ func printSetupSummary(out *setupOut, e *client.Engine, envLeft, withSkill []str
 			joinMax(envLeft, 3), alias, agent))
 	}
 	if exe, err := os.Executable(); err == nil {
-		if p, err := exec.LookPath("hearth"); err != nil || filepath.Dir(p) != filepath.Dir(exe) {
+		if p, err := exec.LookPath("hearth"); err != nil || !sameFile(p, exe) {
 			// Installed in a directory this terminal's PATH does not have yet.
 			next = append(next, fmt.Sprintf("Open a new terminal (this one does not find hearth yet), or: export PATH=\"%s:$PATH\"", filepath.Dir(exe)))
 		}
@@ -119,4 +119,16 @@ func inContainer() bool {
 	}
 	b, _ := os.ReadFile("/proc/1/cgroup")
 	return strings.Contains(string(b), "docker") || strings.Contains(string(b), "kubepods")
+}
+
+// sameFile reports whether two paths name the same file after links (the
+// installer links hearth into a directory already on PATH, e.g.
+// /usr/local/bin/hearth -> ~/.local/bin/hearth).
+func sameFile(a, b string) bool {
+	ra, err1 := filepath.EvalSymlinks(a)
+	rb, err2 := filepath.EvalSymlinks(b)
+	if err1 != nil || err2 != nil {
+		return filepath.Clean(a) == filepath.Clean(b)
+	}
+	return ra == rb
 }

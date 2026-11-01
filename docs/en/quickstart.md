@@ -113,7 +113,7 @@ hearth session list           # synced conversations
 curl -fsSL -k https://<server-host>:8787/install.sh | sh
 ```
 
-After the master password setup proposes the working directory: the one your machines of the same kind use (same GPU model, else the same GPU family such as B or GB series, else the same OS and CPU), or your home when none is alike. Press Enter or type another; you always confirm it. Then it restores:
+After the master password setup proposes the working directory: the one your machines of the same kind use (same GPU model, else the same GPU family such as B or GB series, else the same OS and CPU), or your home when none is alike. A directory on a disk this machine does not have (neither it nor its parent exists here) is not proposed; setup names it instead. Press Enter or type another; you always confirm it. Then it restores:
 
 - the 10 most recently active conversations (`hearth restore --last 30` for more, `hearth session restore <id>` for specific ones);
 - skills, agents, MCP configuration;

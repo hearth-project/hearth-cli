@@ -21,14 +21,27 @@ func TestSuggestWorkspace(t *testing.T) {
 		dev("c", "gb-box", "cf-ng-gbzz2-o-l", "/ws/gb", 30),
 		dev("self", "me", "cf-ng-bzz2-o", "/ws/self", 40),
 	}
-	if s := SuggestWorkspace(ds, "self", mach.Facts{OS: "linux", Arch: "x86_64", GPU: "cf-ng-bzz2-o"}); s.Path != "/ws/new" {
+	if s := SuggestWorkspace(ds, "self", mach.Facts{OS: "linux", Arch: "x86_64", GPU: "cf-ng-bzz2-o"}, nil); s.Path != "/ws/new" {
 		t.Fatalf("same GPU: %+v", s)
 	}
-	if s := SuggestWorkspace(ds, "self", mach.Facts{OS: "linux", Arch: "aarch64", GPU: "cf-ng-gbzz2-x"}); s.Path != "/ws/gb" {
+	if s := SuggestWorkspace(ds, "self", mach.Facts{OS: "linux", Arch: "aarch64", GPU: "cf-ng-gbzz2-x"}, nil); s.Path != "/ws/gb" {
 		t.Fatalf("same family: %+v", s)
 	}
-	if s := SuggestWorkspace(ds, "self", mach.Facts{OS: "darwin", Arch: "aarch64", GPU: "apple"}); s.Path != "" {
+	if s := SuggestWorkspace(ds, "self", mach.Facts{OS: "darwin", Arch: "aarch64", GPU: "apple"}, nil); s.Path != "" {
 		t.Fatalf("nothing alike should suggest the home: %+v", s)
+	}
+	// A workspace on a disk this machine does not mount is skipped and named.
+	notNew := func(p string) bool { return p != "/ws/new" && p != "/ws/gb" }
+	if s := SuggestWorkspace(ds, "self", mach.Facts{OS: "linux", Arch: "x86_64", GPU: "cf-ng-bzz2-o"}, notNew); s.Path != "/ws/old" || s.Missing != "/ws/new" || s.MissingMachine != "new-bzz2" {
+		t.Fatalf("missing disk: %+v", s)
+	}
+	if s := SuggestWorkspace(ds, "self", mach.Facts{OS: "linux", Arch: "aarch64", GPU: "cf-ng-gbzz2-x"}, notNew); s.Path != "" || s.Missing != "/ws/gb" {
+		t.Fatalf("only alike machine on a missing disk: %+v", s)
+	}
+	root := t.TempDir()
+	os.MkdirAll(filepath.Join(root, "mnt"), 0o755)
+	if !WorkspaceUsable(filepath.Join(root, "mnt")) || !WorkspaceUsable(filepath.Join(root, "mnt", "me")) || WorkspaceUsable(filepath.Join(root, "absent", "me")) {
+		t.Fatal("WorkspaceUsable")
 	}
 }
 

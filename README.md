@@ -121,7 +121,7 @@ Next
   Anything else: ask Codex "用 hearth" · hearth status · details: ~/.cache/hearth/setup-….log
 ```
 
-The working directory proposed is the one your machines of the same kind use (same GPU model, else the same GPU family, else the same OS and CPU); with none alike it is your home. Press Enter to take it or type another.
+The working directory proposed is the one your machines of the same kind use (same GPU model, else the same GPU family, else the same OS and CPU); with none alike it is your home. A directory on a disk this machine does not mount is not proposed. Press Enter to take it or type another.
 
 ### 3. Restore the software from another machine
 
