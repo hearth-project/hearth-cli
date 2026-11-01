@@ -212,8 +212,12 @@ func sshCmd() *cobra.Command {
 }
 
 func sshArgs(home string, ep client.SSHEndpoint) []string {
-	return []string{"-i", client.SSHKeyPath(home), "-o", "IdentitiesOnly=yes", "-o", "UserKnownHostsFile=" + client.SSHKnownHosts(home),
+	a := []string{"-i", client.SSHKeyPath(home), "-o", "IdentitiesOnly=yes", "-o", "UserKnownHostsFile=" + client.SSHKnownHosts(home),
 		"-o", "StrictHostKeyChecking=yes", "-o", "LogLevel=ERROR", "-p", strconv.Itoa(ep.Port)}
+	if client.SSHForwardAgent(home) {
+		a = append(a, "-o", "ForwardAgent=yes")
+	}
+	return a
 }
 
 func printSSHStatus(st client.SSHStatus) {
@@ -312,6 +316,9 @@ func writeSSHConfig(e *client.Engine, create bool) (int, string, error) {
 		n++
 		fmt.Fprintf(&b, "Host %s\n  HostName %s\n  Port %d\n  User %s\n  IdentityFile %s\n  IdentitiesOnly yes\n  UserKnownHostsFile %s\n  StrictHostKeyChecking yes\n",
 			aliases[k], ep.Address, ep.Port, ep.User, client.SSHKeyPath(e.Home), client.SSHKnownHosts(e.Home))
+		if client.SSHForwardAgent(e.Home) {
+			b.WriteString("  ForwardAgent yes\n") // git there uses this device's keys; none stored there
+		}
 	}
 	if n == 0 && (i < 0 || j < i) {
 		return 0, path, nil // nothing to add, no block to refresh

@@ -42,6 +42,15 @@ type SSHConfig struct {
 	// ShareKeys: also accept each device's usual keys (~/.ssh/id_*.pub),
 	// so plain ssh and IDEs work (default true).
 	ShareKeys *bool `toml:"share_keys,omitempty"`
+	// KeyDays: device keys accepted by a machine expire after this many
+	// days unless its daemon renews them (OpenSSH expiry-time), so a key
+	// revoked while that daemon was down stops working anyway. Default 7,
+	// 0 = never.
+	KeyDays *int `toml:"key_days,omitempty"`
+	// ForwardAgent: SSH sessions to your machines (hearth ssh, the Host
+	// entries) forward this device's ssh-agent, so git on the machine uses
+	// the keys here and no private key is stored there. Default true.
+	ForwardAgent *bool `toml:"forward_agent,omitempty"`
 	// Config: keep Host entries for your machines in ~/.ssh/config (Codex
 	// Desktop, VS Code, Cursor list them). Default: on for a Mac; on
 	// other machines once hearth ssh config was run.
