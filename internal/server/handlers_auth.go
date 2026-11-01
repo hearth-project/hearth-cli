@@ -59,6 +59,9 @@ func (s *Server) routes() {
 	m.HandleFunc("GET /v1/devices", s.authed(s.handleListDevices))
 	m.HandleFunc("GET /v1/account/usage", s.authed(s.handleAccountUsage))
 	m.HandleFunc("DELETE /v1/devices/{id}", s.authed(s.handleRevokeDevice))
+	m.HandleFunc("PUT /v1/devices/{id}/alias", s.authed(func(w http.ResponseWriter, r *http.Request) {
+		s.putDeviceAlias(w, r, userOf(r))
+	}))
 	// The heartbeat answers how many console changes wait for this user.
 	m.HandleFunc("POST /v1/devices/self/heartbeat", s.authed(func(w http.ResponseWriter, r *http.Request) {
 		var hb api.DeviceHeartbeat
@@ -292,7 +295,7 @@ func (s *Server) handleListDevices(w http.ResponseWriter, r *http.Request) {
 		var machine, health map[string]any
 		_ = json.Unmarshal([]byte(d.MachineJSON), &machine)
 		_ = json.Unmarshal([]byte(d.HealthJSON), &health)
-		dev := api.Device{ID: d.ID, Name: d.Name, Status: d.Status, LastSeen: d.LastSeen, LastIP: d.LastIP, Online: online, Machine: machine, Health: health, HealthAt: d.HealthAt}
+		dev := api.Device{ID: d.ID, Name: d.Name, Alias: d.Alias, Status: d.Status, LastSeen: d.LastSeen, LastIP: d.LastIP, Online: online, Machine: machine, Health: health, HealthAt: d.HealthAt}
 		if d.Status == "active" {
 			b, _ := json.Marshal(s.machineEnv(d.HealthJSON, d.ClientVersion))
 			_ = json.Unmarshal(b, &dev.Env)
@@ -300,6 +303,26 @@ func (s *Server) handleListDevices(w http.ResponseWriter, r *http.Request) {
 		out = append(out, dev)
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+// putDeviceAlias names one of the user's machines (body {"alias": ...};
+// "" clears it).
+func (s *Server) putDeviceAlias(w http.ResponseWriter, r *http.Request, uid int64) {
+	var req struct {
+		Alias string `json:"alias"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	id := r.PathValue("id")
+	if dev, ok := r.Context().Value(ctxDevice).(string); ok && id == "self" {
+		id = dev // a device naming itself
+	}
+	if err := s.st.setDeviceAlias(uid, id, strings.TrimSpace(req.Alias)); err != nil {
+		s.writeStoreErr(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) handleRevokeDevice(w http.ResponseWriter, r *http.Request) {

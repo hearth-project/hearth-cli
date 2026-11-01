@@ -506,10 +506,10 @@ func titleOf(s client.RemoteSession) string {
 
 func machineOf(s client.RemoteSession) string {
 	if s.Meta.Writer != "" {
-		return s.Meta.Writer
+		return deviceLabelByID(s.UpdatedBy, s.Meta.Writer)
 	}
 	if s.Meta.Host != "" {
-		return s.Meta.Host
+		return deviceLabelByID(s.UpdatedBy, s.Meta.Host)
 	}
 	if s.UpdatedBy != "" {
 		return s.UpdatedBy
@@ -533,13 +533,45 @@ func deviceCmd() *cobra.Command {
 			tw := tabwriter.NewWriter(os.Stdout, 0, 2, 2, ' ', 0)
 			fmt.Fprintln(tw, "ID\tNAME\tSTATUS\tLAST SEEN")
 			for _, d := range ds {
-				name := d.Name
+				name := client.DeviceLabel(d)
 				if d.ID == e.Cfg.DeviceID {
 					name += " (this)"
 				}
 				fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", d.ID, name, d.Status, humanize.Time(time.Unix(d.LastSeen, 0)))
 			}
 			return tw.Flush()
+		},
+	}, &cobra.Command{
+		Use: "rename [<machine>] <name>", Short: "Name a machine (shown as name (host), its SSH host name); one argument: this machine; \"\" clears it",
+		Args: cobra.RangeArgs(1, 2),
+		RunE: func(_ *cobra.Command, args []string) error {
+			e, err := engine()
+			if err != nil {
+				return err
+			}
+			id, alias := e.Cfg.DeviceID, args[len(args)-1]
+			label := e.Cfg.DeviceName
+			if len(args) == 2 {
+				ds, err := e.API.Devices()
+				if err != nil {
+					return err
+				}
+				d, err := client.FindDevice(ds, args[0])
+				if err != nil {
+					return err
+				}
+				id, label = d.ID, d.Name
+			}
+			if err := e.API.SetDeviceAlias(id, alias); err != nil {
+				return err
+			}
+			if alias == "" {
+				fmt.Printf("%s: name cleared\n", label)
+			} else {
+				fmt.Printf("%s is now %s\n", label, client.LabelOf(alias, label))
+			}
+			_, _, _ = writeSSHConfig(e, false)
+			return nil
 		},
 	}, &cobra.Command{
 		Use: "revoke <id>", Short: "Revoke a device's access (rotate any credentials it had)", Args: cobra.ExactArgs(1),

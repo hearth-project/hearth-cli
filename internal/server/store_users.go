@@ -3,6 +3,8 @@ package server
 import (
 	"database/sql"
 	"errors"
+	"fmt"
+	"regexp"
 )
 
 type userRow struct {
@@ -130,10 +132,11 @@ type deviceRow struct {
 	HealthJSON    string `json:"health_json"`
 	HealthAt      int64  `json:"health_at"`
 	ClientVersion string `json:"client_version"`
+	Alias         string `json:"alias"`
 }
 
 func (s *store) listDevices(userID int64) ([]deviceRow, error) {
-	rows, err := s.rdb.Query(`SELECT id,name,status,last_seen,offline_at,last_ip,machine_json,health_json,health_at,client_version FROM devices WHERE user_id = ? ORDER BY created_at`, userID)
+	rows, err := s.rdb.Query(`SELECT id,name,status,last_seen,offline_at,last_ip,machine_json,health_json,health_at,client_version,alias FROM devices WHERE user_id = ? ORDER BY created_at`, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -141,12 +144,42 @@ func (s *store) listDevices(userID int64) ([]deviceRow, error) {
 	var out []deviceRow
 	for rows.Next() {
 		var d deviceRow
-		if err := rows.Scan(&d.ID, &d.Name, &d.Status, &d.LastSeen, &d.OfflineAt, &d.LastIP, &d.MachineJSON, &d.HealthJSON, &d.HealthAt, &d.ClientVersion); err != nil {
+		if err := rows.Scan(&d.ID, &d.Name, &d.Status, &d.LastSeen, &d.OfflineAt, &d.LastIP, &d.MachineJSON, &d.HealthJSON, &d.HealthAt, &d.ClientVersion, &d.Alias); err != nil {
 			return nil, err
 		}
 		out = append(out, d)
 	}
 	return out, rows.Err()
+}
+
+// aliasRE: a name people give a machine; also an SSH Host alias.
+var aliasRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,62}$`)
+
+// errAliasTaken: another active machine of the user has the name.
+var errAliasTaken = errors.New("another of your machines has that name")
+
+// setDeviceAlias names a device of the user ("" = back to its host name).
+func (s *store) setDeviceAlias(userID int64, id, alias string) error {
+	if alias != "" && !aliasRE.MatchString(alias) {
+		return fmt.Errorf("%w: a name is 1-63 letters, digits, '.', '_' or '-'", errBadRequest)
+	}
+	if alias != "" {
+		var n int
+		if err := s.db.QueryRow(`SELECT COUNT(*) FROM devices WHERE user_id=? AND id<>? AND status='active' AND (alias=? OR (alias='' AND name=?))`, userID, id, alias, alias).Scan(&n); err != nil {
+			return err
+		}
+		if n > 0 {
+			return errAliasTaken
+		}
+	}
+	res, err := s.db.Exec(`UPDATE devices SET alias=? WHERE user_id=? AND id=?`, alias, userID, id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return errNotFound
+	}
+	return nil
 }
 
 func (s *store) revokeDevice(userID int64, id string) error {

@@ -13,7 +13,12 @@ function deviceRows(ds, mine) {
       detail = h("tr", { class: "sub" }, h("td", { colspan: cols.length }, envDetail(d)));
       row.after(detail);
     };
-    var row = h("tr", {}, h("td", {}, h("b", {}, d.name), h("div", { class: "muted mono" }, d.id), d.facts ? h("div", { class: "muted facts" }, factsLine(d.facts)) : null),
+    var rename = mine && d.status === "active" ? h("button", { class: "sm ghost", title: t("Rename"), onclick: function () {
+      var a = prompt(t("A name for this machine (shown as name (host), and its SSH host name; empty = none):"), d.alias || "");
+      if (a !== null) act(me("PUT", "/devices/" + encodeURIComponent(d.id) + "/alias", { alias: a.trim() }));
+    } }, "✎") : null;
+    var title = d.alias && d.alias !== d.name ? [h("b", {}, d.alias), " ", h("span", { class: "muted" }, "(" + d.name + ")")] : [h("b", {}, d.name)];
+    var row = h("tr", {}, h("td", {}, h("div", {}, title, " ", rename), h("div", { class: "muted mono" }, d.id), d.facts ? h("div", { class: "muted facts" }, factsLine(d.facts)) : null),
       h("td", { class: "mono" }, d.ip || "-"), h("td", {}, st),
       h("td", {}, d.status === "active" ? envPill(d, toggle) : h("span", { class: "muted" }, "-")),
       h("td", {}, d.status === "active" && d.online ? sshCell(d) : h("span", { class: "muted" }, "-")),
@@ -21,7 +26,7 @@ function deviceRows(ds, mine) {
       h("td", {}, d.sessions ? h("span", {}, d.sessions, h("div", { class: "muted small" }, t("newest") + " " + ago(d.last_active))) : h("span", { class: "muted" }, "0")),
       h("td", {}, ago(d.last_seen)), h("td", {}, when(d.created_at)),
       h("td", {}, mine && d.status === "active" ? h("button", { class: "sm bad", onclick: function () {
-        if (confirm(t("Log this machine out? It must run hearth setup again.") + "\n" + d.name)) act(me("DELETE", "/devices/" + encodeURIComponent(d.id)));
+        if (confirm(t("Log this machine out? It must run hearth setup again.") + "\n" + devLabel(d))) act(me("DELETE", "/devices/" + encodeURIComponent(d.id)));
       } }, t("Log out")) : null));
     add(body, row);
   });
@@ -48,7 +53,7 @@ view("home", "Overview", function () {
         card(t("Uploads per day"), chart(o.series.map(function (x) { return x.bytes; }), days, bytes)),
         card(t("Machines online"), online.length ? online.map(function (d) {
           return h("div", { class: "item" }, h("div", { class: "ic" }, icon("machine")), h("div", {},
-            h("div", { class: "nm" }, d.name), h("div", { class: "ds" }, (d.ip || "-") + " · " + (d.version || t("not reported (older client)")) + " · " + ago(d.last_seen))));
+            h("div", { class: "nm" }, devLabel(d)), h("div", { class: "ds" }, (d.ip || "-") + " · " + (d.version || t("not reported (older client)")) + " · " + ago(d.last_seen))));
         }) : empty(t("No machine is online right now."), "💤"), h("a", { href: "#machines" }, t("All machines")))),
       h("div", { class: "two" },
         card(t("My top skills (30 days)"), bars(o.top_skills)),

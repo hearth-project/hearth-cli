@@ -141,6 +141,7 @@ Generated from `hearth --help` by `hearth docs cli > docs/cli.md`; every command
 | [`hearth whoami`](#hearth-whoami) | Show the local identity and this workspace's hearth login |
 | [`hearth device`](#hearth-device) | Manage devices |
 | [`hearth device list`](#hearth-device-list) | List devices |
+| [`hearth device rename`](#hearth-device-rename) | Name a machine (shown as name (host), its SSH host name); one argument: this machine; "" clears it |
 | [`hearth device revoke`](#hearth-device-revoke) | Revoke a device's access (rotate any credentials it had) |
 | [`hearth passwd`](#hearth-passwd) | Change the master password (other devices keep working) |
 | [`hearth recover`](#hearth-recover) | Forgot the password: set a new one with the recovery key (signs out all devices) |
@@ -228,6 +229,7 @@ Log in, restore the newest conversations, skills and credentials, and start back
 hearth setup [flags]
 
 Flags:
+      --alias string     a name for this machine (default: asked in a terminal, proposing e.g. gb-node-e05-13); hearth device rename changes it
       --ca-cert string   PEM certificate to trust for a self-signed server
       --device string    device name (default: hostname)
       --email string     account email (default: this machine's local identity, as hearth login)
@@ -1622,6 +1624,14 @@ List devices
 
 ```text
 hearth device list
+```
+
+## hearth device rename
+
+Name a machine (shown as name (host), its SSH host name); one argument: this machine; "" clears it
+
+```text
+hearth device rename [<machine>] <name>
 ```
 
 ## hearth device revoke

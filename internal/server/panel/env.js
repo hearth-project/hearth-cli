@@ -90,7 +90,7 @@ function envCard(d) {
 // the one sentence to say to an agent on another machine.
 function envDetail(d) {
   var env = d.env, z = zh();
-  var short = /^\d+(\.\d+){3}$/.test(d.name) ? d.name : d.name.split(".")[0]; // keep IP names whole
+  var short = d.alias || (/^\d+(\.\d+){3}$/.test(d.name) ? d.name : d.name.split(".")[0]); // keep IP names whole
   var probs = env.problems.length ? h("ul", { class: "envlist big" }, env.problems.map(function (p) {
     var fix = envFix(p, d);
     return h("li", { class: p.level }, h("span", { class: "edot" }),
@@ -124,3 +124,6 @@ function sshCell(d) {
   }
   return h("span", { class: "muted" }, "-");
 }
+
+// devLabel is how a machine is shown: "alias (name)" once the user named it.
+function devLabel(d) { return d.alias && d.alias !== d.name ? d.alias + " (" + d.name + ")" : d.name; }

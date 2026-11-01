@@ -237,6 +237,8 @@ func (s *Server) writeStoreErr(w http.ResponseWriter, err error) {
 		writeErr(w, http.StatusGone, "session deleted")
 	case errors.Is(err, errLocked):
 		writeErr(w, http.StatusLocked, "session leased by another device")
+	case errors.Is(err, errAliasTaken):
+		writeErr(w, http.StatusConflict, err.Error())
 	case errors.Is(err, errExists):
 		writeErr(w, http.StatusConflict, "already exists")
 	case errors.Is(err, errInvite):

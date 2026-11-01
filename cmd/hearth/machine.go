@@ -151,7 +151,7 @@ func machineCmd() *cobra.Command {
 			if at, _ := d.Env["checked_at"].(float64); at > 0 {
 				checked = agoUnix(int64(at))
 			}
-			t.add(d.Name, state, fact, ag, checked, restore)
+			t.add(client.DeviceLabel(d), state, fact, ag, checked, restore)
 		}
 		t.fit()
 		t.print()

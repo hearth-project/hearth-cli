@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -194,7 +195,41 @@ func initCmd() *cobra.Command {
 	return c
 }
 
-func engine() (*client.Engine, error) { return client.NewEngine(client.Home()) }
+func engine() (*client.Engine, error) {
+	e, err := client.NewEngine(client.Home())
+	if err == nil {
+		labelEngine = e
+	}
+	return e, err
+}
+
+// Machine names as shown: "alias (host)" for machines the user named. The
+// device list is fetched once per command, when a name is first shown.
+var (
+	labelEngine *client.Engine
+	labelOnce   sync.Once
+	labelByID   map[string]string
+)
+
+func deviceLabelByID(id, name string) string {
+	labelOnce.Do(func() {
+		labelByID = map[string]string{}
+		if labelEngine == nil {
+			return
+		}
+		if ds, err := labelEngine.API.Devices(); err == nil {
+			for _, d := range ds {
+				if d.Alias != "" {
+					labelByID[d.ID] = d.Alias
+				}
+			}
+		}
+	})
+	if a := labelByID[id]; a != "" {
+		return client.LabelOf(a, shortHost(name))
+	}
+	return name
+}
 
 // prepareServer validates the server URL and installs an optional CA.
 func prepareServer(server, caCert string, insecure bool) error {

@@ -127,8 +127,11 @@ func IdentityLoginMessage(email string, ts int64) string {
 }
 
 type Device struct {
-	ID       string         `json:"id"`
-	Name     string         `json:"name"`
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	// Alias is the name the user gave the machine ("" = none); shown as
+	// "alias (name)" and used as its SSH host name.
+	Alias    string         `json:"alias,omitempty"`
 	Status   string         `json:"status"`
 	LastSeen int64          `json:"last_seen"`
 	LastIP   string         `json:"last_ip,omitempty"`
