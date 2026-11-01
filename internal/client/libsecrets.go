@@ -50,6 +50,14 @@ func (e *Engine) libBundle() (data []byte, sum, secSum string, secrets map[strin
 	if err != nil {
 		return nil, "", "", nil, err
 	}
+	// Written here on demand (another machine's upload, removed later):
+	// not this machine's to push, and their removal deletes nothing.
+	temp := tempCredFiles(e.Home)
+	for bp, p := range secrets {
+		if temp[p] {
+			delete(secrets, bp)
+		}
+	}
 	return data, sum, libSecretsSum(secrets), secrets, nil
 }
 

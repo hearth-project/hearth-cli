@@ -126,7 +126,9 @@ Generated from `hearth --help` by `hearth docs cli > docs/cli.md`; every command
 | [`hearth secret get`](#hearth-secret-get) | Print a secret's value |
 | [`hearth secret list`](#hearth-secret-list) | List secret names (not values) |
 | [`hearth secret rm`](#hearth-secret-rm) | Delete a secret |
-| [`hearth secret exec`](#hearth-secret-exec) | Run a command with env-style secrets (UPPER_CASE names) in its environment |
+| [`hearth secret exec`](#hearth-secret-exec) | Run a command with env-style secrets (UPPER_CASE names) in its environment; --for: credential files too, removed after |
+| [`hearth secret use`](#hearth-secret-use) | Write the credentials a skill or file secret needs (0600) for a while; removed after --ttl |
+| [`hearth secret clean`](#hearth-secret-clean) | Remove the credential files written on demand (hearth secret use, prepare_credentials) now |
 | [`hearth up`](#hearth-up) | After a container restart: start the sync daemon and recipe services |
 | [`hearth init`](#hearth-init) | Make a directory your hearth workspace (state in <dir>/.hearth; --move-login brings the login of ~/.hearth) |
 | [`hearth daemon`](#hearth-daemon) | Continuously sync session files in the foreground (flushes on SIGTERM) |
@@ -1465,10 +1467,34 @@ hearth secret rm <NAME>
 
 ## hearth secret exec
 
-Run a command with env-style secrets (UPPER_CASE names) in its environment
+Run a command with env-style secrets (UPPER_CASE names) in its environment; --for: credential files too, removed after
 
 ```text
-hearth secret exec -- <command> [args...]
+hearth secret exec [--for <skill|NAME>]... -- <command> [args...] [flags]
+
+Flags:
+      --for stringArray   also put this skill's (or file secret's) credential files in place while the command runs
+```
+
+## hearth secret use
+
+Writes the credential files of the named skills (kept encrypted by the machine that had them) or the named file
+secrets to their places, mode 0600, and prints the paths, never the values. They are removed after --ttl
+(default 12h; 0 = keep) by the daemon, or now with hearth secret clean, and are not uploaded from here.
+
+```text
+hearth secret use <skill|NAME>... [flags]
+
+Flags:
+      --ttl duration   remove the files after this long (0 = keep) (default 12h0m0s)
+```
+
+## hearth secret clean
+
+Remove the credential files written on demand (hearth secret use, prepare_credentials) now
+
+```text
+hearth secret clean
 ```
 
 ## hearth up

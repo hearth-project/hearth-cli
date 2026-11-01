@@ -86,6 +86,9 @@ func TestMCPSetupTools(t *testing.T) {
 		Propose: func(r, steps, reason string) (string, error) {
 			got = append(got, r, steps, reason)
 			return "42-abc", nil
+		},
+		PrepareCredentials: func(names []string) (string, error) {
+			return "bos: /x/skills/bos/assets/credentials written\n", nil
 		}}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -101,7 +104,7 @@ func TestMCPSetupTools(t *testing.T) {
 	}
 	defer cs.Close()
 	tools, err := cs.ListTools(ctx, nil)
-	if err != nil || len(tools.Tools) != 5 {
+	if err != nil || len(tools.Tools) != 6 {
 		t.Fatalf("tools: %v %v", tools, err)
 	}
 	r, err := cs.CallTool(ctx, &mcp.CallToolParams{Name: "list_setup_recipes", Arguments: map[string]any{}})
@@ -112,6 +115,10 @@ func TestMCPSetupTools(t *testing.T) {
 		"steps": "[[step]]\ntype = \"run\"\nrun = \"npm i -g x\"\n", "reason": "installed x"}})
 	if err != nil || !strings.Contains(r.Content[0].(*mcp.TextContent).Text, "42-abc") || len(got) != 3 || got[2] != "installed x" {
 		t.Fatalf("propose_setup_step: %v %+v %q", err, r, got)
+	}
+	r, err = cs.CallTool(ctx, &mcp.CallToolParams{Name: "prepare_credentials", Arguments: map[string]any{"names": []string{"bos"}}})
+	if err != nil || !strings.Contains(r.Content[0].(*mcp.TextContent).Text, "assets/credentials written") {
+		t.Fatalf("prepare_credentials: %v %+v", err, r)
 	}
 }
 

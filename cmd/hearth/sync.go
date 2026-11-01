@@ -326,6 +326,10 @@ func daemonCmd() *cobra.Command {
 						log.Printf("upload usage: %v", err)
 					}
 				}
+				// Credential files written on demand whose time is up.
+				if removed, rerr := client.RemoveTempCredentials(e.Home, false, nil); rerr == nil && len(removed) > 0 {
+					log.Printf("removed %d credential file(s) written on demand", len(removed))
+				}
 				st, err := e.PushOnce()
 				// sshd for the user's devices: running, current keys, endpoint published.
 				{
