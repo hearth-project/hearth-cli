@@ -6,7 +6,7 @@ function deviceRows(ds, mine) {
   var cols = ["Machine", "IP", "Status", "Environment", "SSH", "Version", "Conversations", "Last seen", "Created", ""];
   var body = h("tbody", {});
   ds.forEach(function (d) {
-    var st = d.status !== "active" ? badge(t(d.status), "bad") : d.online ? h("span", { class: "dev" }, h("span", { class: "dot" }), t("online")) : h("span", { class: "dev muted" }, h("span", { class: "dot off" }), t("offline"));
+    var st = d.online ? h("span", { class: "dev" }, h("span", { class: "dot" }), t("online")) : h("span", { class: "dev muted" }, h("span", { class: "dot off" }), t("offline"));
     var detail = null;
     var toggle = function () {
       if (detail) { detail.remove(); detail = null; return; }
@@ -26,8 +26,8 @@ function deviceRows(ds, mine) {
       h("td", {}, d.sessions ? h("span", {}, d.sessions, h("div", { class: "muted small" }, t("newest") + " " + ago(d.last_active))) : h("span", { class: "muted" }, "0")),
       h("td", {}, ago(d.last_seen)), h("td", {}, when(d.created_at)),
       h("td", {}, mine && d.status === "active" ? h("button", { class: "sm bad", onclick: function () {
-        if (confirm(t("Log this machine out? It must run hearth setup again.") + "\n" + devLabel(d))) act(me("DELETE", "/devices/" + encodeURIComponent(d.id)));
-      } }, t("Log out")) : null));
+        if (confirm(t("Remove this machine? It is logged out and leaves this list; to use it again, run hearth setup on it.") + "\n" + devLabel(d))) act(me("DELETE", "/devices/" + encodeURIComponent(d.id)));
+      } }, t("Remove")) : null));
     add(body, row);
   });
   return wrap(h("table", {}, h("thead", {}, h("tr", {}, cols.map(function (k) { return h("th", {}, t(k)); }))), body));
