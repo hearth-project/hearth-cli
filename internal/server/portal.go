@@ -71,6 +71,8 @@ func (s *Server) portalRoutes(m *http.ServeMux) {
 	u("GET /v1/me/settings", s.apiMySettings)
 	u("GET /v1/me/intents", s.apiMyIntents)
 	u("DELETE /v1/me/intents/{id}", s.apiCancelIntent)
+	u("POST /v1/me/install-tokens", s.apiCreateInstallToken)
+	m.HandleFunc("POST /v1/me/vault-key", s.limited(s.user(s.apiUnlockVault)))
 }
 
 func (s *Server) apiMe(w http.ResponseWriter, _ *http.Request, c userCtx) {

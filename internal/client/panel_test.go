@@ -152,7 +152,7 @@ func TestAdminPanel(t *testing.T) {
 			t.Fatal(err)
 		}
 		r.Body.Close()
-		if r.StatusCode == 204 {
+		if r.StatusCode == 200 {
 			found := false
 			for _, c := range r.Cookies() {
 				found = found || (c.Name == "hearth_session" && c.HttpOnly)
@@ -163,14 +163,14 @@ func TestAdminPanel(t *testing.T) {
 		}
 		return r.StatusCode
 	}
-	if code := pwLogin("dev@example.com", pw); code != 204 {
+	if code := pwLogin("dev@example.com", pw); code != 200 {
 		t.Fatalf("admin password login: %d", code)
 	}
 	if code := pwLogin("dev@example.com", "wrong password"); code != 401 {
 		t.Fatalf("wrong password: %d", code)
 	}
 	// Every user signs in to the console; admin pages stay closed to them.
-	if code := pwLogin("bob@example.com", pw); code != 204 {
+	if code := pwLogin("bob@example.com", pw); code != 200 {
 		t.Fatalf("user login: %d", code)
 	}
 	libWrite(t, bob, "skills/bench/SKILL.md", "---\nname: bench\ndescription: run benchmarks\n---\nsteps\n")

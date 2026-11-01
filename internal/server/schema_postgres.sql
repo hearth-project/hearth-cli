@@ -234,6 +234,17 @@ CREATE TABLE IF NOT EXISTS user_intents (
 );
 CREATE INDEX IF NOT EXISTS user_intents_by_user ON user_intents(user_id, id);
 
+-- One-time install commands made in the web console (see schema.sql).
+CREATE TABLE IF NOT EXISTS install_tokens (
+  id            TEXT PRIMARY KEY,
+  user_id       BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  auth_hash     BYTEA NOT NULL,
+  enc_vault_key BYTEA NOT NULL,
+  created_at    BIGINT NOT NULL,
+  expires_at    BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS install_tokens_by_user ON install_tokens(user_id);
+
 -- Indexes for the hot read paths.
 CREATE INDEX IF NOT EXISTS sessions_by_access ON sessions(user_id, last_accessed_at DESC);
 CREATE INDEX IF NOT EXISTS sessions_for_gc ON sessions(status, last_accessed_at);

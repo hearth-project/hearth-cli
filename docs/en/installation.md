@@ -24,6 +24,16 @@ curl -fsSL https://<server>/install.sh | sh -s -- --install-only
 
 `curl -fsS https://<server>/v1/info` tells the registration mode: `open` (anyone who can reach the server may sign up), `invite` (an invite code is needed) or `closed`.
 
+### One-time install command (no password on the new machine)
+
+Signed in to the web console, open **Machines → Add a machine** and click **Make a one-time install command**. The command looks like
+
+```bash
+curl -fsSL https://<server>/install.sh | sh -s -- --email you@example.com --token <id>.<secret>
+```
+
+and logs the new machine in without the master password. It works once and for 30 minutes; make a new one for each machine. The page wraps your vault key with a key derived from a random secret that only the command holds, so the server still sees ciphertext only. After a page reload the console asks for the master password once more (checked in the browser) before it makes a command. Treat the command like a password until it has been used: it stays in the new machine's shell history, but it no longer works after its first use. `hearth setup --token <id>.<secret>` (or `HEARTH_INSTALL_TOKEN`) does the same without the installer.
+
 ### Self-signed servers
 
 Internal servers often use a self-signed certificate; the install command then carries a key pin:

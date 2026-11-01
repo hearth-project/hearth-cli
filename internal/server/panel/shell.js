@@ -12,6 +12,7 @@ function showShell(on) {
 }
 
 function showLogin() {
+  VAULT_KEY = null;
   showShell(false);
   var auth = document.getElementById("auth");
   if (auth) auth.remove();
@@ -47,9 +48,10 @@ function showLogin() {
   email.focus();
 }
 
-// passwordLogin derives the login key in a worker (Argon2id + HKDF, the
-// client's scheme) and exchanges it for the session cookie.
-function passwordLogin(email, password, remember, onProgress) {
+// deriveKeys runs the client's key derivation (Argon2id + HKDF) in a
+// worker: the login key for the server and the key that unwraps the vault
+// key, which never leaves this page.
+function deriveKeys(email, password, onProgress) {
   return fetch("/v1/auth/prelogin", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: email }) })
     .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(t(j.error || r.statusText)); return j; }); })
     .then(function (pre) {
@@ -57,20 +59,48 @@ function passwordLogin(email, password, remember, onProgress) {
         var w = new Worker("/app/kdf.js");
         w.onmessage = function (ev) {
           var d = ev.data;
-          if (d.progress !== undefined) { onProgress(d.progress); return; }
+          if (d.progress !== undefined) { if (onProgress) onProgress(d.progress); return; }
           w.terminate();
-          if (d.error) reject(new Error(d.error)); else resolve(d.authKey);
+          if (d.error) reject(new Error(d.error)); else resolve(d);
         };
         w.onerror = function (e) { w.terminate(); reject(new Error(e.message || "worker failed")); };
         w.postMessage({ password: password, salt: pre.salt, kdf: pre.kdf });
       });
-    })
-    .then(function (authKey) {
-      return fetch("/v1/web/login", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: email, auth_key: authKey, remember: remember }) });
+    });
+}
+
+// VAULT_KEY: the account's vault key, unwrapped in this page from the
+// password typed into it (sign-in, or the install-command prompt). Only
+// used to make one-time install commands; kept in memory, and across the
+// reload right after sign-in in sessionStorage, which the next load empties.
+var VAULT_KEY = null;
+try {
+  var vk0 = sessionStorage.getItem("hearth-vk");
+  sessionStorage.removeItem("hearth-vk");
+  if (vk0) VAULT_KEY = HC.b64dec(vk0);
+} catch (e) { VAULT_KEY = null; }
+
+function unwrapVault(kek, encVaultKey) {
+  return HC.open(HC.b64dec(kek), HC.b64dec(encVaultKey), HC.utf8("hearth/vault-key/kek/v1"));
+}
+
+// passwordLogin exchanges the derived login key for the session cookie.
+function passwordLogin(email, password, remember, onProgress) {
+  var keys;
+  return deriveKeys(email, password, onProgress)
+    .then(function (k) {
+      keys = k;
+      return fetch("/v1/web/login", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: email, auth_key: k.authKey, remember: remember }) });
     })
     .then(function (r) {
-      if (r.status === 204) return;
-      return r.json().then(function (j) { throw new Error(t(j.error || r.statusText)); });
+      return r.text().then(function (txt) {
+        var j = {};
+        try { j = txt ? JSON.parse(txt) : {}; } catch (e) { j = {}; }
+        if (!r.ok) throw new Error(t(j.error || r.statusText));
+        if (j.enc_vault_key) {
+          try { sessionStorage.setItem("hearth-vk", HC.b64enc(unwrapVault(keys.kek, j.enc_vault_key))); } catch (e) { /* install commands ask again */ }
+        }
+      });
     });
 }
 

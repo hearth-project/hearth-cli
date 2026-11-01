@@ -179,6 +179,9 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) { s.mux.Serve
 func (s *Server) RunGC() (gcStats, error) {
 	now := s.cfg.Now().Unix()
 	st, err := s.st.runGC(now, int64(s.cfg.ExpireAfter.Seconds()), int64(s.cfg.Grace.Seconds()), int64(s.cfg.TombstoneTTL.Seconds()), int64(s.cfg.DeviceTTL.Seconds()))
+	if _, e := s.st.db.Exec(`DELETE FROM install_tokens WHERE expires_at<?`, now); e != nil && err == nil {
+		err = e
+	}
 	for _, uid := range st.users {
 		s.auth.purgeUser(uid)
 	}

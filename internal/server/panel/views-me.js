@@ -40,7 +40,7 @@ view("home", "Overview", function () {
     var skills = lib.items.filter(function (x) { return x.type === "skill"; }), agents = lib.items.filter(function (x) { return x.type === "agent"; });
     var days = o.series.map(function (x) { return x.day.slice(5); });
     var notice = o.pending_changes ? h("div", { class: "notice" }, icon("bolt"), t("Changes waiting for your machines") + ": " + o.pending_changes + " · " + t("a machine with hearth running applies them within about a minute")) : null;
-    var addMachine = !ds.length && o.install ? card(t("Add a machine"), [h("p", { class: "muted small" }, t("Run on the machine, in a terminal:")), cmdLine(o.install)]) : null;
+    var addMachine = !ds.length && o.install ? card(t("Add a machine"), [h("p", { class: "muted small" }, t("Run on the machine, in a terminal:")), installBox(o.install)]) : null;
     return [notice, addMachine,
       h("div", { class: "grid" },
         kpi(t("Machines online"), online.length + " / " + ds.filter(function (d) { return d.status === "active"; }).length, "machine", online.length ? "ok" : ""),
@@ -75,7 +75,7 @@ view("machines", "Machines", function () {
     var ds = r[0], o = r[1];
     return [card(t("Machines") + " (" + ds.length + ")", deviceRows(ds, true),
       h("span", { class: "muted small" }, t("Online = background sync reported in the last 15 minutes."))),
-      o.install ? card(t("Add a machine"), [h("p", { class: "muted small" }, t("Run on the new machine, in a terminal. It installs Hearth, signs in and restores your setup:")), cmdLine(o.install),
+      o.install ? card(t("Add a machine"), [h("p", { class: "muted small" }, t("Run on the new machine, in a terminal. It installs Hearth, signs in and restores your setup:")), installBox(o.install),
         h("p", { class: "muted small" }, t("Then, on any other machine with Hearth, tell its agent the sentence the installer prints; it sets up the new machine's software over hearth ssh:")),
         cmdLine(t("restore the Codex environment of <machine>"))]) : null];
   });

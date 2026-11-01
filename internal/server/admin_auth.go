@@ -176,6 +176,8 @@ func (s *Server) handleAdminLogin(w http.ResponseWriter, r *http.Request) {
 // handleAdminPasswordLogin signs an admin in with email and the login key
 // the panel derived in the browser from the master password (the same key
 // the client sends to /v1/auth/login; the password itself never arrives).
+// The answer carries the password-wrapped vault key, as for the client: the
+// console unwraps it in the browser to make one-time install commands.
 func (s *Server) handleAdminPasswordLogin(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Email    string `json:"email"`
@@ -203,7 +205,7 @@ func (s *Server) handleAdminPasswordLogin(w http.ResponseWriter, r *http.Request
 	if s.isAdmin(u.ID) {
 		s.Audit(email, "panel-login", "", "password "+clientIP(r))
 	}
-	w.WriteHeader(http.StatusNoContent)
+	writeJSON(w, http.StatusOK, map[string]any{"enc_vault_key": u.EncVaultKey})
 }
 
 func (s *Server) setAdminCookie(w http.ResponseWriter, r *http.Request, uid int64) {
