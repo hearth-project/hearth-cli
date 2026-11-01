@@ -143,7 +143,7 @@ var quietOnTTY bool
 
 // shortHost drops the domain of a host name (IP addresses stay whole).
 func shortHost(h string) string {
-	if net.ParseIP(h) != nil {
+	if net.ParseIP(h) != nil || strings.Contains(h, " (") { // an IP, or a label "alias (host)"
 		return h
 	}
 	if i := strings.IndexByte(h, '.'); i > 0 {

@@ -188,6 +188,7 @@ func (s *Server) apiUsers(w http.ResponseWriter, _ *http.Request, _ adminCtx) {
 type adminDevice struct {
 	ID        string `json:"id"`
 	Name      string `json:"name"`
+	Alias     string `json:"alias,omitempty"`
 	Status    string `json:"status"`
 	CreatedAt int64  `json:"created_at"`
 	LastSeen  int64  `json:"last_seen"`
@@ -214,7 +215,7 @@ func (s *Server) apiUserDevices(w http.ResponseWriter, r *http.Request, _ adminC
 
 // writeDevices lists a user's devices, newest activity first.
 func (s *Server) writeDevices(w http.ResponseWriter, uid int64) {
-	rows, err := s.st.rdb.Query(`SELECT id,name,status,created_at,last_seen,client_version,last_ip,offline_at,machine_json,health_json FROM devices WHERE user_id=? ORDER BY last_seen DESC`, uid)
+	rows, err := s.st.rdb.Query(`SELECT id,name,status,created_at,last_seen,client_version,last_ip,offline_at,machine_json,health_json,alias FROM devices WHERE user_id=? ORDER BY last_seen DESC`, uid)
 	if err != nil {
 		s.writeStoreErr(w, err)
 		return
@@ -237,7 +238,7 @@ func (s *Server) writeDevices(w http.ResponseWriter, uid int64) {
 		var d adminDevice
 		var off int64
 		var machineJSON, healthJSON string
-		if err := rows.Scan(&d.ID, &d.Name, &d.Status, &d.CreatedAt, &d.LastSeen, &d.Version, &d.IP, &off, &machineJSON, &healthJSON); err != nil {
+		if err := rows.Scan(&d.ID, &d.Name, &d.Status, &d.CreatedAt, &d.LastSeen, &d.Version, &d.IP, &off, &machineJSON, &healthJSON, &d.Alias); err != nil {
 			s.writeStoreErr(w, err)
 			return
 		}
@@ -610,7 +611,7 @@ func (s *Server) topUsage(typ, since string, limit int) []nameCount {
 // groups them by client version (most devices first).
 func (s *Server) activeDevices(since int64) ([]activeDevice, []nameCount) {
 	devices, versions := []activeDevice{}, []nameCount{}
-	rows, err := s.st.rdb.Query(`SELECT d.name, d.last_ip, u.email, d.client_version, d.last_seen, d.offline_at FROM devices d JOIN users u ON u.id=d.user_id
+	rows, err := s.st.rdb.Query(`SELECT CASE WHEN d.alias<>'' AND d.alias<>d.name THEN d.alias || ' (' || d.name || ')' ELSE d.name END, d.last_ip, u.email, d.client_version, d.last_seen, d.offline_at FROM devices d JOIN users u ON u.id=d.user_id
 		WHERE d.status='active' AND d.last_seen>=? ORDER BY d.last_seen DESC LIMIT 1000`, since)
 	if err != nil {
 		return devices, versions

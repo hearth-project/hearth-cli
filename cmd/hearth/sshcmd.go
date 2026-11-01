@@ -271,6 +271,12 @@ func deviceAliases(e *client.Engine, ds []api.Device) map[string]string {
 	for i, a := range client.MachineAliases(e.Home, ids, names, fs, addrs) {
 		out[ids[i]] = a
 	}
+	// A name the user gave the machine is its SSH host name too.
+	for _, d := range ds {
+		if d.Alias != "" && (d.Status == "" || d.Status == "active") {
+			out[d.ID] = d.Alias
+		}
+	}
 	return out
 }
 

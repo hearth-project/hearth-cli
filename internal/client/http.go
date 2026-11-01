@@ -524,3 +524,9 @@ func netError(server string, err error) error {
 	}
 	return &NetError{Server: server, Hint: hint, Err: err}
 }
+
+// SetDeviceAlias names a device ("self" = this one; "" clears the name).
+func (a *API) SetDeviceAlias(id, alias string) error {
+	_, err := a.do("PUT", "/v1/devices/"+url.PathEscape(id)+"/alias", map[string]string{"alias": alias}, nil, nil, nil)
+	return err
+}

@@ -59,6 +59,7 @@ func (s *Server) portalRoutes(m *http.ServeMux) {
 	u("GET /v1/me", s.apiMe)
 	u("GET /v1/me/devices", s.apiMyDevices)
 	u("DELETE /v1/me/devices/{id}", s.apiRevokeMyDevice)
+	u("PUT /v1/me/devices/{id}/alias", func(w http.ResponseWriter, r *http.Request, c userCtx) { s.putDeviceAlias(w, r, c.uid) })
 	u("GET /v1/me/library", s.apiMyLibrary)
 	u("GET /v1/me/teams", s.apiMyTeams)
 	u("POST /v1/me/teams/{team}/invite", s.apiMyTeamInvite)

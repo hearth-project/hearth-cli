@@ -72,7 +72,7 @@ func printSetupSummary(out *setupOut, e *client.Engine, envLeft, withSkill []str
 		if ma := client.MachineAgents(home); len(ma) > 0 && ma[0] != "codex" {
 			agent = map[string]string{"claude": "Claude Code", "comate": "Comate"}[ma[0]]
 		}
-		alias := client.MachineAlias(e.Cfg.DeviceName, factsMap())
+		alias := thisAlias(e)
 		next = append(next, fmt.Sprintf("Set up the software (%s): on any machine with Hearth, tell its agent\n     \"恢复 %s 的 %s 环境\"",
 			joinMax(envLeft, 3), alias, agent))
 	}

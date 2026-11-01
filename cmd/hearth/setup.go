@@ -18,7 +18,8 @@ import (
 // log in (if needed), restore every session, start the background daemon.
 func setupCmd() *cobra.Command {
 	var server, email, device, caCert, invite, team string
-	var insecure, noDaemon, force, yes, create, switchLogin, noRegister, noImport, full bool
+	var insecure, noDaemon, force, yes, create, switchLogin, noRegister, noImport, full, newLogin bool
+	var alias string
 	setupLast := defaultRestoreLast
 	c := &cobra.Command{
 		Use:   "setup",
@@ -143,6 +144,7 @@ func setupCmd() *cobra.Command {
 				if err := client.SetOnDemand(home, !full); err != nil {
 					out.warn("restore mode", err)
 				}
+				newLogin = true
 			default:
 				return err
 			}
@@ -155,6 +157,11 @@ func setupCmd() *cobra.Command {
 			e, err := engine()
 			if err != nil {
 				return err
+			}
+			// A name for this machine, shown as "name (host)" everywhere and
+			// used as its SSH host name.
+			if newLogin || alias != "" {
+				chooseSetupAlias(out, e, alias)
 			}
 			var libErr, restoreErr error
 			var teams string
@@ -356,7 +363,7 @@ func setupCmd() *cobra.Command {
 				if serr != nil {
 					out.warn("ssh", fmt.Errorf("%v (hearth ssh status)", serr))
 				} else if ss.Running {
-					out.line("ssh", fmt.Sprintf("%s (%s:%d)", client.MachineAlias(e.Cfg.DeviceName, factsMap()), ss.Address, ss.Port))
+					out.line("ssh", fmt.Sprintf("%s (%s:%d)", thisAlias(e), ss.Address, ss.Port))
 				}
 			}
 			// The user's apps on this machine (a Mac) list the other machines.
@@ -385,6 +392,7 @@ func setupCmd() *cobra.Command {
 	c.Flags().BoolVar(&noDaemon, "no-daemon", false, "do not start background sync")
 	c.Flags().BoolVar(&force, "force", false, "overwrite local session files that differ from the server")
 	c.Flags().IntVar(&setupLast, "sessions", setupLast, "restore this many most recently active conversations (0 = all; a new machine restores none unless given)")
+	c.Flags().StringVar(&alias, "alias", "", "a name for this machine (default: asked in a terminal, proposing e.g. gb-node-e05-13); hearth device rename changes it")
 	c.Flags().BoolVar(&full, "full", false, "restore everything now (credentials, conversations, shell lines, agent setup) instead of on demand")
 	c.Flags().BoolVarP(&yes, "yes", "y", false, "unused: setup no longer runs recipe commands (the hearth skill goes through hearth recipe plan)")
 	_ = c.Flags().MarkHidden("yes")
@@ -566,4 +574,41 @@ func chooseSetupWorkspace(out *setupOut, home string, cfg *client.Config) string
 	}
 	out.line("workspace", msg)
 	return nh
+}
+
+// chooseSetupAlias names this machine: --alias, else asked in a terminal
+// with the generated SSH name as the default; without a terminal the
+// generated name stays (nothing stored).
+func chooseSetupAlias(out *setupOut, e *client.Engine, alias string) {
+	def := client.MachineAlias(e.Cfg.DeviceName, factsMap())
+	if alias == "" {
+		if !isTTY() {
+			return
+		}
+		a, ok := askLine(fmt.Sprintf("  %-12s %s (machine %s)\n%15sEnter to keep it, or type another: ", "name", def, e.Cfg.DeviceName, ""))
+		if !ok {
+			return
+		}
+		alias = def
+		if a = strings.TrimSpace(a); a != "" {
+			alias = a
+		}
+	}
+	if err := e.API.SetDeviceAlias("self", alias); err != nil {
+		out.warn("name", fmt.Errorf("%v; later: hearth device rename <name>", err))
+		return
+	}
+	out.line("name", client.LabelOf(alias, e.Cfg.DeviceName))
+}
+
+// thisAlias is this machine's name: the one the user gave, else generated.
+func thisAlias(e *client.Engine) string {
+	if ds, err := e.API.Devices(); err == nil {
+		for _, d := range ds {
+			if d.ID == e.Cfg.DeviceID && d.Alias != "" {
+				return d.Alias
+			}
+		}
+	}
+	return client.MachineAlias(e.Cfg.DeviceName, factsMap())
 }

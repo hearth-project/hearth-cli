@@ -31,7 +31,7 @@ func MachineMatches(ref, name, id, addr string) int {
 func FindDevice(ds []api.Device, ref string) (api.Device, error) {
 	var exact, part []api.Device
 	for _, d := range ds {
-		if f, _ := d.Machine["facts"].(map[string]any); ref == MachineAlias(d.Name, f) {
+		if f, _ := d.Machine["facts"].(map[string]any); (d.Alias != "" && ref == d.Alias) || ref == MachineAlias(d.Name, f) {
 			exact = append(exact, d)
 			continue
 		}
@@ -63,4 +63,16 @@ func FindDevice(ds []api.Device, ref string) (api.Device, error) {
 		}
 	}
 	return api.Device{}, fmt.Errorf("no machine %q (hearth machine list)", ref)
+}
+
+// DeviceLabel is how a machine is shown: "alias (name)" once the user named
+// it, else its name.
+func DeviceLabel(d api.Device) string { return LabelOf(d.Alias, d.Name) }
+
+// LabelOf is DeviceLabel for an alias and a name.
+func LabelOf(alias, name string) string {
+	if alias == "" || alias == name {
+		return name
+	}
+	return alias + " (" + name + ")"
 }
