@@ -18,12 +18,12 @@ import (
 // log in (if needed), restore every session, start the background daemon.
 func setupCmd() *cobra.Command {
 	var server, email, device, caCert, invite, team string
-	var insecure, noDaemon, force, yes, create, switchLogin, noRegister, noImport bool
+	var insecure, noDaemon, force, yes, create, switchLogin, noRegister, noImport, full bool
 	setupLast := defaultRestoreLast
 	c := &cobra.Command{
 		Use:   "setup",
 		Short: "Log in, restore the newest conversations, skills and credentials, and start background sync (new machine)",
-		RunE: func(*cobra.Command, []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			home := client.Home()
 			out := newSetupOut()
 			defer out.close()
@@ -138,6 +138,11 @@ func setupCmd() *cobra.Command {
 				// Where this person works on this machine: proposed from their
 				// machines of the same kind, confirmed (or changed) by them.
 				home = chooseSetupWorkspace(out, home, cfg)
+				// A new machine restores credentials, conversations, shell
+				// lines and agent setup only when asked (--full: everything).
+				if err := client.SetOnDemand(home, !full); err != nil {
+					out.warn("restore mode", err)
+				}
 			default:
 				return err
 			}
@@ -180,12 +185,16 @@ func setupCmd() *cobra.Command {
 			} else if ws != "" {
 				out.line("workspace", ws+" (this machine's profile)")
 			}
+			onDemand := client.OnDemand(home)
+			sessionsAsked := cmd.Flags().Changed("sessions")
 			out.quiet(func() {
 				printMachine(home, "")
 				teams = setupTeam(e, team)
 				// Sessions after the library: machine profiles decide the
 				// workspace, which path translation and workspace files need.
-				restoreErr = restoreAll(e, "", force, setupLast, nil)
+				if !onDemand || sessionsAsked {
+					restoreErr = restoreAll(e, "", force, setupLast, nil)
+				}
 			})
 			if restoreErr != nil {
 				return restoreErr
@@ -195,6 +204,9 @@ func setupCmd() *cobra.Command {
 			var rcs, envLeft []string
 			codexTrust := false
 			out.quiet(func() {
+				if onDemand {
+					return // credentials, shell lines and recipe files when asked for
+				}
 				rs, err := e.RestoreSecretFiles(false)
 				for _, r := range rs {
 					fmt.Printf("secret %-24s %s %s\n", r.Name, r.Action, r.Path)
@@ -238,6 +250,8 @@ func setupCmd() *cobra.Command {
 						}
 					}
 				}
+			})
+			out.quiet(func() {
 				if plan, err := e.Plan(); err == nil {
 					for _, p := range plan {
 						if p.Status == "todo" && !(p.Type == "check" && p.Why == "optional") {
@@ -257,7 +271,7 @@ func setupCmd() *cobra.Command {
 			// Long-term memory: index every machine's conversations here and
 			// let the agents' prompt hooks use it.
 			indexed := -1
-			if client.MemoryOn(home) {
+			if client.MemoryOn(home) && (!onDemand || len(client.MachineAgents(home)) > 0) {
 				out.quiet(func() {
 					if ms, err := e.IndexMemory(); err != nil {
 						fmt.Println("memory:", err)
@@ -277,19 +291,27 @@ func setupCmd() *cobra.Command {
 
 			// What this machine has now, one line per kind.
 			skills, agents := libraryCounts(home)
-			out.line("library", fmt.Sprintf("%s, %s for %s", plural(skills, "skill", "skills"), plural(agents, "agent", "agents"),
-				strings.Join(client.MachineAgents(home), ", ")))
+			if ma := client.MachineAgents(home); len(ma) > 0 {
+				out.line("library", fmt.Sprintf("%s, %s for %s", plural(skills, "skill", "skills"), plural(agents, "agent", "agents"), strings.Join(ma, ", ")))
+			} else {
+				out.line("library", fmt.Sprintf("%s, %s; set up for an agent once it is installed here", plural(skills, "skill", "skills"), plural(agents, "agent", "agents")))
+			}
 			if secretFiles > 0 {
 				out.line("files", plural(secretFiles, "credential or config file", "credential and config files")+" written")
 			}
 			if len(rcs) > 0 {
 				out.line("shell", "your lines of "+strings.Join(rcs, ", ")+" (new shells)")
 			}
-			conv := plural(conversations, "conversation", "conversations") + " restored"
-			if online > 0 {
-				conv += fmt.Sprintf("; %d more on machines still online: hearth restore --include-online", online)
+			if onDemand && !sessionsAsked {
+				out.line("on demand", "conversations (hearth restore --last 10), credentials (your agent asks hearth when a skill needs one),\n"+
+					"shell lines (hearth shell restore), agent setup (\"恢复这台机器的 Codex 环境\"); everything now: hearth setup --full")
+			} else {
+				conv := plural(conversations, "conversation", "conversations") + " restored"
+				if online > 0 {
+					conv += fmt.Sprintf("; %d more on machines still online: hearth restore --include-online", online)
+				}
+				out.line("sessions", conv)
 			}
-			out.line("sessions", conv)
 			if indexed >= 0 {
 				out.line("memory", plural(indexed, "conversation", "conversations")+" indexed for recall")
 			}
@@ -362,7 +384,8 @@ func setupCmd() *cobra.Command {
 	c.Flags().BoolVar(&insecure, "insecure", false, "allow plain HTTP to a non-loopback server")
 	c.Flags().BoolVar(&noDaemon, "no-daemon", false, "do not start background sync")
 	c.Flags().BoolVar(&force, "force", false, "overwrite local session files that differ from the server")
-	c.Flags().IntVar(&setupLast, "sessions", setupLast, "restore this many most recently active conversations (0 = all)")
+	c.Flags().IntVar(&setupLast, "sessions", setupLast, "restore this many most recently active conversations (0 = all; a new machine restores none unless given)")
+	c.Flags().BoolVar(&full, "full", false, "restore everything now (credentials, conversations, shell lines, agent setup) instead of on demand")
 	c.Flags().BoolVarP(&yes, "yes", "y", false, "unused: setup no longer runs recipe commands (the hearth skill goes through hearth recipe plan)")
 	_ = c.Flags().MarkHidden("yes")
 	c.Flags().BoolVar(&noImport, "no-import", false, "do not record this machine for new ones (its skills and agents, new setup items, shell lines)")
@@ -415,6 +438,10 @@ func chooseMachineAgents(e *client.Engine) {
 	}
 	use := client.AgentUse(all)
 	recent, stale := client.RecentAgents(home, use)
+	if client.OnDemand(home) {
+		// Set up an agent here once it is installed (the daemon adopts it).
+		recent = client.InstalledAgents(recent)
+	}
 	if err := client.SetMachineAgents(home, recent); err != nil {
 		fmt.Println("      agents:", err)
 		return

@@ -73,11 +73,21 @@ func secretCmd() *cobra.Command {
 
 	var force bool
 	restore := &cobra.Command{
-		Use:   "restore",
-		Short: "Write file secrets back to their paths (mode 0600)",
-		RunE: func(*cobra.Command, []string) error {
+		Use:   "restore [NAME...]",
+		Short: "Write file secrets back to their paths (mode 0600); names: only those",
+		RunE: func(_ *cobra.Command, names []string) error {
 			e, err := engine()
 			if err != nil {
+				return err
+			}
+			if len(names) > 0 {
+				rs, err := e.RestoreSecretFilesNamed(force, names)
+				for _, r := range rs {
+					fmt.Printf("secret %-24s %s %s\n", r.Name, r.Action, r.Path)
+				}
+				if err == nil && len(rs) == 0 {
+					return fmt.Errorf("no file secret named %s (hearth secret list)", strings.Join(names, ", "))
+				}
 				return err
 			}
 			return restoreSecrets(e, force)

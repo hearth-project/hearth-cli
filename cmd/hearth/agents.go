@@ -71,7 +71,7 @@ func agentsPullCmd() *cobra.Command {
 		Use:   "pull <agent>",
 		Short: "Restore an agent on this machine: skills/agents, newest conversations, its CLI (setup restores only recently used agents)",
 		Args:  cobra.ExactArgs(1),
-		RunE: func(_ *cobra.Command, a []string) error {
+		RunE: func(cmd *cobra.Command, a []string) error {
 			home := client.Home()
 			name := a[0]
 			on := false
@@ -95,9 +95,16 @@ func agentsPullCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if err := restoreAll(e, name, false, last, nil); err != nil {
-				return err
+			// On-demand machines bring conversations only when asked (--last).
+			if !client.OnDemand(home) || cmd.Flags().Changed("last") {
+				if err := restoreAll(e, name, false, last, nil); err != nil {
+					return err
+				}
 			}
+			if _, err := installSkillMCP(true); err != nil {
+				fmt.Println("skill search:", err)
+			}
+			_, _ = client.SyncMemoryHooks(home, client.MemoryHooksOn(home))
 			if plan, err := e.Plan(); err == nil {
 				for _, p := range plan {
 					if p.Status == "todo" && p.Name == name {

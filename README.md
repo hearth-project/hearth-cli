@@ -99,7 +99,7 @@ curl -fsSL -k https://<server>:8787/install.sh | sh -s -- --invite <code>    # f
 
 `-k` is only for the first download from a self-signed server; after that the client trusts exactly that server's certificate.
 
-The installer puts `hearth` in `~/.local/bin`, adds the `hearth` skill to Codex / Claude Code / Comate, asks for your master password and your working directory on this machine, and restores your files:
+The installer puts `hearth` in `~/.local/bin`, adds the `hearth` skill to Codex / Claude Code / Comate, asks for your master password and your working directory on this machine, and starts SSH and background sync; conversations, credentials and the agent setup come when you ask for them:
 
 ```text
 hearth 0.1.0 installed to ~/.local/bin/hearth
@@ -110,8 +110,8 @@ Hearth setup on gpu-node-13 (linux x86_64, 8 x NVIDIA H800)
   workspace    /data/you, as on gpu-node-12 (GPU h800)
                Enter to use it, or type another directory:
   library      42 skills, 3 agents for codex
-  files        6 credential and config files written
-  sessions     10 conversations restored
+  on demand    conversations (hearth restore --last 10), credentials (your agent asks hearth when a skill needs one),
+               shell lines (hearth shell restore), agent setup ("恢复这台机器的 Codex 环境"); everything now: hearth setup --full
   sync         on (background)
   ssh          h800-gpu-node-13 (10.0.0.13:8022)
 
