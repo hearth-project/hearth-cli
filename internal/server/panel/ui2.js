@@ -16,6 +16,55 @@ function copyBtn(text) {
 }
 function cmdLine(text) { return h("div", { class: "cmd" }, h("code", {}, text), copyBtn(text)); }
 
+// installBox: the "add a machine" commands. The main one is a one-time
+// install command: it carries a token that logs the new machine in without
+// the master password (works once, for 30 minutes). The page wraps the
+// vault key for it, so it needs the vault key: from the sign-in, else the
+// user types the password once here (checked in this browser). The plain
+// command, which asks for the password on the new machine, stays below.
+function installBox(plain) {
+  var out = h("div", {}), err = h("p", { class: "err" });
+  var make = h("button", { class: "pri", type: "button" }, t("Make a one-time install command"));
+  var pw = h("input", { type: "password", autocomplete: "current-password", placeholder: t("Master password") });
+  var unlock = h("form", { class: "row hidden", onsubmit: function (ev) { ev.preventDefault(); go(); } },
+    h("span", { class: "muted small" }, t("Type your master password to make the command. It is checked in this browser and not sent.")), pw,
+    h("button", { class: "pri", type: "submit" }, t("Continue")));
+  var result = h("div", {});
+  make.addEventListener("click", function () { go(); });
+  function busy(on) { make.disabled = on; unlock.querySelectorAll("button").forEach(function (b) { b.disabled = on; }); }
+  function go() {
+    err.textContent = "";
+    if (!VAULT_KEY && !pw.value) { unlock.classList.remove("hidden"); pw.focus(); return; }
+    busy(true);
+    var vk = VAULT_KEY ? Promise.resolve(VAULT_KEY) : deriveKeys(ME, pw.value).then(function (k) {
+      return me("POST", "/vault-key", { auth_key: k.authKey }).then(function (r) { return unwrapVault(k.kek, r.enc_vault_key); });
+    });
+    vk.then(function (key) {
+      VAULT_KEY = key; pw.value = ""; unlock.classList.add("hidden");
+      var secret = HC.random(32);
+      return me("POST", "/install-tokens", {
+        auth_hash: HC.b64enc(HC.sha256(HC.hkdf(secret, "hearth-install-auth"))),
+        enc_vault_key: HC.b64enc(HC.seal(HC.hkdf(secret, "hearth-install-key"), key, HC.utf8("hearth/vault-key/install/v1")))
+      }).then(function (r) {
+        var cmd = withInstallToken(plain, r.email, r.id + "." + HC.b64url(secret));
+        result.textContent = "";
+        add(result, [cmdLine(cmd), h("p", { class: "muted small" }, t("Valid until") + " " + when(r.expires_at) + ", " + t("works once. The new machine logs in without the master password."))]);
+        make.textContent = t("Make another one");
+      });
+    }).then(function () { busy(false); }, function (e) { busy(false); if (e.message !== "unauthorized") err.textContent = e.message; });
+  }
+  add(out, [h("div", { class: "row", style: "margin:6px 0" }, make), unlock, err, result,
+    h("details", { class: "other" }, h("summary", {}, t("Or the plain command, which asks for the master password on the new machine")), cmdLine(plain))]);
+  return out;
+}
+
+// withInstallToken appends the setup arguments to the install one-liner
+// (curl ... | sh, or { ... } | sh with a proxy fallback).
+function withInstallToken(cmd, email, token) {
+  var q = /^[A-Za-z0-9@._+-]+$/.test(email) ? email : "'" + email.replace(/'/g, "'\\''") + "'";
+  return cmd.replace(/\| sh$/, "| sh -s --") + " --email " + q + " --token " + token;
+}
+
 // dialog shows a modal; returns a close function.
 function dialog(title, body, actions, wide) {
   var ov;

@@ -245,6 +245,7 @@ Flags:
       --sessions int     restore this many most recently active conversations (0 = all; a new machine restores none unless given) (default 10)
       --switch           replace an existing login to another account or server
       --team string      join a team with this invite code, or create a team of this name (asked in a terminal when you have none)
+      --token string     one-time install token from the web console's install command: log in without the password (works once, 30 minutes) [$HEARTH_INSTALL_TOKEN]
 ```
 
 ## hearth status

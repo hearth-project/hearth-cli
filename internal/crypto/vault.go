@@ -12,6 +12,7 @@ const (
 	aadVaultKEK      = "hearth/vault-key/kek/v1"
 	aadVaultRecovery = "hearth/vault-key/recovery/v1"
 	aadVaultIdentity = "hearth/vault-key/identity/v1"
+	aadVaultInstall  = "hearth/vault-key/install/v1"
 )
 
 // Vault holds the decrypted vault key and its derived subkeys.
@@ -88,6 +89,28 @@ func WrapWithIdentity(vaultKey, key []byte) ([]byte, error) {
 // UnwrapWithIdentity reverses WrapWithIdentity.
 func UnwrapWithIdentity(wrapped, key []byte) ([]byte, error) {
 	return Open(key, wrapped, []byte(aadVaultIdentity))
+}
+
+// One-time install commands. The web console picks a random secret, wraps
+// the vault key with InstallKey(secret) and gives the server only that
+// ciphertext and sha256(InstallAuth(secret)); the secret itself travels in
+// the command. The console builds these values in JavaScript (panel/seal.js)
+// and must derive them identically.
+
+// InstallKey derives the key that wraps the vault key for an install command.
+func InstallKey(secret []byte) []byte { return HKDF(secret, "hearth-install-key") }
+
+// InstallAuth is what the new machine shows the server to redeem the command.
+func InstallAuth(secret []byte) []byte { return HKDF(secret, "hearth-install-auth") }
+
+// WrapWithInstall encrypts the vault key for a one-time install command.
+func WrapWithInstall(vaultKey, key []byte) ([]byte, error) {
+	return Seal(key, vaultKey, []byte(aadVaultInstall))
+}
+
+// UnwrapWithInstall reverses WrapWithInstall.
+func UnwrapWithInstall(wrapped, key []byte) ([]byte, error) {
+	return Open(key, wrapped, []byte(aadVaultInstall))
 }
 
 // SessionID returns the opaque server-side identifier for a logical

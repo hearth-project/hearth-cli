@@ -18,6 +18,7 @@ import (
 // log in (if needed), restore every session, start the background daemon.
 func setupCmd() *cobra.Command {
 	var server, email, device, caCert, invite, team string
+	var installToken string
 	var insecure, noDaemon, force, yes, create, switchLogin, noRegister, noImport, full, newLogin bool
 	var alias string
 	setupLast := defaultRestoreLast
@@ -93,7 +94,21 @@ func setupCmd() *cobra.Command {
 					}
 				}
 				loggedIn, via := false, ""
-				if !create && invite == "" {
+				if installToken == "" {
+					installToken = os.Getenv("HEARTH_INSTALL_TOKEN")
+				}
+				if installToken != "" && !create && invite == "" {
+					// One-time install command from the web console: no password.
+					if nc, err := client.LoginWithInstallToken(home, server, email, installToken, device); err == nil {
+						cfg, loggedIn = nc, true
+						via = " (one-time install command, no password needed)"
+					} else if !errors.Is(err, client.ErrInstallToken) {
+						return err
+					} else {
+						fmt.Fprintf(os.Stderr, "  %v\n", err)
+					}
+				}
+				if !loggedIn && !create && invite == "" {
 					user, _, _ := strings.Cut(email, "@")
 					if secret, ok := client.PlatformSecret(client.LocalIdentity{Username: user, Email: email}); ok {
 						if nc, err := client.LoginWithIdentity(home, server, email, secret, device); err == nil {
@@ -388,6 +403,7 @@ func setupCmd() *cobra.Command {
 	c.Flags().BoolVar(&create, "new", false, "create the account first (first machine only; servers in invite mode also need --invite)")
 	c.Flags().BoolVar(&switchLogin, "switch", false, "replace an existing login to another account or server")
 	c.Flags().StringVar(&invite, "invite", "", "invite code: create the account first (first machine only)")
+	c.Flags().StringVar(&installToken, "token", "", "one-time install token from the web console's install command: log in without the password (works once, 30 minutes) [$HEARTH_INSTALL_TOKEN]")
 	c.Flags().BoolVar(&insecure, "insecure", false, "allow plain HTTP to a non-loopback server")
 	c.Flags().BoolVar(&noDaemon, "no-daemon", false, "do not start background sync")
 	c.Flags().BoolVar(&force, "force", false, "overwrite local session files that differ from the server")

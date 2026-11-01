@@ -120,6 +120,22 @@ type IdentityStatusResponse struct {
 	Disabled bool `json:"disabled"` // the user opted out; automatic enrollment stops
 }
 
+// One-time install commands from the web console. The token in the command
+// is "<id>.<secret>" (secret: 32 random bytes, base64url without padding).
+type InstallLoginRequest struct {
+	Email      string `json:"email"`
+	ID         string `json:"id"`
+	Auth       []byte `json:"auth"` // crypto.InstallAuth(secret)
+	DeviceName string `json:"device_name"`
+}
+
+type InstallLoginResponse struct {
+	Token              string `json:"token"`
+	DeviceID           string `json:"device_id"`
+	ExpiresAt          int64  `json:"expires_at"`
+	EncVaultKeyInstall []byte `json:"enc_vault_key_install"`
+}
+
 // IdentityLoginMessage is the message an identity proof signs. Client and
 // server must build it identically.
 func IdentityLoginMessage(email string, ts int64) string {

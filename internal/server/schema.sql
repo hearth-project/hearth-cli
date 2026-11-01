@@ -240,6 +240,20 @@ CREATE TABLE IF NOT EXISTS user_intents (
 );
 CREATE INDEX IF NOT EXISTS user_intents_by_user ON user_intents(user_id, id);
 
+-- One-time install commands made in the web console. The vault key is
+-- wrapped with a key derived from a secret that only the command holds;
+-- the server keeps the ciphertext and the SHA-256 of the redeem proof.
+-- A row is deleted when it is used or has expired.
+CREATE TABLE IF NOT EXISTS install_tokens (
+  id            TEXT PRIMARY KEY,
+  user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  auth_hash     BLOB NOT NULL,
+  enc_vault_key BLOB NOT NULL,
+  created_at    INTEGER NOT NULL,
+  expires_at    INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS install_tokens_by_user ON install_tokens(user_id);
+
 -- Indexes for the hot read paths.
 CREATE INDEX IF NOT EXISTS sessions_by_access ON sessions(user_id, last_accessed_at DESC);
 CREATE INDEX IF NOT EXISTS sessions_for_gc ON sessions(status, last_accessed_at);

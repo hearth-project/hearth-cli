@@ -49,6 +49,7 @@ func (s *Server) routes() {
 	m.HandleFunc("POST /v1/auth/register", s.limited(s.handleRegister))
 	m.HandleFunc("POST /v1/auth/login", s.limited(s.handleLogin))
 	m.HandleFunc("POST /v1/auth/identity/login", s.limited(s.handleIdentityLogin))
+	m.HandleFunc("POST /v1/auth/install/login", s.limited(s.handleInstallLogin))
 	m.HandleFunc("POST /v1/auth/identity/enable", s.authed(s.handleIdentityEnable))
 	m.HandleFunc("GET /v1/auth/identity", s.authed(s.handleIdentityStatus))
 	m.HandleFunc("DELETE /v1/auth/identity", s.authed(s.handleIdentityDisable))
