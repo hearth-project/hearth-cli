@@ -34,7 +34,49 @@ type HealthReport struct {
 	RecipeManual int                    `json:"recipe_manual,omitempty"`
 	TodoSteps    []string               `json:"todo_steps,omitempty"` // the first few, for the console
 	Issues       []string               `json:"issues,omitempty"`
+	SSH          *SSHHealth             `json:"ssh,omitempty"`
 	CheckedAt    int64                  `json:"checked_at"`
+}
+
+// SSHHealth: whether the user's devices can SSH into this machine, as far
+// as the machine itself can tell (the server also tries to reach it).
+type SSHHealth struct {
+	On      bool   `json:"on"`
+	Running bool   `json:"running"`
+	Address string `json:"address,omitempty"`
+	Port    int    `json:"port,omitempty"`
+	Answers bool   `json:"answers"`          // an SSH server answers on the published address
+	KeyOK   bool   `json:"key_ok"`           // with the host key the user's devices trust
+	Keys    int    `json:"keys,omitempty"`   // device keys it accepts
+	Detail  string `json:"detail,omitempty"` // why not
+}
+
+// sshHealth checks this machine's sshd the way the user's devices reach it.
+func sshHealth(home string) *SSHHealth {
+	st := SSHServerStatus(home)
+	h := &SSHHealth{On: st.On, Running: st.Running, Address: st.Address, Port: st.Port, Keys: st.Keys, Detail: st.Err}
+	if !st.On || st.Address == "" || st.Port == 0 {
+		return h
+	}
+	got, err := probeHostKey(st.Address, st.Port)
+	if err != nil {
+		if h.Detail == "" {
+			h.Detail = truncHealth(err.Error(), 160)
+		}
+		return h
+	}
+	h.Answers = true
+	want := loadSSHState(home).HostKey
+	h.KeyOK = want == "" || sameHostKey(got, want)
+	if !h.KeyOK {
+		h.Detail = "the sshd answering there has another host key than the one published (another sshd took the port?)"
+	}
+	return h
+}
+
+func sameHostKey(a, b string) bool {
+	fa, fb := strings.Fields(a), strings.Fields(b)
+	return len(fa) >= 2 && len(fb) >= 2 && fa[0] == fb[0] && fa[1] == fb[1]
 }
 
 type AgentHealth struct {
@@ -83,6 +125,7 @@ var healthTools = []struct{ name, bin, agent string }{
 func (e *Engine) MachineHealth() HealthReport {
 	EnsureUserPath() // tools installed after the daemon started
 	r := HealthReport{Client: Version, Agents: map[string]AgentHealth{}, Tools: map[string]ToolHealth{}, CheckedAt: time.Now().Unix()}
+	r.SSH = sshHealth(e.Home)
 	if m, err := Machine(e.Home); err == nil {
 		b, _ := json.Marshal(m.Facts)
 		_ = json.Unmarshal(b, &r.Machine)
@@ -194,6 +237,9 @@ func (e *Engine) MachineHealth() HealthReport {
 	}
 	if r.RecipeTodo > 0 {
 		r.Issues = append(r.Issues, "restore flow has "+strconv.Itoa(r.RecipeTodo)+" pending step(s)")
+	}
+	if s := r.SSH; s != nil && s.On && !s.Answers {
+		r.Issues = append(r.Issues, "ssh: your devices cannot connect: "+orStr(s.Detail, "sshd is not running"))
 	}
 	r.Status = "ready"
 	if len(r.Issues) > 0 {
@@ -477,4 +523,11 @@ func commandOK(bin string, args ...string) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	return exec.CommandContext(ctx, bin, args...).Run() == nil
+}
+
+func orStr(s, d string) string {
+	if s == "" {
+		return d
+	}
+	return s
 }

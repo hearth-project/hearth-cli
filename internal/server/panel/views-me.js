@@ -3,7 +3,7 @@
 
 function deviceRows(ds, mine) {
   if (!ds.length) return empty(t("No machines yet. Install Hearth on a machine and run hearth setup."), "💻");
-  var cols = ["Machine", "IP", "Status", "Environment", "Version", "Conversations", "Last seen", "Created", ""];
+  var cols = ["Machine", "IP", "Status", "Environment", "SSH", "Version", "Conversations", "Last seen", "Created", ""];
   var body = h("tbody", {});
   ds.forEach(function (d) {
     var st = d.status !== "active" ? badge(t(d.status), "bad") : d.online ? h("span", { class: "dev" }, h("span", { class: "dot" }), t("online")) : h("span", { class: "dev muted" }, h("span", { class: "dot off" }), t("offline"));
@@ -16,6 +16,7 @@ function deviceRows(ds, mine) {
     var row = h("tr", {}, h("td", {}, h("b", {}, d.name), h("div", { class: "muted mono" }, d.id), d.facts ? h("div", { class: "muted facts" }, factsLine(d.facts)) : null),
       h("td", { class: "mono" }, d.ip || "-"), h("td", {}, st),
       h("td", {}, d.status === "active" ? envPill(d, toggle) : h("span", { class: "muted" }, "-")),
+      h("td", {}, d.status === "active" && d.online ? sshCell(d) : h("span", { class: "muted" }, "-")),
       h("td", { class: "mono" }, d.version || (d.status === "active" && d.online ? h("span", { class: "badge warn", title: t(OLD_CLIENT_HINT) }, t("old version: run hearth self-update there")) : h("span", { class: "muted" }, "-"))),
       h("td", {}, d.sessions ? h("span", {}, d.sessions, h("div", { class: "muted small" }, t("newest") + " " + ago(d.last_active))) : h("span", { class: "muted" }, "0")),
       h("td", {}, ago(d.last_seen)), h("td", {}, when(d.created_at)),

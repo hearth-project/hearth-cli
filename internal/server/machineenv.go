@@ -1,9 +1,62 @@
 package server
 
 import (
+	"bufio"
 	"encoding/json"
+	"net"
+	"strconv"
 	"strings"
+	"sync"
+	"time"
 )
+
+// sshReach remembers, per address, whether the server reached an SSH
+// server there (banner within 3 s). A check runs in the background at most
+// every 5 minutes, so listing machines never waits for it.
+type sshReach struct {
+	mu sync.Mutex
+	m  map[string]sshReachEntry
+}
+
+type sshReachEntry struct {
+	ok, running bool
+	at          time.Time
+}
+
+func (r *sshReach) check(addr string, port int) (ok, done bool) {
+	if addr == "" || port == 0 {
+		return false, false
+	}
+	k := net.JoinHostPort(addr, strconv.Itoa(port))
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.m == nil {
+		r.m = map[string]sshReachEntry{}
+	}
+	e, seen := r.m[k]
+	if (!seen || time.Since(e.at) > 5*time.Minute) && !e.running {
+		e.running = true
+		r.m[k] = e
+		go func() {
+			res := sshAnswers(k)
+			r.mu.Lock()
+			r.m[k] = sshReachEntry{ok: res, at: time.Now()}
+			r.mu.Unlock()
+		}()
+	}
+	return e.ok, seen && !e.at.IsZero()
+}
+
+func sshAnswers(hostport string) bool {
+	c, err := net.DialTimeout("tcp", hostport, 3*time.Second)
+	if err != nil {
+		return false
+	}
+	defer c.Close()
+	_ = c.SetReadDeadline(time.Now().Add(3 * time.Second))
+	line, err := bufio.NewReader(c).ReadString('\n')
+	return err == nil && strings.HasPrefix(line, "SSH-")
+}
 
 // The environment check of a machine, from its latest health report (sent
 // with the heartbeat) and the latest tool releases: what it lacks compared
@@ -27,7 +80,16 @@ type MachineEnv struct {
 	Status    string       `json:"status"` // ok, warn, error, unknown
 	Problems  []EnvProblem `json:"problems"`
 	Tools     []EnvTool    `json:"tools,omitempty"`
+	SSH       *EnvSSH      `json:"ssh,omitempty"`
 	CheckedAt int64        `json:"checked_at,omitempty"`
+}
+
+// EnvSSH says whether the user's devices can SSH into the machine.
+type EnvSSH struct {
+	Status  string `json:"status"` // ok, off, down, blocked (the machine answers itself, the server cannot reach it), checking
+	Address string `json:"address,omitempty"`
+	Port    int    `json:"port,omitempty"`
+	Detail  string `json:"detail,omitempty"`
 }
 
 // EnvTool is one tool row of the check.
@@ -66,6 +128,15 @@ type reportedHealth struct {
 			CodexHome string `json:"codex_home"`
 		} `json:"stale_app_servers"`
 	} `json:"tools"`
+	SSH *struct {
+		On      bool   `json:"on"`
+		Running bool   `json:"running"`
+		Address string `json:"address"`
+		Port    int    `json:"port"`
+		Answers bool   `json:"answers"`
+		KeyOK   bool   `json:"key_ok"`
+		Detail  string `json:"detail"`
+	} `json:"ssh"`
 	Client     string   `json:"client"` // Hearth build that made the report (newer than the stored one right after an update)
 	RecipeTodo int      `json:"recipe_todo"`
 	TodoSteps  []string `json:"todo_steps"`
@@ -109,7 +180,9 @@ func (s *Server) machineEnv(healthJSON, clientVersion string) *MachineEnv {
 				add(EnvProblem{Level: "warn", Code: "node", Tool: name, Have: t.Version})
 			}
 		case t.Expected && !t.Installed:
-			add(EnvProblem{Level: "error", Code: "missing", Tool: name})
+			// Not set up yet (new machines restore software on demand): a
+			// thing to do, not a fault.
+			add(EnvProblem{Level: "warn", Code: "missing", Tool: name})
 		case t.Installed && !unused(name):
 			if latest, n, more := behind(releases, t.Version); n > 0 {
 				add(EnvProblem{Level: "warn", Code: "outdated", Tool: name, Have: t.Version, Latest: latest, Behind: n, More: more})
@@ -159,6 +232,32 @@ func (s *Server) machineEnv(healthJSON, clientVersion string) *MachineEnv {
 	}
 	if h.RecipeTodo > 0 {
 		add(EnvProblem{Level: "warn", Code: "steps", Behind: h.RecipeTodo, Steps: h.TodoSteps})
+	}
+	if x := h.SSH; x != nil {
+		es := &EnvSSH{Address: x.Address, Port: x.Port, Detail: x.Detail}
+		switch {
+		case !x.On:
+			es.Status = "off"
+		case s.now()-h.CheckedAt > 15*60:
+			es.Status = "stale" // an old report (machine offline): nothing to judge now
+		case !x.Answers:
+			es.Status = "down"
+			add(EnvProblem{Level: "error", Code: "ssh_down", Tool: "ssh", Detail: x.Detail})
+		case !x.KeyOK:
+			es.Status = "down"
+			add(EnvProblem{Level: "error", Code: "ssh_hostkey", Tool: "ssh", Detail: x.Detail})
+		default:
+			switch ok, done := s.sshReach.check(x.Address, x.Port); {
+			case !done:
+				es.Status = "checking"
+			case ok:
+				es.Status = "ok"
+			default:
+				es.Status = "blocked"
+				add(EnvProblem{Level: "warn", Code: "ssh_blocked", Tool: "ssh", Have: x.Address + ":" + strconv.Itoa(x.Port)})
+			}
+		}
+		env.SSH = es
 	}
 	if h.Client != "" {
 		clientVersion = h.Client

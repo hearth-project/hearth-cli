@@ -24,6 +24,9 @@ function envText(p) {
     case "stale_app_server": return z ? p.behind + " 个 Codex app-server 还在用切换前的 CODEX_HOME=" + p.detail + "，重启后才会用新的" : p.behind + " Codex app-server process(es) still use CODEX_HOME=" + p.detail + " from before the switch; they use the new one after a restart";
     case "unreachable": return z ? "Codex 连不上它的模型服务 " + p.have + "（" + p.detail + "）" : "Codex cannot reach its model endpoint " + p.have + " (" + p.detail + ")";
     case "hearth": return z ? "Hearth 客户端有新版本（" + p.have + " → " + p.latest + "）" : "Newer Hearth client available (" + p.have + " → " + p.latest + ")";
+    case "ssh_down": return z ? "远程 SSH 连不上：sshd 没有在发布的地址上应答" + (p.detail ? "（" + p.detail + "）" : "") : "Remote SSH does not work: no sshd answers on the published address" + (p.detail ? " (" + p.detail + ")" : "");
+    case "ssh_hostkey": return z ? "远程 SSH 的 host key 和发布的不一致（端口可能被别的 sshd 占用）" : "Remote SSH answers with another host key than the published one (another sshd on the port?)";
+    case "ssh_blocked": return z ? "机器上的 sshd 正常，但服务器连不到 " + p.have + "（可能有防火墙，或不在同一网络）" : "The machine's sshd works, but the server cannot reach " + p.have + " (a firewall, or another network)";
   }
   return p.code;
 }
@@ -40,6 +43,8 @@ function envFix(p, d) {
     case "no_login": return "hearth agents where codex   # the home Hearth sets for you; log in there (codex-mixin connect codex / codex login) or point Hearth at the one with your login";
     case "stale_app_server": return "hearth agents restart-app-server   # Codex Desktop reconnects and starts a new one";
     case "shared_home": return "hearth agents isolate codex   # moves your Codex config and conversations into your workspace";
+    case "ssh_down": case "ssh_hostkey": return "hearth ssh status   # on that machine; hearth ssh enable restarts Hearth's sshd";
+    case "ssh_blocked": return "hearth ssh <machine>   # from your own device: works if your network reaches it";
   }
   return null;
 }
@@ -96,11 +101,26 @@ function envDetail(d) {
   })) : h("div", { class: "envok" }, icon("check"), z ? "与标准环境一致，没有发现问题" : "Matches the standard setup, nothing to fix");
   var tools = (env.tools || []).length ? h("table", { class: "envtools" }, h("thead", {}, h("tr", {}, [z ? "工具" : "Tool", z ? "本机" : "Installed", z ? "最新" : "Latest", ""].map(function (k) { return h("th", {}, k); }))),
     h("tbody", {}, env.tools.map(function (x) {
-      var st = !x.installed ? badge(z ? "未安装" : "missing", x.expected ? "bad" : "") : x.latest && x.version && x.version !== x.latest ? badge(z ? "可升级" : "update", "warn") : badge("OK", "ok");
+      var st = !x.installed ? badge(z ? "未安装" : "missing", x.expected ? "warn" : "") : x.latest && x.version && x.version !== x.latest ? badge(z ? "可升级" : "update", "warn") : badge("OK", "ok");
       return h("tr", {}, h("td", {}, toolName(x.name)), h("td", { class: "mono" }, x.version || "-"), h("td", { class: "mono" }, x.latest || "-"), h("td", {}, st));
     }))) : null;
   var say = z ? "恢复 " + short + " 的 Codex 环境" : "restore the Codex environment of " + short;
   var how = env.problems.length ? h("div", { class: "envhow" }, h("div", { class: "muted small" }, z ? "在任意一台已登录 Hearth 的机器上，对 agent 说：" : "On any machine logged in to Hearth, tell your agent:"),
     cmdLine(say), h("div", { class: "muted small" }, z ? "agent 会按这台机器的架构选择恢复流程，通过 hearth ssh 逐步装好并检查。" : "It picks the restore flow for this machine's architecture and sets it up over hearth ssh, checking each step.")) : null;
   return h("div", { class: "envdetail" }, h("div", {}, h("h4", {}, z ? "检查结果" : "Findings"), probs, how), tools ? h("div", {}, h("h4", {}, z ? "工具版本" : "Tools"), tools) : null);
+}
+
+// sshCell is the machine table's SSH column: can the user's devices connect.
+function sshCell(d) {
+  var z = zh(), x = d.env && d.env.ssh;
+  if (!x) return h("span", { class: "muted" }, "-");
+  var where = x.address ? x.address + ":" + x.port : "";
+  switch (x.status) {
+    case "ok": return h("span", { title: where }, badge(z ? "可连接" : "works", "ok"), h("div", { class: "muted small mono" }, where));
+    case "checking": return h("span", { title: where }, badge(z ? "检测中" : "checking", ""), h("div", { class: "muted small mono" }, where));
+    case "blocked": return h("span", { title: z ? "机器上的 sshd 正常，服务器连不到它" : "the machine's sshd works; the server cannot reach it" }, badge(z ? "服务器不可达" : "unreachable from server", "warn"), h("div", { class: "muted small mono" }, where));
+    case "down": return h("span", { title: x.detail || "" }, badge(z ? "连不上" : "down", "bad"));
+    case "off": return h("span", { class: "muted" }, z ? "已关闭" : "off");
+  }
+  return h("span", { class: "muted" }, "-");
 }

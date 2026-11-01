@@ -1,8 +1,11 @@
 package server
 
 import (
+	"net"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestBehind(t *testing.T) {
@@ -114,5 +117,60 @@ func TestMachineEnvCodexNoLogin(t *testing.T) {
 	}
 	if env.Status != "error" {
 		t.Fatalf("status %s", env.Status)
+	}
+}
+
+// A missing tool is a thing to do (amber), not a fault; SSH that does not
+// answer is one (red); the server's own reachability check runs in the
+// background.
+func TestMachineEnvSSHAndLevels(t *testing.T) {
+	now := time.Unix(1_800_000_000, 0)
+	s := &Server{versions: newToolVersions(), cfg: Config{Now: func() time.Time { return now }}}
+	at := strconv.FormatInt(now.Unix(), 10)
+	env := s.machineEnv(`{"checked_at":`+at+`,"tools":{"codex":{"expected":true,"installed":false}},
+	 "ssh":{"on":true,"running":false,"address":"127.0.0.1","port":1,"answers":false,"detail":"sshd not found"}}`, "")
+	codes := map[string]string{}
+	for _, p := range env.Problems {
+		codes[p.Code] = p.Level
+	}
+	if codes["missing"] != "warn" || codes["ssh_down"] != "error" || env.SSH.Status != "down" {
+		t.Fatalf("%+v %+v", env.Problems, env.SSH)
+	}
+	// Answers locally: the server checks it can reach it too.
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	go func() {
+		for {
+			c, err := l.Accept()
+			if err != nil {
+				return
+			}
+			c.Write([]byte("SSH-2.0-OpenSSH_8.2\r\n"))
+			c.Close()
+		}
+	}()
+	port := l.Addr().(*net.TCPAddr).Port
+	rep := `{"checked_at":` + at + `,"ssh":{"on":true,"running":true,"address":"127.0.0.1","port":` + strconv.Itoa(port) + `,"answers":true,"key_ok":true}}`
+	if e := s.machineEnv(rep, ""); e.SSH.Status != "checking" || len(e.Problems) != 0 {
+		t.Fatalf("first look: %+v", e.SSH)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		e := s.machineEnv(rep, "")
+		if e.SSH.Status == "ok" && e.Status == "ok" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("never reached: %+v", e.SSH)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	// An old report (machine offline) is not judged.
+	old := strconv.FormatInt(now.Unix()-3600, 10)
+	if e := s.machineEnv(`{"checked_at":`+old+`,"ssh":{"on":true,"answers":false}}`, ""); e.SSH.Status != "stale" || len(e.Problems) != 0 {
+		t.Fatalf("stale: %+v %+v", e.SSH, e.Problems)
 	}
 }

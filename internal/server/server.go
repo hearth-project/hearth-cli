@@ -87,7 +87,8 @@ type Server struct {
 	settings settingsCache
 	activity *activity
 	versions *toolVersions
-	adminKey []byte // signs admin panel sessions
+	sshReach sshReach // whether the server reaches machines' sshd
+	adminKey []byte   // signs admin panel sessions
 	started  time.Time
 	// quotaFlag caches whether any account has its own quota.
 	quotaFlag struct {
