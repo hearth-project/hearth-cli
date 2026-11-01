@@ -122,7 +122,7 @@ Generated from `hearth --help` by `hearth docs cli > docs/cli.md`; every command
 | [`hearth machine facts`](#hearth-machine-facts) | Print the detected facts as JSON |
 | [`hearth secret`](#hearth-secret) | End-to-end encrypted credentials (tokens, config files, keys) |
 | [`hearth secret set`](#hearth-secret-set) | Store a secret (value from --file, stdin, or a hidden prompt) |
-| [`hearth secret restore`](#hearth-secret-restore) | Write file secrets back to their paths (mode 0600) |
+| [`hearth secret restore`](#hearth-secret-restore) | Write file secrets back to their paths (mode 0600); names: only those |
 | [`hearth secret get`](#hearth-secret-get) | Print a secret's value |
 | [`hearth secret list`](#hearth-secret-list) | List secret names (not values) |
 | [`hearth secret rm`](#hearth-secret-rm) | Delete a secret |
@@ -230,6 +230,7 @@ Flags:
       --device string    device name (default: hostname)
       --email string     account email (default: this machine's local identity, as hearth login)
       --force            overwrite local session files that differ from the server
+      --full             restore everything now (credentials, conversations, shell lines, agent setup) instead of on demand
       --insecure         allow plain HTTP to a non-loopback server
       --invite string    invite code: create the account first (first machine only)
       --new              create the account first (first machine only; servers in invite mode also need --invite)
@@ -237,7 +238,7 @@ Flags:
       --no-import        do not record this machine for new ones (its skills and agents, new setup items, shell lines)
       --no-register      never create the account; fail when the login does not exist
       --server string    server URL (default: this login's, $HEARTH_SERVER, or the server hearth was installed from)
-      --sessions int     restore this many most recently active conversations (0 = all) (default 10)
+      --sessions int     restore this many most recently active conversations (0 = all; a new machine restores none unless given) (default 10)
       --switch           replace an existing login to another account or server
       --team string      join a team with this invite code, or create a team of this name (asked in a terminal when you have none)
 ```
@@ -1429,10 +1430,10 @@ Flags:
 
 ## hearth secret restore
 
-Write file secrets back to their paths (mode 0600)
+Write file secrets back to their paths (mode 0600); names: only those
 
 ```text
-hearth secret restore [flags]
+hearth secret restore [NAME...] [flags]
 
 Flags:
       --force   overwrite existing files that differ

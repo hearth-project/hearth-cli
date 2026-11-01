@@ -99,7 +99,7 @@ curl -fsSL -k https://<服务器>:8787/install.sh | sh -s -- --invite <邀请码
 
 `-k` 只用于第一次从自签名服务器下载；之后客户端只信任这台服务器的证书。
 
-安装脚本会把 `hearth` 装到 `~/.local/bin`，给 Codex / Claude Code / Comate 装上 `hearth` skill，询问主密码和这台机器的工作目录，然后恢复你的文件：
+安装脚本会把 `hearth` 装到 `~/.local/bin`，给 Codex / Claude Code / Comate 装上 `hearth` skill，询问主密码和这台机器的工作目录，然后启动 SSH 和后台同步；会话、凭证、agent 环境在需要时再取：
 
 ```text
 hearth 0.1.0 installed to ~/.local/bin/hearth
@@ -110,8 +110,8 @@ Hearth setup on gpu-node-13 (linux x86_64, 8 x NVIDIA H800)
   workspace    /data/you, as on gpu-node-12 (GPU h800)
                Enter to use it, or type another directory:
   library      42 skills, 3 agents for codex
-  files        6 credential and config files written
-  sessions     10 conversations restored
+  on demand    conversations (hearth restore --last 10), credentials (your agent asks hearth when a skill needs one),
+               shell lines (hearth shell restore), agent setup ("恢复这台机器的 Codex 环境"); everything now: hearth setup --full
   sync         on (background)
   ssh          h800-gpu-node-13 (10.0.0.13:8022)
 

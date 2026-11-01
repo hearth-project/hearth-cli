@@ -150,7 +150,12 @@ func libBundlePath(root, bp string) string {
 
 // restoreLibSecrets writes the credential files back into the skills this
 // library has (mode 0600). Returns how many it wrote.
+// On an on-demand machine nothing is written (they come when a skill
+// needs them).
 func (e *Engine) restoreLibSecrets() (int, error) {
+	if OnDemand(e.Home) {
+		return 0, nil
+	}
 	st, _ := loadLibState(e.Home)
 	synced := st.SecretFiles
 	all, err := e.Secrets()

@@ -40,7 +40,7 @@ Keep the curl options exactly as given (a self-signed server's command has `-k`,
 
 ## B. Log in and restore this machine
 
-The standard flow has two parts. **(1) On the new machine**: install, log in, choose the working directory, and Hearth restores the user's files (conversations, skills, credentials, shell lines). **(2) From any other machine with Hearth**: the user tells that machine's agent "恢复 <machine> 的 Codex 环境", and it installs and checks the software over `hearth ssh` following the restore flow for this kind of machine (see "Discover and restore a newly online machine" in C). Part 2 can also run here (D) when no other machine is at hand.
+The standard flow has two parts. **(1) On the new machine**: install, log in, choose the working directory; Hearth starts SSH from the user's devices and background upload. A new machine restores **nothing else by default** (on demand): no credentials, no conversations, no shell lines, no agent setup; most work happens over SSH from another device, and on accounts several people share every credential on disk is readable by all of them. `hearth setup --full` restores everything at once as before. **(2) From any other machine with Hearth**: the user tells that machine's agent "恢复 <machine> 的 Codex 环境", and it installs and checks the software over `hearth ssh` following the restore flow for this kind of machine (see "Discover and restore a newly online machine" in C). Part 2 can also run here (D) when no other machine is at hand.
 
 1. Collect in one message (skip what `onboard status` already knows):
    - server URL only if `onboard status` has none (the installer remembers it); account email only if `onboard status` shows no `email` (it is detected from this machine's identity). Ask for an invite code only if `registration` is `invite`; open servers create a missing account during setup.
@@ -63,7 +63,7 @@ The standard flow has two parts. **(1) On the new machine**: install, log in, ch
    cd <workspace> && hearth setup --invite <code>   # new account on an invite-only server
    ```
 
-   Tell them: a new account prints a recovery key once; keep it offline (password manager), never paste it into the chat. `setup` restores the 10 most recently active conversations (`--sessions N`, 0 = all), skills and credentials, and starts background sync. It also copies the skills and agents this machine already has into the library (`--no-import` to skip; items that look like they hold a credential stay out and are listed), asks for the email when no identity is found, and offers in the terminal the conversations left on machines still online (usually the machine they are moving from). It ends with a `done:` line (conversations, library size, credential files) and the next steps. Setup installs no software: agent CLIs, gateways and services come in **D**. Wait until they say it finished.
+   Tell them: a new account prints a recovery key once; keep it offline (password manager), never paste it into the chat. `setup` logs in, picks the working directory and starts background sync; on a new machine it restores no conversations (`--sessions N` asks for some), credentials or shell lines (`--full`: all of it). It also copies the skills and agents this machine already has into the library (`--no-import` to skip; items that look like they hold a credential stay out and are listed), asks for the email when no identity is found, and offers in the terminal the conversations left on machines still online (usually the machine they are moving from). It ends with a `done:` line (conversations, library size, credential files) and the next steps. Setup installs no software: agent CLIs, gateways and services come in **D**. Wait until they say it finished.
 4. Finish, following `next` in `onboard status`:
    - skill search MCP: `setup` registers it with Codex and Claude Code automatically; if it is missing (agent installed later) run `hearth lib mcp-install`;
    - skills live once in the library (`hearth lib skills-dir` shows it); move them with `hearth lib skills-dir '<path>'` (e.g. `${WORKSPACE}/.agents/skills`) — it moves the files, rewrites the agent links and saves `skills.dir` in `<library>/config.toml`, which syncs to other machines;
@@ -75,7 +75,9 @@ The standard flow has two parts. **(1) On the new machine**: install, log in, ch
 
 ## D. Restore this machine's environment
 
-Setup restored data and credentials; the software (Node, Codex CLI, Claude Code, codex-mixin, services) is set up by you, with the user, from the restore flow the user's machines recorded on the server. Hearth does not install it by itself.
+On an on-demand machine (`<home>/restore-mode.json`), restore only what is needed, when it is needed: conversations with `hearth restore --last N` or by id, a credential with `hearth secret restore <name>` (the skill names the file it needs; `hearth secret list` shows the names), shell lines with `hearth shell restore`. Never print a credential's value into the conversation. Once an agent's CLI is installed, run `hearth agents pull <agent>`: it renders the skills and agents for it and registers skill search and memory hooks (the daemon does it by itself within 20 minutes); add `--last N` only if the user wants conversations too.
+
+Setup restored data and credentials (with `--full`); the software (Node, Codex CLI, Claude Code, codex-mixin, services) is set up by you, with the user, from the restore flow the user's machines recorded on the server. Hearth does not install it by itself.
 
 1. Read the flow and the guide:
 

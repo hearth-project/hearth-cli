@@ -131,6 +131,20 @@ type SecretRestore struct {
 // RestoreSecretFiles writes file secrets to their paths (mode 0600). A
 // different existing file is kept unless force is set.
 func (e *Engine) RestoreSecretFiles(force bool) ([]SecretRestore, error) {
+	return e.restoreSecretFiles(force, nil)
+}
+
+// RestoreSecretFilesNamed writes the named file secrets only (an on-demand
+// machine restores what the user asks for).
+func (e *Engine) RestoreSecretFilesNamed(force bool, names []string) ([]SecretRestore, error) {
+	want := map[string]bool{}
+	for _, n := range names {
+		want[n] = true
+	}
+	return e.restoreSecretFiles(force, want)
+}
+
+func (e *Engine) restoreSecretFiles(force bool, only map[string]bool) ([]SecretRestore, error) {
 	all, err := e.Secrets()
 	if err != nil {
 		return nil, err
@@ -139,6 +153,9 @@ func (e *Engine) RestoreSecretFiles(force bool) ([]SecretRestore, error) {
 	for _, s := range all {
 		if s.RestoreTo == "" || strings.HasPrefix(s.RestoreTo, libRestorePrefix) {
 			continue // library credential files: written with their skill
+		}
+		if only != nil && !only[s.Name] {
+			continue
 		}
 		p := ExpandHome(s.RestoreTo)
 		r := SecretRestore{Name: s.Name, Path: p}
