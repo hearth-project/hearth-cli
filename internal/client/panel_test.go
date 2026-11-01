@@ -298,6 +298,35 @@ func TestAdminPanel(t *testing.T) {
 	if r, _ := hc.Get(en.url + "/admin/../schema.sql"); r.StatusCode == 200 {
 		t.Fatal("served a file outside the panel")
 	}
+
+	// A removed machine leaves the list: machines are only online or offline.
+	listDevices := func() []map[string]any {
+		req, _ := http.NewRequest("GET", en.url+"/v1/me/devices", nil)
+		req.AddCookie(bobCookie)
+		r, err := hc.Do(req)
+		if err != nil || r.StatusCode != 200 {
+			t.Fatalf("devices: %v %v", r, err)
+		}
+		defer r.Body.Close()
+		var ds []map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&ds); err != nil {
+			t.Fatal(err)
+		}
+		return ds
+	}
+	ds := listDevices()
+	if len(ds) == 0 {
+		t.Fatal("no devices listed")
+	}
+	req, _ = http.NewRequest("DELETE", en.url+"/v1/me/devices/"+ds[0]["id"].(string), nil)
+	req.AddCookie(bobCookie)
+	req.Header.Set("X-Hearth-Admin", "1")
+	if r, err := hc.Do(req); err != nil || r.StatusCode != 204 {
+		t.Fatalf("remove device: %v %v", r, err)
+	}
+	if after := listDevices(); len(after) != len(ds)-1 {
+		t.Fatalf("removed device still listed: %d -> %d", len(ds), len(after))
+	}
 }
 
 // sessionCookie signs m in to the console with a link and returns the cookie.

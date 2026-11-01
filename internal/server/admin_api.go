@@ -213,9 +213,10 @@ func (s *Server) apiUserDevices(w http.ResponseWriter, r *http.Request, _ adminC
 	s.writeDevices(w, uid)
 }
 
-// writeDevices lists a user's devices, newest activity first.
+// writeDevices lists a user's logged-in devices, newest activity first.
+// Removed (revoked) devices are left out: a machine is online or offline.
 func (s *Server) writeDevices(w http.ResponseWriter, uid int64) {
-	rows, err := s.st.rdb.Query(`SELECT id,name,status,created_at,last_seen,client_version,last_ip,offline_at,machine_json,health_json,alias FROM devices WHERE user_id=? ORDER BY last_seen DESC`, uid)
+	rows, err := s.st.rdb.Query(`SELECT id,name,status,created_at,last_seen,client_version,last_ip,offline_at,machine_json,health_json,alias FROM devices WHERE user_id=? AND status='active' ORDER BY last_seen DESC`, uid)
 	if err != nil {
 		s.writeStoreErr(w, err)
 		return

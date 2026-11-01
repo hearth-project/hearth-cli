@@ -110,7 +110,7 @@ function userActions(u) {
       act(api("POST", "/users/" + e + "/quota", { bytes: b }));
     }],
     [t(u.admin ? "Remove admin" : "Make admin"), function () { act(api("POST", "/users/" + e + "/admin", { admin: !u.admin })); }],
-    [t("Log out devices"), function () { if (confirm(t("Are you sure?"))) act(api("POST", "/users/" + e + "/revoke-devices")); }],
+    [t("Remove all machines"), function () { if (confirm(t("Are you sure?"))) act(api("POST", "/users/" + e + "/revoke-devices")); }],
     [t("Delete"), function () { if (confirm(t("Delete this account and all its data?") + "\n" + u.email)) act(api("DELETE", "/users/" + e)); }, "bad"]
   ];
   out.push(menuButton("⋯", more));
@@ -124,7 +124,7 @@ function devicesRow(u, tr) {
     var tb = h("table", {}, h("thead", {}, h("tr", {}, ["Name", "IP", "Status", "Version", "Last seen", "Created"].map(function (k) { return h("th", {}, t(k)); }))),
       h("tbody", {}, ds.map(function (d) {
         return h("tr", {}, h("td", {}, d.name, " ", h("span", { class: "muted mono" }, d.id)), h("td", { class: "mono" }, d.ip || "-"),
-          h("td", {}, d.online ? badge(t("online"), "ok") : d.status),
+          h("td", {}, d.online ? badge(t("online"), "ok") : h("span", { class: "muted" }, t("offline"))),
           h("td", { class: "mono" }, d.version || t("not reported (older client)")),
           h("td", {}, ago(d.last_seen)), h("td", {}, when(d.created_at)));
       })));
