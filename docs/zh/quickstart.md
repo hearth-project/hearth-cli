@@ -113,7 +113,7 @@ hearth session list           # 已同步的会话
 curl -fsSL -k https://<server-host>:8787/install.sh | sh
 ```
 
-输入主密码后，setup 会推荐工作目录：你同类型机器用的目录（先看同 GPU 型号，再看同 GPU 系列如 B 卡、GB 卡，再看同系统同架构），没有同类机器就推荐用户目录。回车采用或输入其他路径，一定由你确认。然后自动恢复：
+输入主密码后，setup 会推荐工作目录：你同类型机器用的目录（先看同 GPU 型号，再看同 GPU 系列如 B 卡、GB 卡，再看同系统同架构），没有同类机器就推荐用户目录。这台机器上没有的盘（目录和它的上级目录都不存在）不会被推荐，setup 会说明是哪个目录。回车采用或输入其他路径，一定由你确认。然后自动恢复：
 
 - 最近活动的 10 条会话（`hearth restore --last 30` 恢复更多，`hearth session restore <id>` 恢复指定的）；
 - skills、agents、MCP 配置；

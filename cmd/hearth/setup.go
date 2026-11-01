@@ -549,7 +549,7 @@ func chooseSetupWorkspace(out *setupOut, home string, cfg *client.Config) string
 	sug := client.WorkspaceSuggestion{}
 	if e, err := client.NewEngine(home); err == nil {
 		if ds, err := e.API.Devices(); err == nil {
-			sug = client.SuggestWorkspace(ds, cfg.DeviceID, client.Facts())
+			sug = client.SuggestWorkspace(ds, cfg.DeviceID, client.Facts(), client.WorkspaceUsable)
 		}
 	}
 	def := h
@@ -557,6 +557,10 @@ func chooseSetupWorkspace(out *setupOut, home string, cfg *client.Config) string
 	if sug.Path != "" {
 		def = sug.Path
 		why = "as on " + shortHost(sug.Machine) + " (" + sug.Kind + ")"
+	}
+	if sug.Missing != "" {
+		// The most alike machine works on a disk this one does not have.
+		why += fmt.Sprintf("; %s works in %s, which is not on this machine", shortHost(sug.MissingMachine), sug.Missing)
 	}
 	if !isTTY() {
 		if sug.Path != "" {

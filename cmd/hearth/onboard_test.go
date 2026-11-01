@@ -97,3 +97,17 @@ func TestChooseIdentity(t *testing.T) {
 		t.Fatal("no answer accepted")
 	}
 }
+
+func TestSameFileFollowsLinks(t *testing.T) {
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "local", "hearth")
+	os.MkdirAll(filepath.Dir(bin), 0o755)
+	os.WriteFile(bin, []byte("x"), 0o755)
+	link := filepath.Join(dir, "usr-local-bin-hearth")
+	if err := os.Symlink(bin, link); err != nil {
+		t.Skip(err)
+	}
+	if !sameFile(link, bin) || sameFile(filepath.Join(dir, "other"), bin) {
+		t.Fatal("sameFile")
+	}
+}

@@ -24,12 +24,31 @@ type WorkspaceSuggestion struct {
 	Path    string // "" = the user's home (no separate workspace)
 	Machine string // the machine it comes from
 	Kind    string // what makes it alike: "gpu cf-ng-bzz2-o", "gb family", "linux/x86_64"
+	// Missing is the workspace of a more alike machine that cannot be used
+	// here: neither it nor its parent directory exists (a disk this machine
+	// does not mount). "" when none was skipped.
+	Missing        string
+	MissingMachine string
+}
+
+// WorkspaceUsable reports whether a workspace another machine uses can be
+// used here: it exists, or its parent does (the directory is created). A
+// path whose parent is missing usually lives on a disk this machine does not
+// mount; creating it would put the workspace on the local disk instead.
+func WorkspaceUsable(p string) bool {
+	if fi, err := os.Stat(p); err == nil {
+		return fi.IsDir()
+	}
+	fi, err := os.Stat(filepath.Dir(filepath.Clean(p)))
+	return err == nil && fi.IsDir()
 }
 
 // SuggestWorkspace picks the workspace of the most alike, most recently
-// seen active device other than self.
-func SuggestWorkspace(ds []api.Device, self string, f mach.Facts) WorkspaceSuggestion {
+// seen active device other than self, among those usable here (usable nil
+// = all).
+func SuggestWorkspace(ds []api.Device, self string, f mach.Facts, usable func(string) bool) WorkspaceSuggestion {
 	best, bestScore, bestSeen := WorkspaceSuggestion{}, 0, int64(0)
+	missing, missScore, missSeen := WorkspaceSuggestion{}, 0, int64(0)
 	for _, d := range ds {
 		if d.ID == self || (d.Status != "" && d.Status != "active") {
 			continue
@@ -49,9 +68,21 @@ func SuggestWorkspace(ds []api.Device, self string, f mach.Facts) WorkspaceSugge
 		case f.GPU == "" && s("gpu") == "" && s("os") == f.OS && s("arch") == f.Arch:
 			score, kind = 1, f.OS+"/"+f.Arch
 		}
-		if score > bestScore || (score == bestScore && score > 0 && d.LastSeen > bestSeen) {
+		if score == 0 {
+			continue
+		}
+		if usable != nil && !usable(ws) {
+			if score > missScore || (score == missScore && d.LastSeen > missSeen) {
+				missing, missScore, missSeen = WorkspaceSuggestion{Missing: ws, MissingMachine: d.Name}, score, d.LastSeen
+			}
+			continue
+		}
+		if score > bestScore || (score == bestScore && d.LastSeen > bestSeen) {
 			best, bestScore, bestSeen = WorkspaceSuggestion{Path: ws, Machine: d.Name, Kind: kind}, score, d.LastSeen
 		}
+	}
+	if missScore > bestScore || (missScore == bestScore && missScore > 0 && missSeen > bestSeen) {
+		best.Missing, best.MissingMachine = missing.Missing, missing.MissingMachine
 	}
 	return best
 }
