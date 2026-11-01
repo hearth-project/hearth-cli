@@ -158,24 +158,15 @@ func secretCmd() *cobra.Command {
 				}
 				return report(e.DeleteSecret(a[0]), "deleted "+a[0]+" (rotate it if it may have leaked)")
 			}},
-		&cobra.Command{Use: "exec -- <command> [args...]", Short: "Run a command with env-style secrets (UPPER_CASE names) in its environment",
-			Args: cobra.MinimumNArgs(1), DisableFlagParsing: false,
-			RunE: func(_ *cobra.Command, a []string) error {
-				e, err := engine()
-				if err != nil {
-					return err
+		secretExecCmd(), secretUseCmd(),
+		&cobra.Command{Use: "clean", Short: "Remove the credential files written on demand (hearth secret use, prepare_credentials) now",
+			RunE: func(*cobra.Command, []string) error {
+				removed, err := client.RemoveTempCredentials(client.Home(), true, nil)
+				for _, p := range removed {
+					fmt.Println("removed", p)
 				}
-				env, err := e.SecretEnv()
-				if err != nil {
-					return err
-				}
-				cmd := exec.Command(a[0], a[1:]...)
-				cmd.Env = append(os.Environ(), env...)
-				cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
-				err = cmd.Run()
-				var ee *exec.ExitError
-				if errors.As(err, &ee) {
-					os.Exit(ee.ExitCode())
+				if err == nil && len(removed) == 0 {
+					fmt.Println("no credential files written on demand here")
 				}
 				return err
 			}},
@@ -284,5 +275,88 @@ func recoverCmd() *cobra.Command {
 	c.Flags().BoolVar(&insecure, "insecure", false, "allow plain HTTP to a non-loopback server")
 	c.MarkFlagRequired("server")
 	c.MarkFlagRequired("email")
+	return c
+}
+
+// secretUseCmd writes the credentials a skill (or a file secret) needs,
+// for a while: on-demand machines restore none at setup.
+func secretUseCmd() *cobra.Command {
+	var ttl time.Duration
+	c := &cobra.Command{Use: "use <skill|NAME>...", Short: "Write the credentials a skill or file secret needs (0600) for a while; removed after --ttl",
+		Long: "Writes the credential files of the named skills (kept encrypted by the machine that had them) or the named file\n" +
+			"secrets to their places, mode 0600, and prints the paths, never the values. They are removed after --ttl\n" +
+			"(default 12h; 0 = keep) by the daemon, or now with hearth secret clean, and are not uploaded from here.",
+		Args: cobra.MinimumNArgs(1),
+		RunE: func(_ *cobra.Command, a []string) error {
+			e, err := engine()
+			if err != nil {
+				return err
+			}
+			us, err := e.UseCredentials(a, ttl)
+			printCredUse(us, ttl)
+			return err
+		}}
+	c.Flags().DurationVar(&ttl, "ttl", 12*time.Hour, "remove the files after this long (0 = keep)")
+	return c
+}
+
+func printCredUse(us []client.CredUse, ttl time.Duration) {
+	for _, u := range us {
+		where := u.Path
+		if u.Action == "env" {
+			where = "(environment variable; hearth secret exec -- <command>)"
+		}
+		note := ""
+		if u.Action == "written" && ttl > 0 {
+			note = " (removed in " + ttl.String() + ")"
+		}
+		fmt.Printf("%-10s %-14s %s%s\n", u.For, u.Action, where, note)
+	}
+}
+
+// secretExecCmd runs one command with the env-style secrets in its
+// environment and, with --for, the credential files of skills or file
+// secrets in place for the time it runs.
+func secretExecCmd() *cobra.Command {
+	var forItems []string
+	c := &cobra.Command{Use: "exec [--for <skill|NAME>]... -- <command> [args...]",
+		Short: "Run a command with env-style secrets (UPPER_CASE names) in its environment; --for: credential files too, removed after",
+		Args:  cobra.MinimumNArgs(1),
+		RunE: func(_ *cobra.Command, a []string) error {
+			e, err := engine()
+			if err != nil {
+				return err
+			}
+			env, err := e.SecretEnv()
+			if err != nil {
+				return err
+			}
+			var written map[string]bool
+			if len(forItems) > 0 {
+				us, err := e.UseCredentials(forItems, 0)
+				if err != nil {
+					return err
+				}
+				written = map[string]bool{}
+				for _, u := range us {
+					if u.Action == "written" {
+						written[u.Path] = true
+					}
+				}
+			}
+			cmd := exec.Command(a[0], a[1:]...)
+			cmd.Env = append(os.Environ(), env...)
+			cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+			err = cmd.Run()
+			if len(written) > 0 {
+				_, _ = client.RemoveTempCredentials(e.Home, true, written)
+			}
+			var ee *exec.ExitError
+			if errors.As(err, &ee) {
+				os.Exit(ee.ExitCode())
+			}
+			return err
+		}}
+	c.Flags().StringArrayVar(&forItems, "for", nil, "also put this skill's (or file secret's) credential files in place while the command runs")
 	return c
 }

@@ -48,9 +48,12 @@ type Service struct {
 	Propose func(recipe, stepsTOML, reason string) (string, error)
 	// Long-term memory: Recall searches the local index (no network);
 	// Remember / Forget keep the user's facts.
-	Recall   func(query, cwd string, limit int) (string, error)
-	Remember func(text, scope string) (string, error)
-	Forget   func(id string) error
+	Recall func(query, cwd string, limit int) (string, error)
+	// PrepareCredentials writes the credential files a skill (or a named
+	// file secret) needs and reports their paths, never the values.
+	PrepareCredentials func(names []string) (string, error)
+	Remember           func(text, scope string) (string, error)
+	Forget             func(id string) error
 
 	mu        sync.Mutex
 	sig       string
@@ -184,6 +187,10 @@ type recallArgs struct {
 type rememberArgs struct {
 	Text  string `json:"text" jsonschema:"one fact, habit or decision, written so another agent understands it without this conversation"`
 	Scope string `json:"scope,omitempty" jsonschema:"a directory (e.g. the repository root) when it only holds there; empty = everywhere"`
+}
+
+type prepareArgs struct {
+	Names []string `json:"names" jsonschema:"skills (e.g. the one whose script reported missing credentials) or file secret names (hearth secret list)"`
 }
 
 type forgetArgs struct {
@@ -365,6 +372,21 @@ func (s *Service) New(version string) *mcp.Server {
 				return text("Not forgotten: " + err.Error()), nil, nil
 			}
 			return text("Forgotten."), nil, nil
+		})
+	}
+	if s.PrepareCredentials != nil {
+		mcp.AddTool(srv, &mcp.Tool{
+			Name: "prepare_credentials",
+			Description: "Put the credentials a skill needs in place on this machine before running it, e.g. when its script " +
+				"reports a missing credentials/token/key file. Machines restore credentials only on demand: this writes the files " +
+				"the user keeps end-to-end encrypted (mode 0600, removed after 12 hours) and returns their paths. It never " +
+				"returns the values: do not read, print or copy the files.",
+		}, func(_ context.Context, _ *mcp.CallToolRequest, a prepareArgs) (*mcp.CallToolResult, any, error) {
+			out, err := s.PrepareCredentials(a.Names)
+			if err != nil {
+				return text(strings.TrimSpace(out + "\nNot all prepared: " + err.Error())), nil, nil
+			}
+			return text(out), nil, nil
 		})
 	}
 	if s.Recipes != nil {

@@ -58,7 +58,27 @@ func mcpCmd() *cobra.Command {
 			os.MkdirAll(home, 0o700)
 			svc := &mcpserver.Service{Sources: skillSources(extra), UsageLog: usageLog(),
 				Recipes: func() string { return client.RecipesSummary(home) },
-				Propose: func(r, steps, reason string) (string, error) { return client.Propose(home, r, steps, reason) }}
+				Propose: func(r, steps, reason string) (string, error) { return client.Propose(home, r, steps, reason) },
+				PrepareCredentials: func(names []string) (string, error) {
+					e, err := client.NewEngine(home)
+					if err != nil {
+						return "", err
+					}
+					us, err := e.UseCredentials(names, 12*time.Hour)
+					var b strings.Builder
+					for _, u := range us {
+						switch u.Action {
+						case "env":
+							fmt.Fprintf(&b, "%s: %s is an environment variable; run the command as: hearth secret exec -- <command>\n", u.For, u.Name)
+						default:
+							fmt.Fprintf(&b, "%s: %s %s\n", u.For, u.Path, u.Action)
+						}
+					}
+					if b.Len() == 0 && err == nil {
+						b.WriteString("nothing stored for that\n")
+					}
+					return b.String(), err
+				}}
 			if client.MemoryOn(home) {
 				svc.Recall = func(q, cwd string, limit int) (string, error) {
 					hits, err := client.Recall(home, q, cwd, limit)
