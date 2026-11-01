@@ -331,6 +331,12 @@ func envProblemText(p map[string]any) string {
 		return "codex has no login: " + s("detail") + " has no " + s("have") + " (Codex Desktop asks to log in)"
 	case "stale_app_server":
 		return fmt.Sprintf("%d codex app-server process(es) still use CODEX_HOME=%s from before the switch: hearth agents restart-app-server", int(n), s("detail"))
+	case "ssh_down":
+		return "remote ssh does not work: " + s("detail")
+	case "ssh_hostkey":
+		return "remote ssh answers with another host key"
+	case "ssh_blocked":
+		return "sshd works here, but the server cannot reach " + s("have")
 	case "shared_home":
 		return "your codex-mixin login is in the shared " + s("detail") + ", everyone on this account falls back to it: hearth agents isolate codex"
 	}
@@ -344,7 +350,7 @@ func reportHealthOf(e *client.Engine) (client.HealthReport, error) {
 	h := e.MachineHealth()
 	return h, e.API.HeartbeatReport(map[string]any{"facts": h.Machine, "profiles": h.Profiles, "workspace": h.Workspace},
 		map[string]any{"status": h.Status, "client": h.Client, "agents": h.Agents, "tools": h.Tools, "recipe_todo": h.RecipeTodo,
-			"recipe_manual": h.RecipeManual, "todo_steps": h.TodoSteps, "issues": h.Issues, "checked_at": h.CheckedAt})
+			"recipe_manual": h.RecipeManual, "todo_steps": h.TodoSteps, "issues": h.Issues, "ssh": h.SSH, "checked_at": h.CheckedAt})
 }
 
 // reportHealthQuiet reports after a change (a restore step done); a

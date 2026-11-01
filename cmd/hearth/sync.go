@@ -390,7 +390,7 @@ func daemonCmd() *cobra.Command {
 					lastHealth = time.Now()
 				}
 				h := health
-				if err := e.API.HeartbeatReport(map[string]any{"facts": h.Machine, "profiles": h.Profiles, "workspace": h.Workspace}, map[string]any{"status": h.Status, "client": h.Client, "agents": h.Agents, "tools": h.Tools, "recipe_todo": h.RecipeTodo, "recipe_manual": h.RecipeManual, "todo_steps": h.TodoSteps, "issues": h.Issues, "checked_at": h.CheckedAt}); err != nil {
+				if err := e.API.HeartbeatReport(map[string]any{"facts": h.Machine, "profiles": h.Profiles, "workspace": h.Workspace}, map[string]any{"status": h.Status, "client": h.Client, "agents": h.Agents, "tools": h.Tools, "recipe_todo": h.RecipeTodo, "recipe_manual": h.RecipeManual, "todo_steps": h.TodoSteps, "issues": h.Issues, "ssh": h.SSH, "checked_at": h.CheckedAt}); err != nil {
 					log.Printf("health heartbeat: %v", err)
 				} else if !proxySaved {
 					proxySaved = true
