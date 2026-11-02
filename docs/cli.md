@@ -179,6 +179,10 @@ Generated from `hearth --help` by `hearth docs cli > docs/cli.md`; every command
 | [`hearth site enable`](#hearth-site-enable) | Apply a site recipe you disabled |
 | [`hearth site pull`](#hearth-site-pull) | Fetch the site defaults now (works before login with --server) |
 | [`hearth site status`](#hearth-site-status) | List the site defaults on this machine |
+| [`hearth app`](#hearth-app) | The macOS menu bar app: your machines at a glance, and the console in a window |
+| [`hearth app install`](#hearth-app-install) | Install (or update) the menu bar app from your server into ~/Applications and start it |
+| [`hearth app open`](#hearth-app-open) | Start the menu bar app |
+| [`hearth app uninstall`](#hearth-app-uninstall) | Quit and remove the menu bar app |
 | [`hearth codex-import`](#hearth-codex-import) | Import Claude Code sessions into Codex (alias for `agent import codex --from claude`) |
 | [`hearth codex-threads`](#hearth-codex-threads) | Make restored sessions show up in Codex Desktop (index threads, names, sidebar sections) |
 | [`hearth docs`](#hearth-docs) | Documentation: how to install the agents' software (env), the command reference (cli) |
@@ -1356,7 +1360,8 @@ List your machines, architecture and agent readiness
 hearth machine list [flags]
 
 Flags:
-      --all   also revoked machines
+      --all    also revoked machines
+      --json   machine-readable (the macOS menu bar app reads it)
 ```
 
 ## hearth machine inspect
@@ -1692,6 +1697,7 @@ password. Admins (hearth server admin grant <email>) also see the administration
 hearth panel [flags]
 
 Flags:
+      --json      print the link as JSON and open nothing
       --no-open   only print the link
 ```
 
@@ -2030,6 +2036,38 @@ List the site defaults on this machine
 
 ```text
 hearth site status
+```
+
+## hearth app
+
+The macOS menu bar app: your machines at a glance, and the console in a window
+
+```text
+hearth app
+```
+
+## hearth app install
+
+Install (or update) the menu bar app from your server into ~/Applications and start it
+
+```text
+hearth app install
+```
+
+## hearth app open
+
+Start the menu bar app
+
+```text
+hearth app open
+```
+
+## hearth app uninstall
+
+Quit and remove the menu bar app
+
+```text
+hearth app uninstall
 ```
 
 ## hearth codex-import
