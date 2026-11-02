@@ -14,7 +14,16 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/Hearth"
 sed "s/@VERSION@/$VERSION/g" Resources/Info.plist > "$APP/Contents/Info.plist"
-if [ -f Resources/AppIcon.icns ]; then cp Resources/AppIcon.icns "$APP/Contents/Resources/"; fi
+# The icon is drawn by the app itself (Snapshot.icon), then packed as .icns.
+ICONSET=$(mktemp -d)/AppIcon.iconset
+mkdir -p "$ICONSET"
+"$BIN" --icon "$ICONSET/full.png" >/dev/null
+for s in 16 32 128 256 512; do
+  sips -z $s $s "$ICONSET/full.png" --out "$ICONSET/icon_${s}x${s}.png" >/dev/null
+  sips -z $((s*2)) $((s*2)) "$ICONSET/full.png" --out "$ICONSET/icon_${s}x${s}@2x.png" >/dev/null
+done
+rm "$ICONSET/full.png"
+iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/AppIcon.icns"
 codesign --force --deep --sign - "$APP"          # ad hoc: no Developer ID needed
 (cd "$OUT" && rm -f hearth-menubar-darwin.zip && ditto -c -k --keepParent Hearth.app hearth-menubar-darwin.zip)
 echo "$OUT/hearth-menubar-darwin.zip"

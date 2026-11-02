@@ -12,6 +12,11 @@ enum Entry {
             Snapshot.render(fixture: args[i + 1], outDir: args[i + 2])
             exit(0)
         }
+        if let i = args.firstIndex(of: "--icon"), args.count > i + 1 {
+            _ = NSApplication.shared
+            Snapshot.icon(to: args[i + 1])
+            exit(0)
+        }
         HearthApp.main()
     }
 }

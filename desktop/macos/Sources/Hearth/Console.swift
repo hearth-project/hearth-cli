@@ -80,7 +80,10 @@ final class ConsoleController: NSObject, WKNavigationDelegate, WKUIDelegate {
 
     static func der(fromPEMFile path: String) -> Data? {
         guard let pem = try? String(contentsOfFile: path, encoding: .utf8) else { return nil }
-        let b64 = pem.components(separatedBy: "\n").filter { !$0.hasPrefix("-----") }.joined()
+        // The first certificate of the file: the server's own.
+        guard let begin = pem.range(of: "-----BEGIN CERTIFICATE-----"),
+              let end = pem.range(of: "-----END CERTIFICATE-----", range: begin.upperBound..<pem.endIndex) else { return nil }
+        let b64 = pem[begin.upperBound..<end.lowerBound].components(separatedBy: .whitespacesAndNewlines).joined()
         return Data(base64Encoded: b64)
     }
 
