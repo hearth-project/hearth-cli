@@ -1,16 +1,19 @@
 package client
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
+	"net/url"
 	"os"
 	"os/exec"
 	"os/user"
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -23,7 +26,7 @@ import (
 
 // SSH into a machine the way it is usually set up by hand on GPU
 // containers: the system sshd with /etc/ssh/sshd_config, overridden to
-// public keys only, no passwords and the main interface only
+// public keys only, no passwords and the machine's own addresses only
 // (sshd -D -e -p 8022 -o ListenAddress=<bond0> ...), detached with setsid,
 // and the accepted keys in ~/.ssh/authorized_keys. Hearth only manages a
 // marked block of that file (the keys of the account's active devices), so
@@ -38,16 +41,18 @@ const sshdFlags = 4
 
 type sshState struct {
 	Disabled bool   `json:"disabled,omitempty"` // this machine only
-	Address  string `json:"address,omitempty"`
-	Port     int    `json:"port,omitempty"`
-	PID      int    `json:"pid,omitempty"`
-	External bool   `json:"external,omitempty"` // an sshd Hearth did not start (left running when SSH is turned off)
-	HostKey  string `json:"host_key,omitempty"`
-	Shared   bool   `json:"shared,omitempty"` // Hearth's own sshd for a workspace on a shared account
-	Flags    int    `json:"flags,omitempty"`  // sshdFlags the running sshd was started with
-	KeysHash string `json:"keys_hash,omitempty"`
-	Endpoint string `json:"endpoint,omitempty"` // published value, to skip unchanged uploads
-	LastErr  string `json:"last_error,omitempty"`
+	Address  string `json:"address,omitempty"`  // the first of Addresses: what older clients connect to
+	// Addresses sshd listens on (empty in states written before: Address).
+	Addresses []string `json:"addresses,omitempty"`
+	Port      int      `json:"port,omitempty"`
+	PID       int      `json:"pid,omitempty"`
+	External  bool     `json:"external,omitempty"` // an sshd Hearth did not start (left running when SSH is turned off)
+	HostKey   string   `json:"host_key,omitempty"`
+	Shared    bool     `json:"shared,omitempty"` // Hearth's own sshd for a workspace on a shared account
+	Flags     int      `json:"flags,omitempty"`  // sshdFlags the running sshd was started with
+	KeysHash  string   `json:"keys_hash,omitempty"`
+	Endpoint  string   `json:"endpoint,omitempty"` // published value, to skip unchanged uploads
+	LastErr   string   `json:"last_error,omitempty"`
 }
 
 func sshStatePath(home string) string { return filepath.Join(sshDir(home), "state.json") }
@@ -155,26 +160,123 @@ func sshPortWanted(home string) int {
 	return defaultSSHPort
 }
 
-// SSHAddress is the IPv4 address sshd listens on: [ssh] address, else
-// bond0 (common on GPU clusters), else the address of the default route.
-func SSHAddress(home string) string {
+// SSHAddresses are the IPv4 addresses sshd listens on, the first one is
+// the machine's main address: [ssh] address, else bond0 (common on GPU
+// clusters), the addresses the machine's host name resolves to, and the
+// source addresses of the routes to the Hearth server and to the rest of
+// the network. A machine often has several (a container's overlay and
+// the host's network, a second NIC): listening on only one of them left
+// machines unreachable whose name resolves to another. Only addresses of
+// this machine's own interfaces are taken, never loopback or link-local.
+func SSHAddresses(home, server string) []string {
 	if c, err := UserConfig(home); err == nil && c.SSH != nil && c.SSH.Address != "" {
-		return c.SSH.Address
+		return []string{c.SSH.Address}
 	}
-	if ifc, err := net.InterfaceByName("bond0"); err == nil {
-		if addrs, err := ifc.Addrs(); err == nil {
-			for _, a := range addrs {
-				if ip, _, err := net.ParseCIDR(a.String()); err == nil && ip.To4() != nil {
-					return ip.String()
-				}
+	return sshCandidates(localIPv4s(), bond0IPv4s(), hostNameIPv4s(), routeSource(serverHost(server)), routeSource("10.255.255.254"))
+}
+
+// sshCandidates orders and filters the candidate addresses: each group in
+// turn, only addresses of this machine (local), each once.
+func sshCandidates(local map[string]bool, groups ...[]string) []string {
+	var out []string
+	for _, g := range groups {
+		for _, ip := range g {
+			if ip != "" && local[ip] && !slices.Contains(out, ip) {
+				out = append(out, ip)
 			}
 		}
 	}
-	if c, err := net.Dial("udp4", "10.255.255.254:9"); err == nil { // no packet is sent
-		defer c.Close()
-		return c.LocalAddr().(*net.UDPAddr).IP.String()
+	return out
+}
+
+// localIPv4s are the usable IPv4 addresses of this machine's interfaces.
+func localIPv4s() map[string]bool {
+	out := map[string]bool{}
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return out
 	}
-	return ""
+	for _, a := range addrs {
+		ip, _, err := net.ParseCIDR(a.String())
+		if err != nil || ip.To4() == nil || ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsUnspecified() {
+			continue
+		}
+		out[ip.String()] = true
+	}
+	return out
+}
+
+func bond0IPv4s() []string {
+	ifc, err := net.InterfaceByName("bond0")
+	if err != nil {
+		return nil
+	}
+	addrs, err := ifc.Addrs()
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, a := range addrs {
+		if ip, _, err := net.ParseCIDR(a.String()); err == nil && ip.To4() != nil {
+			out = append(out, ip.String())
+		}
+	}
+	return out
+}
+
+// hostNameIPv4s: what the machine's host name resolves to, the address
+// other machines find it by (2 s at most).
+func hostNameIPv4s() []string {
+	h, err := os.Hostname()
+	if err != nil || h == "" {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	ips, err := net.DefaultResolver.LookupIP(ctx, "ip4", h)
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, ip := range ips {
+		out = append(out, ip.String())
+	}
+	return out
+}
+
+// serverHost is the host of the Hearth server URL ("" if none).
+func serverHost(server string) string {
+	u, err := url.Parse(server)
+	if err != nil {
+		return ""
+	}
+	return u.Hostname()
+}
+
+// routeSource is this machine's source address towards host: a UDP
+// "connection" picks the route, no packet is sent.
+func routeSource(host string) []string {
+	if host == "" {
+		return nil
+	}
+	c, err := net.DialTimeout("udp4", net.JoinHostPort(host, "9"), 2*time.Second)
+	if err != nil {
+		return nil
+	}
+	defer c.Close()
+	return []string{c.LocalAddr().(*net.UDPAddr).IP.String()}
+}
+
+// addrs: the addresses sshd listens on (a state written before Addresses
+// existed has only Address).
+func (s sshState) addrs() []string {
+	if len(s.Addresses) > 0 {
+		return s.Addresses
+	}
+	if s.Address != "" {
+		return []string{s.Address}
+	}
+	return nil
 }
 
 func alive(pid int) bool {
@@ -203,6 +305,15 @@ func portFree(addr string, port int) bool {
 		return false
 	}
 	l.Close()
+	return true
+}
+
+func allFree(addrs []string, port int) bool {
+	for _, a := range addrs {
+		if !portFree(a, port) {
+			return false
+		}
+	}
 	return true
 }
 
@@ -293,10 +404,11 @@ func (e *Engine) EnsureSSHD() (SSHStatus, error) {
 			return fail(err)
 		}
 	}
-	addr := SSHAddress(home)
-	if addr == "" {
+	addrs := SSHAddresses(home, e.Cfg.Server)
+	if len(addrs) == 0 {
 		return fail(errors.New("no IPv4 address to listen on; set [ssh] address in config.toml"))
 	}
+	addr := addrs[0]
 	// On an account several people share (a workspace), sessions through
 	// this person's own sshd are marked as theirs (SetEnv HEARTH_USER), so
 	// the end of the shared rc file restores their agent homes over
@@ -315,7 +427,7 @@ func (e *Engine) EnsureSSHD() (SSHStatus, error) {
 		}
 	}
 	want := sshPortWanted(home)
-	ours := !s.External && alive(s.PID) && s.Flags == sshdFlags && s.Shared == shared && s.Address == addr && s.Port >= want && s.Port < want+20 && listening(addr, s.Port)
+	ours := !s.External && alive(s.PID) && s.Flags == sshdFlags && s.Shared == shared && slices.Equal(s.addrs(), addrs) && s.Port >= want && s.Port < want+20 && listening(addr, s.Port)
 	adopted := !shared && s.External && s.Address == addr && s.Port == want && listening(addr, s.Port)
 	hostKey := s.HostKey
 	if !ours && !adopted {
@@ -329,23 +441,32 @@ func (e *Engine) EnsureSSHD() (SSHStatus, error) {
 		s.PID, s.External, s.Port = 0, false, 0
 		if hk, err := probeHostKey(addr, want); err == nil && !shared {
 			// An sshd is already there (started by hand): use it.
-			s.External, s.Address, s.Port, hostKey = true, addr, want, hk
+			s.External, s.Address, s.Addresses, s.Port, hostKey = true, addr, nil, want, hk
 		} else {
 			port := 0
 			for p := want; p < want+20; p++ {
-				if portFree(addr, p) {
+				if allFree(addrs, p) {
 					port = p
 					break
 				}
 			}
 			if port == 0 {
-				return fail(fmt.Errorf("no free port from %d on %s", want, addr))
+				return fail(fmt.Errorf("no free port from %d on %s", want, strings.Join(addrs, ", ")))
 			}
-			pid, err := startSSHD(home, sshdAuth, addr, port, setEnv)
+			pid, err := startSSHD(home, sshdAuth, addrs, port, setEnv)
 			if err != nil {
 				return fail(err)
 			}
-			s.PID, s.Address, s.Port, s.Flags, s.Shared = pid, addr, port, sshdFlags, shared
+			s.PID, s.Address, s.Addresses, s.Port, s.Flags, s.Shared = pid, addr, addrs, port, sshdFlags, shared
+		}
+	}
+	if s.External {
+		// An sshd started by hand: publish the addresses it answers on.
+		s.Addresses = nil
+		for _, a := range addrs {
+			if a == s.Address || listening(a, s.Port) {
+				s.Addresses = append(s.Addresses, a)
+			}
 		}
 	}
 	if hostKey == "" {
@@ -361,6 +482,9 @@ func (e *Engine) EnsureSSHD() (SSHStatus, error) {
 		name, _ = os.Hostname()
 	}
 	ep := SSHEndpoint{DeviceID: e.Cfg.DeviceID, Name: name, Address: s.Address, Port: s.Port, User: u.Username, HostKey: hostKey}
+	if a := s.addrs(); len(a) > 1 {
+		ep.Addresses = a
+	}
 	v, _ := json.Marshal(ep)
 	if string(v) != s.Endpoint {
 		ep.Updated = time.Now().Unix()
@@ -379,7 +503,7 @@ func (e *Engine) EnsureSSHD() (SSHStatus, error) {
 // startSSHD runs the system sshd detached, with the flags of the usual
 // manual setup: the system config and host keys when running as root,
 // else a config of its own with Hearth's host key.
-func startSSHD(home, authPath, addr string, port int, setEnv string) (int, error) {
+func startSSHD(home, authPath string, addrs []string, port int, setEnv string) (int, error) {
 	bin, err := exec.LookPath("sshd")
 	if err != nil {
 		if _, err2 := os.Stat("/usr/sbin/sshd"); err2 != nil {
@@ -404,8 +528,11 @@ func startSSHD(home, authPath, addr string, port int, setEnv string) (int, error
 		}
 		args = append(args, "-f", "/dev/null", "-o", "HostKey="+hk, "-o", "Subsystem=sftp internal-sftp")
 	}
-	args = append(args, "-p", strconv.Itoa(port),
-		"-o", "ListenAddress="+addr, "-o", "PidFile="+filepath.Join(dir, "sshd.pid"),
+	args = append(args, "-p", strconv.Itoa(port))
+	for _, a := range addrs {
+		args = append(args, "-o", "ListenAddress="+a)
+	}
+	args = append(args, "-o", "PidFile="+filepath.Join(dir, "sshd.pid"),
 		"-o", "AuthenticationMethods=publickey", "-o", "PubkeyAuthentication=yes",
 		"-o", "PasswordAuthentication=no", "-o", "KbdInteractiveAuthentication=no",
 		"-o", "PermitRootLogin=prohibit-password", "-o", "AllowUsers="+u.Username,
@@ -438,7 +565,7 @@ func startSSHD(home, authPath, addr string, port int, setEnv string) (int, error
 	pid := cmd.Process.Pid
 	go cmd.Wait() // reap it if it exits while we run
 	for i := 0; i < 30; i++ {
-		if listening(addr, port) {
+		if listening(addrs[0], port) {
 			return pid, nil
 		}
 		time.Sleep(100 * time.Millisecond)

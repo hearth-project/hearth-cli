@@ -27,6 +27,7 @@ function envText(p) {
     case "ssh_down": return z ? "远程 SSH 连不上：sshd 没有在发布的地址上应答" + (p.detail ? "（" + p.detail + "）" : "") : "Remote SSH does not work: no sshd answers on the published address" + (p.detail ? " (" + p.detail + ")" : "");
     case "ssh_hostkey": return z ? "远程 SSH 的 host key 和发布的不一致（端口可能被别的 sshd 占用）" : "Remote SSH answers with another host key than the published one (another sshd on the port?)";
     case "ssh_blocked": return z ? "机器上的 sshd 正常，但服务器连不到 " + p.have + "（可能有防火墙，或不在同一网络）" : "The machine's sshd works, but the server cannot reach " + p.have + " (a firewall, or another network)";
+    case "ssh_nat": return z ? "服务器连不到 " + p.have + "：机器的请求来自 " + p.detail + "，sshd 没有监听这个地址（多半在 NAT 或代理后面，别的机器连不进去）" : "The server cannot reach " + p.have + ": the machine's requests come from " + p.detail + ", an address sshd does not listen on (NAT or a proxy; other machines cannot connect in)";
   }
   return p.code;
 }
@@ -45,6 +46,7 @@ function envFix(p, d) {
     case "shared_home": return "hearth agents isolate codex   # moves your Codex config and conversations into your workspace";
     case "ssh_down": case "ssh_hostkey": return "hearth ssh status   # on that machine; hearth ssh enable restarts Hearth's sshd";
     case "ssh_blocked": return "hearth ssh <machine>   # from your own device: works if your network reaches it";
+    case "ssh_nat": return "[ssh] address = \"<an address of it your devices reach>\"   # in that machine's config.toml; or map a port to " + p.have;
   }
   return null;
 }

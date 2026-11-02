@@ -1,6 +1,7 @@
 package client
 
 import (
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -131,5 +132,40 @@ func TestKeyLinesExpiry(t *testing.T) {
 	}
 	if SSHForwardAgent(home) {
 		t.Fatal("forward_agent = false ignored")
+	}
+}
+
+// sshd listens on every address of the machine the candidates name, in
+// their order, each once; addresses of other machines are dropped.
+func TestSSHCandidates(t *testing.T) {
+	local := map[string]bool{"10.0.0.5": true, "33.1.2.3": true, "10.79.1.1": true}
+	got := sshCandidates(local, nil, []string{"10.79.1.1", "8.8.8.8"}, []string{"33.1.2.3"}, []string{"33.1.2.3", "10.79.1.1"})
+	if strings.Join(got, ",") != "10.79.1.1,33.1.2.3" {
+		t.Fatalf("got %v", got)
+	}
+	if got := sshCandidates(local, []string{"10.0.0.5"}, []string{"10.79.1.1"}); got[0] != "10.0.0.5" {
+		t.Fatalf("bond0 first: %v", got)
+	}
+}
+
+// A client connects to the first address that answers; with none it
+// falls back to the main one.
+func TestReachableAddress(t *testing.T) {
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	port := l.Addr().(*net.TCPAddr).Port
+	ep := SSHEndpoint{Address: "192.0.2.1", Addresses: []string{"192.0.2.1", "127.0.0.1"}, Port: port}
+	if a, ok := ep.ReachableAddress(300 * time.Millisecond); !ok || a != "127.0.0.1" {
+		t.Fatalf("got %s %v", a, ok)
+	}
+	l.Close()
+	if a, ok := ep.ReachableAddress(300 * time.Millisecond); ok || a != "192.0.2.1" {
+		t.Fatalf("none answers: got %s %v", a, ok)
+	}
+	if got := (SSHEndpoint{Address: "10.0.0.1"}).Addrs(); len(got) != 1 || got[0] != "10.0.0.1" {
+		t.Fatalf("old endpoint: %v", got)
 	}
 }
