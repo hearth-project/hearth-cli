@@ -268,3 +268,6 @@ func ServerBuild(home, server string) string {
 	}
 	return m.Version
 }
+
+// FileSHA256 is the hex SHA-256 of a file.
+func FileSHA256(p string) (string, error) { return fileSum(p) }

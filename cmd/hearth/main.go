@@ -50,7 +50,7 @@ func main() {
 	}
 	root.AddCommand(initCmd(), serverCmd(), registerCmd(), loginCmd(), logoutCmd(), statusCmd(),
 		whoamiCmd(), identityCmd(),
-		pushCmd(), daemonCmd(), restoreCmd(), sessionCmd(), deviceCmd(), setupCmd(), libCmd(), mcpCmd(), secretCmd(), passwdCmd(), recoverCmd(), toolsCmd(),
+		pushCmd(), daemonCmd(), appCmd(), restoreCmd(), sessionCmd(), deviceCmd(), setupCmd(), libCmd(), mcpCmd(), secretCmd(), passwdCmd(), recoverCmd(), toolsCmd(),
 		recipeCmd(), doctorCmd(), saveCmd(), envCmd(), upCmd(), mcpConfigCmd(), agentsCmd(),
 		teamCmd(), sourceCmd(), findCmd(), linkCmd(), unlinkCmd(), linksCmd(), updateCmd(), publishCmd(), learnCmd(), codexThreadsCmd(), codexImportCmd(), agentCmd(), backupSelCmd(), siteCmd(), docsCmd(), selfUpdateCmd(), configCmd(), machineCmd(), onboardCmd(), recoveryKeyCmd(), panelCmd(), shellCmd(), recallCmd(), memoryCmd(), sshCmd())
 	groupCommands(root)

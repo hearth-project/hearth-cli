@@ -1,0 +1,36 @@
+name: macos-app
+# The macOS menu bar app (desktop/macos): build it universal, render the menu
+# with sample data, and keep the app and the pictures as artifacts.
+on:
+  pull_request:
+    paths: ["desktop/macos/**", ".github/workflows/macos-app.yml"]
+  push:
+    branches: [main]
+    paths: ["desktop/macos/**", ".github/workflows/macos-app.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: macos-app-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - run: swift --version
+      - name: build Hearth.app
+        working-directory: desktop/macos
+        run: scripts/build-app.sh "$RUNNER_TEMP/out" "0.1.0-ci.${{ github.run_number }}"
+      - name: render the menu (light, dark, one machine open)
+        working-directory: desktop/macos
+        run: |
+          "$RUNNER_TEMP/out/Hearth.app/Contents/MacOS/Hearth" --snapshot Fixtures/machines.json "$RUNNER_TEMP/out/snapshots"
+          ls -l "$RUNNER_TEMP/out/snapshots"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hearth-menubar
+          path: |
+            ${{ runner.temp }}/out/hearth-menubar-darwin.zip
+            ${{ runner.temp }}/out/snapshots/*.png

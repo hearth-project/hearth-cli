@@ -9,6 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/hearth-project/hearth-cli/internal/api"
 	"github.com/hearth-project/hearth-cli/internal/client"
 	"github.com/hearth-project/hearth-cli/internal/machine"
 	"github.com/hearth-project/hearth-cli/internal/paths"
@@ -109,7 +110,7 @@ func machineCmd() *cobra.Command {
 	add.Flags().StringVar(&workspace, "workspace", "", "working directory on these machines, e.g. /mnt/ssd/$USER/work")
 	add.Flags().StringVar(&desc, "description", "", "description")
 	add.Flags().BoolVar(&here, "here", false, "match machines like this one (by GPU model, else OS and architecture)")
-	var listAll bool
+	var listAll, listJSON bool
 	list := &cobra.Command{Use: "list", Short: "List your machines, architecture and agent readiness", RunE: func(*cobra.Command, []string) error {
 		e, err := engine()
 		if err != nil {
@@ -118,6 +119,9 @@ func machineCmd() *cobra.Command {
 		ds, err := e.API.Devices()
 		if err != nil {
 			return err
+		}
+		if listJSON {
+			return printJSON(machineRows(e, ds, listAll))
 		}
 		t := &table{}
 		t.add("MACHINE", "STATE", "FACTS", "ENVIRONMENT", "CHECKED", "SSH HOST")
@@ -162,6 +166,7 @@ func machineCmd() *cobra.Command {
 		return nil
 	}}
 	list.Flags().BoolVar(&listAll, "all", false, "also revoked machines")
+	list.Flags().BoolVar(&listJSON, "json", false, "machine-readable (the macOS menu bar app reads it)")
 	inspect := &cobra.Command{Use: "inspect <machine>", Short: "Show a machine's public health report", Args: cobra.ExactArgs(1), RunE: func(_ *cobra.Command, a []string) error {
 		e, err := engine()
 		if err != nil {
@@ -356,3 +361,100 @@ func reportHealthOf(e *client.Engine) (client.HealthReport, error) {
 // reportHealthQuiet reports after a change (a restore step done); a
 // failure only means the daemon reports it a few minutes later.
 func reportHealthQuiet(e *client.Engine) { _ = reportHealth(e) }
+
+// machinesJSON is `hearth machine list --json`: what the console's machine
+// list shows, for the macOS menu bar app and scripts. Public readiness data
+// only (never credentials or contents).
+type machinesJSON struct {
+	Server   string        `json:"server"`
+	Email    string        `json:"email"`
+	Machines []machineJSON `json:"machines"`
+}
+
+type machineJSON struct {
+	ID        string        `json:"id"`
+	Name      string        `json:"name"`            // device (host) name
+	Alias     string        `json:"alias,omitempty"` // the name the user gave it
+	Label     string        `json:"label"`           // "alias (host)"
+	Host      string        `json:"host"`            // SSH host name; sentences about the machine use it
+	This      bool          `json:"this,omitempty"`  // the machine this command runs on
+	Status    string        `json:"status"`          // active, revoked
+	Online    bool          `json:"online"`
+	LastSeen  int64         `json:"last_seen"`
+	IP        string        `json:"ip,omitempty"`
+	OS        string        `json:"os,omitempty"`
+	Arch      string        `json:"arch,omitempty"`
+	GPU       string        `json:"gpu,omitempty"`
+	Version   string        `json:"version,omitempty"` // Hearth client version
+	Env       string        `json:"env"`               // ok, warn, error, unknown
+	Problems  []problemJSON `json:"problems"`
+	SSH       string        `json:"ssh,omitempty"` // ok, blocked, down, off, checking, stale
+	SSHAddr   string        `json:"ssh_addr,omitempty"`
+	CheckedAt int64         `json:"checked_at,omitempty"`
+}
+
+type problemJSON struct {
+	Code   string `json:"code"`
+	Level  string `json:"level"`
+	Tool   string `json:"tool,omitempty"`
+	Have   string `json:"have,omitempty"`
+	Latest string `json:"latest,omitempty"`
+	Behind int    `json:"behind,omitempty"`
+	Text   string `json:"text"` // English, as `hearth machine list` prints it
+}
+
+func machineRows(e *client.Engine, ds []api.Device, all bool) machinesJSON {
+	out := machinesJSON{Server: e.Cfg.Server, Email: e.Cfg.Email, Machines: []machineJSON{}}
+	hosts := deviceAliases(e, ds)
+	for _, d := range ds {
+		if d.Status != "" && d.Status != "active" && !all {
+			continue
+		}
+		m := machineJSON{ID: d.ID, Name: d.Name, Alias: d.Alias, Label: client.DeviceLabel(d), Host: hosts[d.ID],
+			This: d.ID == e.Cfg.DeviceID, Status: orDefault(d.Status, "active"), Online: d.Online, LastSeen: d.LastSeen,
+			IP: d.LastIP, Env: "unknown", Problems: []problemJSON{}}
+		if m.Host == "" {
+			m.Host = d.Name
+		}
+		if f, _ := d.Machine["facts"].(map[string]any); f != nil {
+			m.OS, _ = f["os"].(string)
+			m.Arch, _ = f["arch"].(string)
+			m.GPU, _ = f["gpu"].(string)
+		}
+		m.Version, _ = d.Health["client"].(string)
+		if st, _ := d.Env["status"].(string); st != "" {
+			m.Env = st
+		}
+		if at, _ := d.Env["checked_at"].(float64); at > 0 {
+			m.CheckedAt = int64(at)
+		}
+		probs, _ := d.Env["problems"].([]any)
+		for _, p := range probs {
+			pm, ok := p.(map[string]any)
+			if !ok {
+				continue
+			}
+			str := func(k string) string { v, _ := pm[k].(string); return v }
+			n, _ := pm["behind"].(float64)
+			m.Problems = append(m.Problems, problemJSON{Code: str("code"), Level: str("level"), Tool: str("tool"),
+				Have: str("have"), Latest: str("latest"), Behind: int(n), Text: envProblemText(pm)})
+		}
+		if ssh, _ := d.Env["ssh"].(map[string]any); ssh != nil {
+			m.SSH, _ = ssh["status"].(string)
+			if a, _ := ssh["address"].(string); a != "" {
+				m.SSHAddr = a
+				if p, _ := ssh["port"].(float64); p > 0 {
+					m.SSHAddr = fmt.Sprintf("%s:%d", a, int(p))
+				}
+			}
+		}
+		out.Machines = append(out.Machines, m)
+	}
+	return out
+}
+
+func printJSON(v any) error {
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	return enc.Encode(v)
+}

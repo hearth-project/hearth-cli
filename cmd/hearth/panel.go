@@ -8,12 +8,14 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+
+	"github.com/hearth-project/hearth-cli/internal/client"
 )
 
 // panelCmd prints (and opens) a sign-in link to the server's admin panel
 // for an admin logged in on this machine.
 func panelCmd() *cobra.Command {
-	var noOpen bool
+	var noOpen, asJSON bool
 	c := &cobra.Command{
 		Use:   "panel",
 		Short: "Open the web console: your machines, skills, agents and teams (admins also manage the server)",
@@ -30,6 +32,10 @@ func panelCmd() *cobra.Command {
 				return err
 			}
 			link := strings.TrimRight(e.Cfg.Server, "/") + path
+			if asJSON {
+				// For the macOS menu bar app: it opens the console in its own window.
+				return printJSON(map[string]string{"url": link, "server": strings.TrimRight(e.Cfg.Server, "/"), "ca": client.CAFile(e.Home)})
+			}
 			fmt.Printf("console sign-in link (valid 10 minutes, keep it private):\n\n  %s\n\n", link)
 			if !noOpen {
 				openBrowser(link)
@@ -39,6 +45,7 @@ func panelCmd() *cobra.Command {
 		},
 	}
 	c.Flags().BoolVar(&noOpen, "no-open", false, "only print the link")
+	c.Flags().BoolVar(&asJSON, "json", false, "print the link as JSON and open nothing")
 	return c
 }
 

@@ -48,11 +48,16 @@ type distBinary struct {
 type distState struct {
 	Distribution
 	bins map[string]distBinary // hearth-<os>-<arch>
+	apps map[string]distBinary // desktop apps, e.g. hearth-menubar-darwin.zip (hearth app install)
 	pin  string
 }
 
 // distNameRE limits served names to the platforms the client supports.
 var distNameRE = regexp.MustCompile(`^hearth-(linux|darwin)-(amd64|arm64)$`)
+
+// distAppRE: desktop apps in the dist dir (the macOS menu bar app, built on
+// macOS by CI: desktop/macos), served next to the binaries.
+var distAppRE = regexp.MustCompile(`^hearth-menubar-darwin\.zip$`)
 
 func fileSHA256(p string) (string, error) {
 	f, err := os.Open(p)
@@ -84,7 +89,7 @@ func newDist(d *Distribution) (*distState, error) {
 	if strings.ContainsAny(d.PublicURL, "'\"`$\\ \n") {
 		return nil, fmt.Errorf("invalid public URL %q", d.PublicURL)
 	}
-	ds := &distState{Distribution: *d, bins: map[string]distBinary{}}
+	ds := &distState{Distribution: *d, bins: map[string]distBinary{}, apps: map[string]distBinary{}}
 	own := fmt.Sprintf("hearth-%s-%s", runtime.GOOS, runtime.GOARCH)
 	sum, err := fileSHA256(d.BinaryPath)
 	if err != nil {
@@ -97,13 +102,18 @@ func newDist(d *Distribution) (*distState, error) {
 			return nil, fmt.Errorf("dist dir: %w", err)
 		}
 		for _, e := range entries {
-			if !distNameRE.MatchString(e.Name()) || !e.Type().IsRegular() {
+			isBin, isApp := distNameRE.MatchString(e.Name()), distAppRE.MatchString(e.Name())
+			if !(isBin || isApp) || !e.Type().IsRegular() {
 				continue
 			}
 			p := filepath.Join(d.Dir, e.Name())
 			sum, err := fileSHA256(p)
 			if err != nil {
 				return nil, err
+			}
+			if isApp {
+				ds.apps[e.Name()] = distBinary{p, sum}
+				continue
 			}
 			ds.bins[e.Name()] = distBinary{p, sum}
 		}
@@ -302,7 +312,9 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 	var b distBinary
 	ok := false
 	if d != nil {
-		b, ok = d.bins[r.PathValue("name")]
+		if b, ok = d.bins[r.PathValue("name")]; !ok {
+			b, ok = d.apps[r.PathValue("name")]
+		}
 	}
 	if !ok {
 		writeErr(w, http.StatusNotFound, "no such binary")
@@ -341,7 +353,11 @@ func (s *Server) handleDistManifest(w http.ResponseWriter, _ *http.Request) {
 	for n, b := range d.bins {
 		out[n] = b.sha256
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"binaries": out, "version": d.Version, "auto_update": s.Settings().ClientAutoUpdate})
+	apps := map[string]string{}
+	for n, b := range d.apps {
+		apps[n] = b.sha256
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"binaries": out, "apps": apps, "version": d.Version, "auto_update": s.Settings().ClientAutoUpdate})
 }
 
 // DistPlatforms lists the client builds served by /install.sh.
