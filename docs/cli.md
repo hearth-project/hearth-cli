@@ -2343,7 +2343,7 @@ hearth shell uninstall
 Every Linux machine of your account accepts SSH from your own devices: Hearth gives each device a key,
 keeps the public keys (plus each device's ~/.ssh/id_*.pub) end-to-end encrypted, writes the keys of your
 active devices into a marked block of ~/.ssh/authorized_keys, and runs the system sshd the way it is set
-up by hand on GPU containers (public keys only, main interface only, port 8022; an sshd already listening
+up by hand on GPU containers (public keys only, the machine's own addresses only, port 8022; an sshd already listening
 there is used as it is). Revoking a device removes its keys everywhere within a minute.
 
   hearth ssh                 machines you can reach

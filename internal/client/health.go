@@ -44,17 +44,22 @@ type SSHHealth struct {
 	On      bool   `json:"on"`
 	Running bool   `json:"running"`
 	Address string `json:"address,omitempty"`
-	Port    int    `json:"port,omitempty"`
-	Answers bool   `json:"answers"`          // an SSH server answers on the published address
-	KeyOK   bool   `json:"key_ok"`           // with the host key the user's devices trust
-	Keys    int    `json:"keys,omitempty"`   // device keys it accepts
-	Detail  string `json:"detail,omitempty"` // why not
+	// Addresses: all it listens on, Address first (when more than one).
+	Addresses []string `json:"addresses,omitempty"`
+	Port      int      `json:"port,omitempty"`
+	Answers   bool     `json:"answers"`          // an SSH server answers on the published address
+	KeyOK     bool     `json:"key_ok"`           // with the host key the user's devices trust
+	Keys      int      `json:"keys,omitempty"`   // device keys it accepts
+	Detail    string   `json:"detail,omitempty"` // why not
 }
 
 // sshHealth checks this machine's sshd the way the user's devices reach it.
 func sshHealth(home string) *SSHHealth {
 	st := SSHServerStatus(home)
 	h := &SSHHealth{On: st.On, Running: st.Running, Address: st.Address, Port: st.Port, Keys: st.Keys, Detail: st.Err}
+	if a := loadSSHState(home).addrs(); len(a) > 1 {
+		h.Addresses = a
+	}
 	if !st.On || st.Address == "" || st.Port == 0 {
 		return h
 	}

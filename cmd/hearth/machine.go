@@ -337,6 +337,8 @@ func envProblemText(p map[string]any) string {
 		return "remote ssh answers with another host key"
 	case "ssh_blocked":
 		return "sshd works here, but the server cannot reach " + s("have")
+	case "ssh_nat":
+		return "the server cannot reach " + s("have") + ": the machine's requests come from " + s("detail") + ", an address sshd does not listen on (NAT or a proxy): set [ssh] address there, or map a port"
 	case "shared_home":
 		return "your codex-mixin login is in the shared " + s("detail") + ", everyone on this account falls back to it: hearth agents isolate codex"
 	}
