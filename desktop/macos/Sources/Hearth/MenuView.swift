@@ -89,7 +89,7 @@ struct MenuView: View {
             if let n = note {
                 Text(n).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
             } else if let u = store.updated {
-                Text("更新于 " + u.formatted(date: .omitted, time: .shortened))
+                Text("更新于 " + u.formatted(.dateTime.hour(.twoDigits(amPM: .omitted)).minute(.twoDigits).locale(Locale(identifier: "zh_CN"))))
                     .font(.system(size: 11)).foregroundStyle(.tertiary)
             }
             Spacer()
