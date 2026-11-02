@@ -1697,7 +1697,7 @@ password. Admins (hearth server admin grant <email>) also see the administration
 hearth panel [flags]
 
 Flags:
-      --json      print the link as JSON and open nothing
+      --json      print the link and this device's vault key as JSON and open nothing (for the menu bar app; keep the output private)
       --no-open   only print the link
 ```
 

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"fmt"
 	"os"
 	"os/exec"
@@ -33,8 +34,16 @@ func panelCmd() *cobra.Command {
 			}
 			link := strings.TrimRight(e.Cfg.Server, "/") + path
 			if asJSON {
-				// For the macOS menu bar app: it opens the console in its own window.
-				return printJSON(map[string]string{"url": link, "server": strings.TrimRight(e.Cfg.Server, "/"), "ca": client.CAFile(e.Home)})
+				// For the macOS menu bar app: it opens the console in its own
+				// window, with this device's vault key in the URL fragment
+				// (never sent to the server), so the console makes one-time
+				// install commands without asking for the password. Only
+				// here: a fragment opened in a browser stays in its history.
+				out := map[string]string{"url": link, "server": strings.TrimRight(e.Cfg.Server, "/"), "ca": client.CAFile(e.Home)}
+				if v, err := client.LoadVault(e.Home); err == nil {
+					out["vault_key"] = base64.RawURLEncoding.EncodeToString(v.Key())
+				}
+				return printJSON(out)
 			}
 			fmt.Printf("console sign-in link (valid 10 minutes, keep it private):\n\n  %s\n\n", link)
 			if !noOpen {
@@ -45,7 +54,7 @@ func panelCmd() *cobra.Command {
 		},
 	}
 	c.Flags().BoolVar(&noOpen, "no-open", false, "only print the link")
-	c.Flags().BoolVar(&asJSON, "json", false, "print the link as JSON and open nothing")
+	c.Flags().BoolVar(&asJSON, "json", false, "print the link and this device's vault key as JSON and open nothing (for the menu bar app; keep the output private)")
 	return c
 }
 

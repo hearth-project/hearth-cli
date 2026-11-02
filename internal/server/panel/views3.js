@@ -65,6 +65,10 @@ view("audit", "Audit log", function () {
   window.addEventListener("hashchange", function () { current = location.hash.slice(1) || "home"; render(); });
   me("GET", "").then(function (m) {
     ME = m.email; IS_ADMIN = m.admin;
+    if (HANDED_VK) {
+      var vk = HANDED_VK; HANDED_VK = null; VAULT_KEY = vk;
+      me("GET", "/vault-wrap").then(function (r) { keepVault(vk, r.wrap_key); }, function () {});
+    }
     document.getElementById("me").textContent = m.email;
     var av = document.getElementById("avatar"); av.textContent = (m.email || "?").slice(0, 1).toUpperCase();
     showShell(true);

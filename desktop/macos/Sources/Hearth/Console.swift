@@ -56,7 +56,21 @@ final class ConsoleController: NSObject, WKNavigationDelegate, WKUIDelegate {
         }
     }
 
-    struct Link: Decodable { var url: URL; var server: String; var ca: String }
+    struct Link: Decodable {
+        var url: URL
+        var server: String
+        var ca: String
+        var vault_key: String?
+
+        /// The sign-in link with this Mac's vault key in the fragment (the
+        /// fragment is never sent): the console then makes one-time install
+        /// commands without asking for the password.
+        var withKey: URL {
+            guard let k = vault_key, var c = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return url }
+            c.fragment = "hearth-vk=" + k
+            return c.url ?? url
+        }
+    }
 
     static func link() async throws -> Link {
         let data = try await HearthCLI.run(["panel", "--json"])
@@ -68,7 +82,7 @@ final class ConsoleController: NSObject, WKNavigationDelegate, WKUIDelegate {
             let l = try await Self.link()
             serverHost = l.url.host
             pinnedCert = Self.der(fromPEMFile: l.ca)
-            web?.load(URLRequest(url: l.url))
+            web?.load(URLRequest(url: l.withKey))
         } catch {
             let msg = error.localizedDescription.replacingOccurrences(of: "<", with: "&lt;")
             web?.loadHTMLString("""
