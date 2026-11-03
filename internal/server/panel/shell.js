@@ -142,7 +142,7 @@ function drawTabs() {
     ORDER.forEach(function (id) {
       var v = VIEWS[id];
       if (v.group !== g[0]) return;
-      nav.appendChild(h("a", { class: id === current ? "on" : "", href: "#" + id, onclick: function () { document.getElementById("side").classList.remove("open"); } },
+      nav.appendChild(h("a", { class: "t-" + v.icon + (id === current ? " on" : ""), href: "#" + id, onclick: function () { document.getElementById("side").classList.remove("open"); } },
         icon(v.icon), h("span", {}, t(v.title)), id === "approvals" && pendingCount ? badge(pendingCount, "warn") : null));
     });
   });
