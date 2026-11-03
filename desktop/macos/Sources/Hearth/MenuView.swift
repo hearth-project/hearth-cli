@@ -65,7 +65,7 @@ struct MenuView: View {
         } else if store.list == nil {
             ProgressView().controlSize(.small).frame(maxWidth: .infinity).padding(24)
         } else if store.machines.isEmpty {
-            Text("还没有机器").font(.system(size: 12)).foregroundStyle(.secondary).frame(maxWidth: .infinity).padding(24)
+            Text(store.hiddenCount > 0 ? "最近 12 小时没有在线的机器" : "还没有机器").font(.system(size: 12)).foregroundStyle(.secondary).frame(maxWidth: .infinity).padding(24)
         } else {
             ScrollView {
                 VStack(spacing: 2) {
@@ -73,6 +73,14 @@ struct MenuView: View {
                         MachineRow(m: m, open: expanded == m.id, toggle: {
                             withAnimation(.easeInOut(duration: 0.18)) { expanded = expanded == m.id ? nil : m.id }
                         }, say: { note = $0 })
+                    }
+                    if store.hiddenCount > 0 {
+                        Text("另有 \(store.hiddenCount) 台离线超过 12 小时，在控制台查看")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.tertiary)
+                            .frame(maxWidth: .infinity)
+                            .padding(.top, 6)
+                            .padding(.bottom, 2)
                     }
                 }
                 .padding(6)

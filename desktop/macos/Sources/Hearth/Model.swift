@@ -114,11 +114,20 @@ final class MachineStore: ObservableObject {
     @Published var loading = false
     @Published var updated: Date?
     private var timer: Timer?
+    /// The clock the 12-hour cutoff is measured against. Fixtures use the
+    /// newest last_seen in the file so snapshots do not change with the date.
+    private var now: () -> Date = Date.init
+
+    /// Machines offline for longer than this are left out of the menu; the
+    /// console still lists them.
+    static let staleAfter: TimeInterval = 12 * 3600
 
     init(fixture: MachineList? = nil) {
         if let f = fixture {
             list = f
             updated = Date()
+            let newest = f.machines.map(\.last_seen).max() ?? 0
+            now = { Date(timeIntervalSince1970: TimeInterval(newest)) }
             return
         }
         Task { await refresh() }
@@ -127,13 +136,20 @@ final class MachineStore: ObservableObject {
         }
     }
 
+    /// Machines shown in the menu: online ones, this machine, and machines
+    /// seen within the last 12 hours.
     var machines: [Machine] {
-        (list?.machines ?? []).sorted { a, b in
+        let cutoff = now().timeIntervalSince1970 - Self.staleAfter
+        return (list?.machines ?? []).filter { m in
+            m.online || m.isThis || TimeInterval(m.last_seen) >= cutoff
+        }.sorted { a, b in
             if a.online != b.online { return a.online }
             if a.isThis != b.isThis { return a.isThis }
             return a.title.localizedStandardCompare(b.title) == .orderedAscending
         }
     }
+    /// How many machines are left out for being offline too long.
+    var hiddenCount: Int { (list?.machines.count ?? 0) - machines.count }
     var onlineCount: Int { machines.filter(\.online).count }
     var attentionCount: Int { machines.filter { $0.env == "error" || $0.env == "warn" }.count }
     var hasError: Bool { machines.contains { $0.env == "error" } }
