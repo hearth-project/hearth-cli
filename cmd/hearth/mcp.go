@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -100,6 +101,9 @@ func mcpCmd() *cobra.Command {
 				svc.Remote, svc.Fetch = e.SearchableSkills, e.FetchSkill
 				svc.RemoteSearch = func(q string, limit int) []search.Result { return e.SearchTeams(q, limit, 1500*time.Millisecond) }
 				svc.TeamList = func() []search.Skill { return e.TeamSkills(2 * time.Second) }
+			}
+			svc.Interactive = func(op, machine, arg, extra string) (mcpserver.InteractiveResult, error) {
+				return mcpInteractive(home, op, machine, arg, extra)
 			}
 			return svc.New(version).Run(cmd.Context(), &mcp.StdioTransport{})
 		},
@@ -419,4 +423,50 @@ func shellJoin(args []string) string {
 		out = append(out, "'"+strings.ReplaceAll(a, "'", `'"'"'`)+"'")
 	}
 	return strings.Join(out, " ")
+}
+
+// mcpInteractive runs `hearth recipe tty <op>` for the MCP tools and reads
+// the QR code it wrote.
+func mcpInteractive(home, op, machine, arg, extra string) (mcpserver.InteractiveResult, error) {
+	var r mcpserver.InteractiveResult
+	args := []string{"recipe", "tty", op, arg, "--json"}
+	switch op {
+	case "start", "status":
+		args = append(args, "--wait", "25s")
+		if op == "status" && extra != "" {
+			args = append(args, "--since", extra)
+		}
+	case "input":
+		args = []string{"recipe", "tty", "input", arg, extra, "--json"}
+	case "stop":
+	default:
+		return r, fmt.Errorf("unknown operation %q", op)
+	}
+	if machine != "" {
+		args = append(args, "--on", machine)
+	}
+	self, err := os.Executable()
+	if err != nil {
+		return r, err
+	}
+	c := exec.Command(self, args...)
+	c.Env = append(os.Environ(), "HEARTH_HOME="+home)
+	var stderr strings.Builder
+	c.Stderr = &stderr
+	out, err := c.Output()
+	if err != nil && len(out) == 0 {
+		msg := strings.TrimSpace(stderr.String())
+		if msg == "" {
+			msg = err.Error()
+		}
+		return r, errors.New(strings.TrimPrefix(msg, "error: "))
+	}
+	r.JSON = strings.TrimSpace(string(out))
+	var rep struct {
+		QRPath string `json:"qr_path"`
+	}
+	if json.Unmarshal(out, &rep) == nil && rep.QRPath != "" {
+		r.PNG, _ = os.ReadFile(rep.QRPath)
+	}
+	return r, nil
 }

@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"os"
 	"runtime"
+	"sort"
 	"strings"
 
 	"github.com/hearth-project/hearth-cli/internal/machine"
@@ -28,6 +29,10 @@ type PlanStep struct {
 	Check       string   `json:"check,omitempty"` // succeeds when the step is done
 	Expect      string   `json:"expect,omitempty"`
 	Interactive bool     `json:"interactive,omitempty"` // the user runs it in their own terminal
+	// RunWith: how an agent runs an interactive step that names its command
+	// (a QR-code login shown in the chat).
+	RunWith     string   `json:"run_with,omitempty"`
+	Env         []string `json:"env,omitempty"` // variables set for it (names; values may be secrets)
 	NeedsSecret string   `json:"stdin_secret,omitempty"`
 	DependsOn   []string `json:"depends_on,omitempty"`
 	Status      string   `json:"status"` // todo, done (marked here), skipped
@@ -87,6 +92,14 @@ func Plan(recipes []*Recipe, opt PlanOptions) []PlanStep {
 				p.Do, p.Check, p.Expect = "verify", s.Run, s.Expect
 			case "manual":
 				p.Do, p.Check = s.Text, s.DoneWhen
+				if s.Run != "" && s.TTY {
+					p.Commands = []string{s.Run}
+					p.RunWith = "the hearth MCP tool run_interactive_step (or: hearth recipe tty start " + p.Key + " --on <machine>)"
+					for k := range s.Set {
+						p.Env = append(p.Env, k)
+					}
+					sort.Strings(p.Env)
+				}
 			}
 			if ok, why := r.machineMatches(s.When); !ok {
 				p.Status, p.Why = "skipped", why

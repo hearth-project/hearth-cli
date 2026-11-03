@@ -145,6 +145,23 @@ hearth learn --accept id1,id2 --here id3 --never id4 \
 
 On a new machine `hearth setup` restores only their files (credentials, configs) and environment variables; installing software, running commands and QR-code logins make up this machine's **restore flow** (`hearth recipe plan`), which an agent goes through with the hearth skill: preferably from another machine with Hearth ("restore the Codex environment of <machine>", over `hearth ssh`; `hearth machine list` shows each machine's environment check), or on the machine itself ("use hearth to restore this machine's environment"): it runs each step's check, installs following the [client software setup guide](client-env.md) (`hearth docs env`), checks again and marks it with `hearth recipe done <key>`. When this machine needed another way, the agent records it back into the flow (`--here-step` for machines like this one). In a terminal: `hearth recipe run <key>`, or all at once `hearth recipe apply` (lists the commands, asks once). A command approved on any of your machines runs on the others without asking; the approvals are end-to-end encrypted, so the server cannot forge them, and a changed command is asked about again. `[recipes] share_approvals = false` in config.toml approves per machine instead. Machine profiles: `hearth machine` (show), `hearth machine add <name> --here`, `hearth machine use <name>`.
 
+### QR-code logins in the chat
+
+A login that shows a QR code in the terminal (for example `codex-mixin setup` through DUCX) is a `manual` step with `tty = true`. Give it the command in `run` and the agent runs it for you without leaving the chat: Hearth starts it under a pseudo-terminal in the background on the target machine (over `hearth ssh`), reads the QR code from the output as a PNG, the agent shows it, you scan it, and when the command ends the step's check runs and the step is marked done. Environment comes from `set`, where `${secret:NAME}` is one of your Hearth secrets; secret values are replaced by `********` in the output.
+
+```toml
+[[step]]
+type = "manual"
+name = "codex-mixin-login"
+text = "log in to codex-mixin (QR code)"
+tty = true
+run = 'PATH="$HOME/.local/bin:$PATH"; codex-mixin setup --no-tui --preset baidu-oneapi --key "$ONEAPI_KEY" --quota-username me --codex-mode custom'
+set = { ONEAPI_KEY = "${secret:ONEAPI_KEY}", https_proxy = "http://proxy.example.com:8080" }
+done_when = 'PATH="$HOME/.local/bin:$PATH"; codex-mixin doctor --no-tui | grep -q "doctor: ok"'
+```
+
+Agents use the `hearth` MCP tools `run_interactive_step`, `poll_interactive_step`, `answer_interactive_step` and `stop_interactive_step`; in a terminal: `hearth recipe tty start <key> --on <machine>` (prints the PNG's path), `hearth recipe tty status <session> --on <machine>`. Only plan steps of this kind can be started, the code images stay in a temporary directory of the machine you work on (mode 0600) and are removed when the step ends, and nothing of the session is uploaded. The target machine runs Linux and needs this version of Hearth.
+
 ### Organisation defaults
 
 Admins can publish recipes for everyone on the server (internal tool installs, proxies, where the SSO token lives); `setup` fetches them and runs them with your own:
