@@ -1,13 +1,21 @@
 import SwiftUI
 
-/// A calm palette: warm accent (Hearth's flame), soft status colours that
-/// read well on light and dark menus.
+/// A calm, mostly neutral palette: the warm accent (Hearth's flame) for the
+/// main action, soft status colours that read well on light and dark menus.
 enum Theme {
     static let accent = Color(red: 0.91, green: 0.45, blue: 0.22)
     static let ok = Color(red: 0.20, green: 0.68, blue: 0.42)
     static let warn = Color(red: 0.88, green: 0.60, blue: 0.13)
     static let bad = Color(red: 0.86, green: 0.30, blue: 0.27)
     static let idle = Color.secondary.opacity(0.55)
+    static let blue = Color(red: 0.25, green: 0.52, blue: 0.92)
+    static let slate = Color(red: 0.42, green: 0.47, blue: 0.56)
+    /// The grouped cards: nearly white on a light menu, a lifted gray on dark.
+    static let card = Color(nsColor: NSColor(name: nil) { a in
+        a.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            ? NSColor(white: 1, alpha: 0.07)
+            : NSColor(white: 1, alpha: 0.72)
+    })
 
     static func envColor(_ env: String) -> Color {
         switch env {

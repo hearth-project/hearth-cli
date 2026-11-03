@@ -1,0 +1,178 @@
+import SwiftUI
+
+/// One machine in a group card: an icon for the kind of machine with its
+/// online dot, the name, and the environment state as a small glyph. Opening
+/// it shows the facts, the problems and the actions.
+struct MachineRow: View {
+    var m: Machine
+    var open: Bool
+    var toggle: () -> Void
+    var say: (String) -> Void
+    @State private var hover = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button(action: toggle) {
+                HStack(spacing: 10) {
+                    MachineIcon(m: m)
+                    HStack(spacing: 6) {
+                        Text(m.title)
+                            .font(.system(size: 13, weight: m.env == "error" ? .semibold : .regular))
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        if m.isThis { Badge(text: "本机", color: .secondary) }
+                    }
+                    .layoutPriority(1)
+                    Spacer(minLength: 6)
+                    if !m.online {
+                        Text(Words.ago(m.last_seen)).font(.system(size: 11)).foregroundStyle(.tertiary).lineLimit(1).fixedSize()
+                    }
+                    EnvGlyph(m: m)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(.tertiary)
+                        .rotationEffect(.degrees(open ? 90 : 0))
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 7)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(m.host)
+            if open { detail }
+        }
+        .background(Color.primary.opacity(open ? 0.035 : (hover ? 0.03 : 0)))
+        .onHover { hover = $0 }
+    }
+
+    private var detail: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            VStack(spacing: 5) {
+                Fact(label: "主机", value: m.name, selectable: true)
+                let f = Words.facts(m)
+                if !f.isEmpty { Fact(label: "系统", value: f) }
+                Fact(label: "状态", value: m.online ? "在线" : "离线 · " + Words.ago(m.last_seen))
+                if !m.isThis, let s = Words.ssh(m.ssh) { Fact(label: "SSH", value: s) }
+            }
+            if !m.problems.isEmpty {
+                VStack(alignment: .leading, spacing: 5) {
+                    ForEach(m.problems.prefix(5), id: \.self) { p in
+                        HStack(alignment: .firstTextBaseline, spacing: 7) {
+                            Image(systemName: p.level == "error" ? "xmark.circle.fill" : "exclamationmark.circle.fill")
+                                .font(.system(size: 10))
+                                .foregroundStyle(p.level == "error" ? Theme.bad : Theme.warn)
+                            Text(Words.problem(p)).font(.system(size: 12)).fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                    if m.problems.count > 5 {
+                        Text("还有 \(m.problems.count - 5) 项，在控制台查看").font(.system(size: 11)).foregroundStyle(.secondary)
+                    }
+                }
+                .padding(9)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Color.primary.opacity(0.04)))
+            }
+            HStack(spacing: 6) {
+                if m.env != "ok" {
+                    Button { say(Actions.restore(m)) } label: { Text("恢复环境") }
+                        .modifier(PrimaryButton())
+                }
+                Button { say(Actions.fix(m)) } label: { Text("检查") }
+                if m.sshUsable {
+                    Button { say(Actions.ssh(m)) } label: { Text("SSH 连接") }
+                }
+                Spacer()
+                Button {
+                    Actions.copy(m.host)
+                    say("已复制 \(m.host)")
+                } label: { Image(systemName: "doc.on.doc") }
+                    .buttonStyle(.borderless)
+                    .help("复制机器名")
+            }
+            .controlSize(.small)
+        }
+        .padding(.leading, 48)
+        .padding(.trailing, 12)
+        .padding(.top, 2)
+        .padding(.bottom, 12)
+    }
+}
+
+/// A rounded tile with a symbol for the machine (laptop, server) and a dot
+/// in the corner: green online, gray offline.
+struct MachineIcon: View {
+    var m: Machine
+    var body: some View {
+        let symbol = m.os == "darwin" ? "laptopcomputer" : (m.gpu?.isEmpty == false ? "cpu" : "server.rack")
+        let tint = m.os == "darwin" ? Theme.blue : Theme.slate
+        RoundedRectangle(cornerRadius: 7, style: .continuous)
+            .fill(tint.opacity(m.online ? 0.16 : 0.08))
+            .frame(width: 26, height: 26)
+            .overlay(Image(systemName: symbol).font(.system(size: 12, weight: .medium)).foregroundStyle(m.online ? tint : Color.secondary))
+            .overlay(alignment: .bottomTrailing) {
+                Circle()
+                    .fill(m.online ? Theme.ok : Color(nsColor: .tertiaryLabelColor))
+                    .frame(width: 8, height: 8)
+                    .overlay(Circle().strokeBorder(Theme.card, lineWidth: 1.5))
+                    .offset(x: 2, y: 2)
+            }
+    }
+}
+
+/// The environment state at the end of a row: a check when all is well, a
+/// coloured count of problems otherwise.
+struct EnvGlyph: View {
+    var m: Machine
+    var body: some View {
+        Group {
+            switch m.env {
+            case "ok":
+                Image(systemName: "checkmark.circle.fill").foregroundStyle(Theme.ok.opacity(0.85))
+            case "error", "warn":
+                let c = Theme.envColor(m.env)
+                HStack(spacing: 3) {
+                    Image(systemName: m.env == "error" ? "xmark.circle.fill" : "exclamationmark.circle.fill")
+                    if !m.problems.isEmpty { Text("\(m.problems.count)").monospacedDigit() }
+                }
+                .foregroundStyle(c)
+                .padding(.horizontal, 6).padding(.vertical, 2)
+                .background(Capsule().fill(c.opacity(0.12)))
+            default:
+                Image(systemName: "minus.circle").foregroundStyle(.tertiary)
+            }
+        }
+        .font(.system(size: 11, weight: .semibold))
+        .fixedSize()
+        .help(Words.env(m))
+    }
+}
+
+struct Badge: View {
+    var text: String
+    var color: Color
+    var body: some View {
+        Text(text).font(.system(size: 10, weight: .medium))
+            .padding(.horizontal, 5).padding(.vertical, 1)
+            .background(Capsule().fill(color.opacity(0.15)))
+            .foregroundStyle(color)
+            .fixedSize()
+    }
+}
+
+/// A label on the left, the value on the right (detail of an open row).
+struct Fact: View {
+    var label: String
+    var value: String
+    var selectable = false
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Text(label).font(.system(size: 11)).foregroundStyle(.secondary).frame(width: 34, alignment: .leading)
+            if selectable {
+                Text(value).font(.system(size: 11)).textSelection(.enabled).lineLimit(1).truncationMode(.middle)
+            } else {
+                Text(value).font(.system(size: 11)).lineLimit(1).truncationMode(.middle)
+            }
+            Spacer(minLength: 0)
+        }
+    }
+}

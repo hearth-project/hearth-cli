@@ -4,6 +4,9 @@ import SwiftUI
 /// Renders the menu with sample data to PNG files (light and dark), for CI
 /// and for reviewing the design without a menu bar.
 enum Snapshot {
+    /// True while rendering PNGs.
+    @MainActor static var active = false
+
     @MainActor static func render(fixture: String, outDir: String) {
         guard let data = FileManager.default.contents(atPath: fixture),
               let list = try? JSONDecoder().decode(MachineList.self, from: data) else {
@@ -11,6 +14,7 @@ enum Snapshot {
             exit(1)
         }
         try? FileManager.default.createDirectory(atPath: outDir, withIntermediateDirectories: true)
+        active = true
         let store = MachineStore(fixture: list)
         let first = store.machines.first?.id
         for (name, scheme) in [("light", ColorScheme.light), ("dark", ColorScheme.dark)] {
