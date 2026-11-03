@@ -88,6 +88,11 @@ struct MenuView: View {
             .controlSize(.regular)
             if let n = note {
                 Text(n).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
+            } else if let err = store.error, store.list != nil {
+                Label("刷新失败", systemImage: "exclamationmark.triangle.fill")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Theme.warn)
+                    .help(err)
             } else if let u = store.updated {
                 Text("更新于 " + u.formatted(.dateTime.hour(.twoDigits(amPM: .omitted)).minute(.twoDigits).locale(Locale(identifier: "zh_CN"))))
                     .font(.system(size: 11)).foregroundStyle(.tertiary)

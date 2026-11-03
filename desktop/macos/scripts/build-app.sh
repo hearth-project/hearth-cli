@@ -7,8 +7,20 @@ cd "$(dirname "$0")/.."
 OUT=${1:-dist}
 VERSION=${2:-0.1.0}
 mkdir -p "$OUT"
-swift build -c release --arch arm64 --arch x86_64
-BIN=$(swift build -c release --arch arm64 --arch x86_64 --show-bin-path)/Hearth
+# `--arch a --arch b` needs full Xcode (xcbuild). With only the command line
+# tools, build each architecture on its own and join them with lipo.
+if [ "$(xcode-select -p 2>/dev/null)" != /Library/Developer/CommandLineTools ]; then
+  swift build -c release --arch arm64 --arch x86_64
+  BIN=$(swift build -c release --arch arm64 --arch x86_64 --show-bin-path)/Hearth
+else
+  for a in arm64 x86_64; do
+    swift build -c release --triple "$a-apple-macosx13.0"
+  done
+  BIN=.build/Hearth-universal
+  lipo -create -output "$BIN" \
+    "$(swift build -c release --triple arm64-apple-macosx13.0 --show-bin-path)/Hearth" \
+    "$(swift build -c release --triple x86_64-apple-macosx13.0 --show-bin-path)/Hearth"
+fi
 APP="$OUT/Hearth.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"

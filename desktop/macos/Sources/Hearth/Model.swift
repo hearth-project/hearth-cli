@@ -49,6 +49,9 @@ struct Machine: Decodable, Identifiable, Hashable {
 /// usual install locations are tried first.
 enum HearthCLI {
     static var binary: String? {
+        if let p = ProcessInfo.processInfo.environment["HEARTH_CLI"], FileManager.default.isExecutableFile(atPath: p) {
+            return p
+        }
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         let candidates = [home + "/.local/bin/hearth", "/usr/local/bin/hearth", "/opt/homebrew/bin/hearth", home + "/bin/hearth"]
         return candidates.first { FileManager.default.isExecutableFile(atPath: $0) }
@@ -56,10 +59,12 @@ enum HearthCLI {
 
     enum Failure: LocalizedError {
         case notInstalled
+        case tooOld
         case failed(String)
         var errorDescription: String? {
             switch self {
             case .notInstalled: return "没有找到 hearth 命令。先在终端安装并登录 Hearth。"
+            case .tooOld: return "hearth 命令版本太旧。在终端运行 hearth self-update 后再刷新。"
             case .failed(let s): return s
             }
         }
@@ -89,7 +94,11 @@ enum HearthCLI {
                 if p.terminationStatus != 0 {
                     var msg = String(data: errData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                     if msg.hasPrefix("error: ") { msg = String(msg.dropFirst(7)) }
-                    cont.resume(throwing: Failure.failed(msg.isEmpty ? "hearth 退出码 \(p.terminationStatus)" : msg))
+                    if msg.contains("unknown flag: --json") {
+                        cont.resume(throwing: Failure.tooOld)
+                    } else {
+                        cont.resume(throwing: Failure.failed(msg.isEmpty ? "hearth 退出码 \(p.terminationStatus)" : msg))
+                    }
                 } else {
                     cont.resume(returning: data)
                 }

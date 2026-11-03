@@ -214,3 +214,15 @@ Logged-in Linux machines accept SSH from your own devices only: public keys only
 
 - **Keys expire unless renewed.** Each machine accepts a device key for 7 days (`[ssh] key_days`, `0` = no expiry; OpenSSH 8.2 or newer) and its daemon renews that every day. A revoked device loses access at the next daemon pass, and at the latest after 7 days on a machine whose daemon is down.
 - **Agent forwarding** (`[ssh] forward_agent`, default on): sessions forward this device's ssh-agent, so `git push` on the machine uses the keys loaded here (`ssh-add`, on a Mac `ssh-add --apple-use-keychain`) and no private key needs to be stored there. While you are connected, root on that machine can use the forwarded agent (not copy the keys); turn it off for machines you do not trust.
+
+## 9. Mac menu bar app
+
+```bash
+hearth app install      # download the app from your server into ~/Applications and start it (again to update)
+hearth app open         # start it
+hearth app uninstall    # quit and remove it
+```
+
+The app puts a flame in the menu bar (filled when a machine's environment has an error). Its menu lists your machines: online or offline, when they were last seen, their GPU and SSH state, and whether their environment is fine. Click a machine for its problems and buttons: *Restore environment* and *Check* open Codex with a prompt for that machine (the prompt is also copied), *SSH* opens a terminal on it. *Open console* opens the web console in a window, already signed in and without asking for the master password. The gear menu has *Refresh*, *Start at login* and *Quit*.
+
+The app reads everything through the `hearth` command (`hearth machine list --json`, `hearth panel --json`), so this Mac must be logged in; if the app says the command is too old, run `hearth self-update`. It is only on servers whose admin publishes it ([server guide](server.md#releasing-a-new-client-version)).
