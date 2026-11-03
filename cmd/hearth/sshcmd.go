@@ -2,12 +2,15 @@ package main
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -24,7 +27,7 @@ func sshCmd() *cobra.Command {
 		Long: "Every Linux machine of your account accepts SSH from your own devices: Hearth gives each device a key,\n" +
 			"keeps the public keys (plus each device's ~/.ssh/id_*.pub) end-to-end encrypted, writes the keys of your\n" +
 			"active devices into a marked block of ~/.ssh/authorized_keys, and runs the system sshd the way it is set\n" +
-			"up by hand on GPU containers (public keys only, main interface only, port 8022; an sshd already listening\n" +
+			"up by hand on GPU containers (public keys only, the machine's own addresses only, port 8022; an sshd already listening\n" +
 			"there is used as it is). Revoking a device removes its keys everywhere within a minute.\n\n" +
 			"  hearth ssh                 machines you can reach\n" +
 			"  hearth ssh <machine>       log in (part of the name is enough)\n" +
@@ -83,7 +86,12 @@ func sshCmd() *cobra.Command {
 			if tty {
 				argv = append(argv, "-t") // a terminal for the command: QR-code logins, prompts
 			}
-			argv = append(argv, ep.User+"@"+ep.Address)
+			addr, ok := ep.ReachableAddress(3 * time.Second)
+			if !ok {
+				// Still try: the user's ~/.ssh/config may route it (ProxyJump).
+				fmt.Fprintln(os.Stderr, unreachableHint(e, ep))
+			}
+			argv = append(argv, ep.User+"@"+addr)
 			argv = append(argv, args[1:]...)
 			return syscall.Exec(bin, argv, os.Environ())
 		},
@@ -220,6 +228,42 @@ func sshArgs(home string, ep client.SSHEndpoint) []string {
 	return a
 }
 
+// unreachableHint says why a machine does not answer and what to do,
+// from the server's view of it: the address it connects from and whether
+// the server reaches its sshd.
+func unreachableHint(e *client.Engine, ep client.SSHEndpoint) string {
+	var where []string
+	for _, a := range ep.Addrs() {
+		where = append(where, net.JoinHostPort(a, strconv.Itoa(ep.Port)))
+	}
+	msg := fmt.Sprintf("hearth: %s does not answer at %s from this machine.", ep.Name, strings.Join(where, ", "))
+	var dev *api.Device
+	if ds, err := e.API.Devices(); err == nil {
+		for i := range ds {
+			if ds[i].ID == ep.DeviceID {
+				dev = &ds[i]
+			}
+		}
+	}
+	status := ""
+	if dev != nil {
+		if s, ok := dev.Env["ssh"].(map[string]any); ok {
+			status, _ = s["status"].(string)
+		}
+	}
+	switch {
+	case dev != nil && dev.LastIP != "" && !slices.Contains(ep.Addrs(), dev.LastIP) && status != "ok":
+		msg += fmt.Sprintf("\n  Its requests reach the Hearth server from %s, an address its sshd does not listen on: it is probably"+
+			"\n  behind NAT (a container's private network) or a proxy, and your machines cannot connect in. On that machine,"+
+			"\n  set [ssh] address to an address of it your devices reach, or map a port to %s.", dev.LastIP, where[0])
+	case status == "ok":
+		msg += "\n  The Hearth server reaches it, so this machine's network does not (a firewall?): try from another machine."
+	default:
+		msg += "\n  Your network may not reach it (a firewall, or another network); hearth machine inspect " + ep.Name + " shows what the server sees."
+	}
+	return msg + "\n  Trying anyway (your ~/.ssh/config may route it)..."
+}
+
 func printSSHStatus(st client.SSHStatus) {
 	switch {
 	case !st.On:
@@ -320,8 +364,12 @@ func writeSSHConfig(e *client.Engine, create bool) (int, string, error) {
 			continue // this machine
 		}
 		n++
+		host := ep.Address
+		if len(ep.Addrs()) > 1 {
+			host, _ = ep.ReachableAddress(1500 * time.Millisecond)
+		}
 		fmt.Fprintf(&b, "Host %s\n  HostName %s\n  Port %d\n  User %s\n  IdentityFile %s\n  IdentitiesOnly yes\n  UserKnownHostsFile %s\n  StrictHostKeyChecking yes\n",
-			aliases[k], ep.Address, ep.Port, ep.User, client.SSHKeyPath(e.Home), client.SSHKnownHosts(e.Home))
+			aliases[k], host, ep.Port, ep.User, client.SSHKeyPath(e.Home), client.SSHKnownHosts(e.Home))
 		if client.SSHForwardAgent(e.Home) {
 			b.WriteString("  ForwardAgent yes\n") // git there uses this device's keys; none stored there
 		}

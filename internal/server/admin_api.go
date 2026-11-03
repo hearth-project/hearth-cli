@@ -244,7 +244,7 @@ func (s *Server) writeDevices(w http.ResponseWriter, uid int64) {
 			return
 		}
 		if d.Status == "active" {
-			d.Env = s.machineEnv(healthJSON, d.Version)
+			d.Env = s.machineEnv(healthJSON, d.Version, d.IP)
 			var m struct {
 				Facts map[string]any `json:"facts"`
 			}

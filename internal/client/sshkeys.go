@@ -9,9 +9,11 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -93,12 +95,53 @@ func (k SSHKey) owner() string {
 type SSHEndpoint struct {
 	DeviceID string `json:"device_id"`
 	Name     string `json:"name"`
-	Address  string `json:"address"`
-	Port     int    `json:"port"`
-	User     string `json:"user"`
-	HostKey  string `json:"host_key"`
-	Updated  int64  `json:"updated"`
-	Online   bool   `json:"-"`
+	Address  string `json:"address"` // the main address (all older clients use)
+	// Addresses: every address sshd listens on, Address first; empty when
+	// it is the only one.
+	Addresses []string `json:"addresses,omitempty"`
+	Port      int      `json:"port"`
+	User      string   `json:"user"`
+	HostKey   string   `json:"host_key"`
+	Updated   int64    `json:"updated"`
+	Online    bool     `json:"-"`
+}
+
+// Addrs are the addresses to try, the main one first.
+func (ep SSHEndpoint) Addrs() []string {
+	if len(ep.Addresses) > 0 {
+		return ep.Addresses
+	}
+	if ep.Address != "" {
+		return []string{ep.Address}
+	}
+	return nil
+}
+
+// ReachableAddress is the first of the endpoint's addresses this machine
+// can open a TCP connection to (all tried at once, within timeout); ok is
+// false when none answered, and the main address is returned.
+func (ep SSHEndpoint) ReachableAddress(timeout time.Duration) (addr string, ok bool) {
+	addrs := ep.Addrs()
+	if len(addrs) == 0 {
+		return "", false
+	}
+	res := make([]chan bool, len(addrs))
+	for i, a := range addrs {
+		res[i] = make(chan bool, 1)
+		go func(a string, c chan bool) {
+			conn, err := net.DialTimeout("tcp", net.JoinHostPort(a, strconv.Itoa(ep.Port)), timeout)
+			if err == nil {
+				conn.Close()
+			}
+			c <- err == nil
+		}(a, res[i])
+	}
+	for i, c := range res { // in order: the main address wins when several answer
+		if <-c {
+			return addrs[i], true
+		}
+	}
+	return addrs[0], false
 }
 
 // PublishDeviceKey makes this device's keys known to the user's machines:
@@ -329,11 +372,14 @@ func (e *Engine) WriteKnownHosts(eps []SSHEndpoint) error {
 		if ep.HostKey == "" {
 			continue
 		}
-		host := ep.Address
-		if ep.Port != 22 {
-			host = fmt.Sprintf("[%s]:%d", ep.Address, ep.Port)
+		var hosts []string
+		for _, a := range ep.Addrs() {
+			if ep.Port != 22 {
+				a = fmt.Sprintf("[%s]:%d", a, ep.Port)
+			}
+			hosts = append(hosts, a)
 		}
-		fmt.Fprintf(&b, "%s %s\n", host, ep.HostKey)
+		fmt.Fprintf(&b, "%s %s\n", strings.Join(hosts, ","), ep.HostKey)
 	}
 	if err := os.MkdirAll(sshDir(e.Home), 0o700); err != nil {
 		return err

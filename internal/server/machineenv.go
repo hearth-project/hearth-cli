@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"net"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -65,7 +66,7 @@ func sshAnswers(hostport string) bool {
 // EnvProblem is one finding. Code says what it is; the console words it.
 type EnvProblem struct {
 	Level  string   `json:"level"` // error, warn
-	Code   string   `json:"code"`  // missing, outdated, doctor, integration, node, steps, hearth, bypass, unreachable, shared_home, no_login, stale_app_server
+	Code   string   `json:"code"`  // missing, outdated, doctor, integration, node, steps, hearth, bypass, unreachable, shared_home, no_login, stale_app_server, ssh_down, ssh_hostkey, ssh_blocked, ssh_nat
 	Tool   string   `json:"tool,omitempty"`
 	Have   string   `json:"have,omitempty"`
 	Latest string   `json:"latest,omitempty"`
@@ -129,13 +130,14 @@ type reportedHealth struct {
 		} `json:"stale_app_servers"`
 	} `json:"tools"`
 	SSH *struct {
-		On      bool   `json:"on"`
-		Running bool   `json:"running"`
-		Address string `json:"address"`
-		Port    int    `json:"port"`
-		Answers bool   `json:"answers"`
-		KeyOK   bool   `json:"key_ok"`
-		Detail  string `json:"detail"`
+		On        bool     `json:"on"`
+		Running   bool     `json:"running"`
+		Address   string   `json:"address"`
+		Addresses []string `json:"addresses"` // all it listens on (newer clients, when more than one)
+		Port      int      `json:"port"`
+		Answers   bool     `json:"answers"`
+		KeyOK     bool     `json:"key_ok"`
+		Detail    string   `json:"detail"`
 	} `json:"ssh"`
 	Client     string   `json:"client"` // Hearth build that made the report (newer than the stored one right after an update)
 	RecipeTodo int      `json:"recipe_todo"`
@@ -149,8 +151,9 @@ var envToolOrder = []string{"codex", "codex-mixin", "claude", "node"}
 // only judged when the user works with that agent.
 var toolAgent = map[string]string{"codex": "codex", "codex-mixin": "codex", "claude": "claude"}
 
-// machineEnv judges a machine. clientVersion is the Hearth build it runs.
-func (s *Server) machineEnv(healthJSON, clientVersion string) *MachineEnv {
+// machineEnv judges a machine. clientVersion is the Hearth build it runs,
+// lastIP the address its requests come from.
+func (s *Server) machineEnv(healthJSON, clientVersion, lastIP string) *MachineEnv {
 	var h reportedHealth
 	if strings.TrimSpace(healthJSON) == "" || healthJSON == "{}" || json.Unmarshal([]byte(healthJSON), &h) != nil || h.CheckedAt == 0 {
 		return &MachineEnv{Status: "unknown", Problems: []EnvProblem{}}
@@ -247,14 +250,33 @@ func (s *Server) machineEnv(healthJSON, clientVersion string) *MachineEnv {
 			es.Status = "down"
 			add(EnvProblem{Level: "error", Code: "ssh_hostkey", Tool: "ssh", Detail: x.Detail})
 		default:
-			switch ok, done := s.sshReach.check(x.Address, x.Port); {
+			addrs := x.Addresses
+			if len(addrs) == 0 {
+				addrs = []string{x.Address}
+			}
+			reached, done := "", true
+			for _, a := range addrs {
+				ok, d := s.sshReach.check(a, x.Port)
+				if ok && reached == "" {
+					reached = a
+				}
+				done = done && d
+			}
+			switch {
+			case reached != "":
+				es.Status, es.Address = "ok", reached
 			case !done:
 				es.Status = "checking"
-			case ok:
-				es.Status = "ok"
 			default:
 				es.Status = "blocked"
-				add(EnvProblem{Level: "warn", Code: "ssh_blocked", Tool: "ssh", Have: x.Address + ":" + strconv.Itoa(x.Port)})
+				p := EnvProblem{Level: "warn", Code: "ssh_blocked", Tool: "ssh", Have: x.Address + ":" + strconv.Itoa(x.Port)}
+				if lastIP != "" && !slices.Contains(addrs, lastIP) {
+					// It reaches the server from an address it does not
+					// listen on (has not): NAT, nobody can connect in.
+					p.Code, p.Detail = "ssh_nat", lastIP
+					es.Detail = "behind NAT: its requests come from " + lastIP
+				}
+				add(p)
 			}
 		}
 		env.SSH = es

@@ -38,7 +38,7 @@ type SSHConfig struct {
 	// `hearth ssh disable` turns one machine off.
 	Enabled *bool  `toml:"enabled,omitempty"`
 	Port    int    `toml:"port,omitempty"`    // first port to try (default 8022)
-	Address string `toml:"address,omitempty"` // listen address (default: bond0, else the main interface)
+	Address string `toml:"address,omitempty"` // the one listen address (default: bond0, the addresses the host name resolves to, the routes' source addresses)
 	// ShareKeys: also accept each device's usual keys (~/.ssh/id_*.pub),
 	// so plain ssh and IDEs work (default true).
 	ShareKeys *bool `toml:"share_keys,omitempty"`
@@ -306,12 +306,14 @@ const Template = `# Hearth settings — the only file you need to edit. It syncs
 [ssh]
 # Your Linux machines accept SSH from your own devices: the keys of your
 # devices go into ~/.ssh/authorized_keys (a marked block; your own lines
-# stay) and sshd runs with public keys only on the main interface, port
-# 8022 (an sshd already there is used as it is). Connect from any device:
+# stay) and sshd runs with public keys only on the machine's own addresses
+# (bond0, its host name's, its routes'), port 8022 (an sshd already there
+# is used as it is). Connect from any device:
 # hearth ssh <machine>, or plain ssh -p 8022 user@address with your usual
 # key. One machine off: hearth ssh disable.
 # enabled = true
 # port = 8022
+# address = "10.0.0.5"   # listen only here (default: the addresses above)
 # share_keys = true   # also accept each device's ~/.ssh/id_*.pub
 # config = true       # Host entries in ~/.ssh/config (default on a Mac)
 # [ssh.aliases]       # names in ~/.ssh/config: default [family]-[host]-[hardware]-[node]
