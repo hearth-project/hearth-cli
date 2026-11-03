@@ -162,15 +162,11 @@ struct MenuView: View {
     private var footer: some View {
         VStack(spacing: 0) {
             MenuRow(icon: "macwindow", title: "打开控制台…", action: openConsole)
-            MenuRow(icon: "plus.rectangle.on.rectangle", title: copying ? "正在生成命令…" : "复制新增机器的命令", action: copyInstallCommand) {
-                if copying {
-                    ProgressView().controlSize(.small).scaleEffect(0.7)
-                } else {
-                    Image(systemName: "doc.on.doc").font(.system(size: 11)).foregroundStyle(.tertiary)
-                }
+            MenuRow(icon: "plus.rectangle.on.rectangle", title: "新增开发机", action: copyInstallCommand) {
+                if copying { ProgressView().controlSize(.small).scaleEffect(0.7) }
             }
             .disabled(copying)
-            .help("一次性命令：在新机器上运行即安装 Hearth 并登录，30 分钟内可用一次。命令不显示，只复制到剪贴板。")
+            .help("复制一条一次性命令，在新机器上运行即安装 Hearth 并登录")
             MenuRow(icon: "arrow.clockwise", title: "刷新", action: { Task { await store.refresh() } }) {
                 if let err = store.error, store.list != nil {
                     Label("刷新失败", systemImage: "exclamationmark.triangle.fill")

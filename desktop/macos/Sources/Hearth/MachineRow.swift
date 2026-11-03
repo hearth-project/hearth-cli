@@ -2,8 +2,10 @@ import SwiftUI
 
 /// One machine in a group card: an icon for the kind of machine with its
 /// online dot, the name, and the environment state as a small glyph. Opening
-/// it shows the facts, the problems and the actions. A double click copies
-/// the machine name without opening it.
+/// it shows the facts, the problems and the actions. The copy button that
+/// appears on hover, or the right-click menu, copies the machine name
+/// without opening it; a plain click only opens and closes the row, so the
+/// two never get in each other's way.
 struct MachineRow: View {
     var m: Machine
     var open: Bool
@@ -47,8 +49,12 @@ struct MachineRow: View {
             .padding(.horizontal, 10)
             .padding(.vertical, 7)
             .contentShape(Rectangle())
-            .gesture(TapGesture(count: 2).onEnded(copyName).exclusively(before: TapGesture().onEnded(toggle)))
-            .help("\(m.host)\n单击展开，双击复制机器名")
+            .onTapGesture(perform: toggle)
+            .contextMenu {
+                Button("复制机器名", action: copyName)
+                Button(open ? "收起" : "展开", action: toggle)
+            }
+            .help("\(m.host)\n单击展开，右键或悬停时点复制按钮复制机器名")
             if open { detail }
         }
         .background(Color.primary.opacity(open ? 0.035 : (hover ? 0.03 : 0)))
