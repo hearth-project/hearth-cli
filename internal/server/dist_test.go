@@ -119,7 +119,8 @@ func TestInstallerPicksPlatformBuild(t *testing.T) {
 	own := fake("hearth-" + runtime.GOOS + "-" + runtime.GOARCH)
 	fake("hearth-linux-arm64")
 	fake("hearth-darwin-arm64")
-	os.WriteFile(filepath.Join(dist, "hearth-windows-amd64.exe"), []byte("x"), 0o755) // ignored
+	os.WriteFile(filepath.Join(dist, "hearth-windows-amd64.exe"), []byte("x"), 0o755)    // ignored
+	os.WriteFile(filepath.Join(dist, "hearth-menubar-darwin.zip"), []byte("app"), 0o644) // an app, not a platform
 	var h http.Handler
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { h.ServeHTTP(w, r) }))
 	defer ts.Close()
@@ -135,11 +136,27 @@ func TestInstallerPicksPlatformBuild(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var m struct{ Binaries map[string]string }
+	var m struct{ Binaries, Apps map[string]string }
 	json.NewDecoder(resp.Body).Decode(&m)
 	resp.Body.Close()
-	if len(m.Binaries) != 3 || m.Binaries["hearth-darwin-arm64"] == "" {
+	if len(m.Binaries) != 3 || m.Binaries["hearth-darwin-arm64"] == "" || len(m.Apps) != 1 || m.Apps["hearth-menubar-darwin.zip"] == "" {
 		t.Fatalf("manifest %+v", m)
+	}
+	if r, err := http.Get(ts.URL + "/download/hearth-menubar-darwin.zip"); err != nil || r.StatusCode != 200 {
+		t.Fatalf("app download: %v %v", r, err)
+	} else {
+		b, _ := io.ReadAll(r.Body)
+		r.Body.Close()
+		if string(b) != "app" {
+			t.Fatalf("app body %q", b)
+		}
+	}
+	if s, _ := http.Get(ts.URL + "/install.sh"); s != nil {
+		b, _ := io.ReadAll(s.Body)
+		s.Body.Close()
+		if strings.Contains(string(b), "menubar") {
+			t.Fatal("the installer lists the app as a platform")
+		}
 	}
 
 	var runArgs func(unameS, unameM, args string) (string, error)

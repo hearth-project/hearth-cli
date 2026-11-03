@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"fmt"
 	"os"
 	"os/exec"
@@ -8,12 +9,14 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+
+	"github.com/hearth-project/hearth-cli/internal/client"
 )
 
 // panelCmd prints (and opens) a sign-in link to the server's admin panel
 // for an admin logged in on this machine.
 func panelCmd() *cobra.Command {
-	var noOpen bool
+	var noOpen, asJSON bool
 	c := &cobra.Command{
 		Use:   "panel",
 		Short: "Open the web console: your machines, skills, agents and teams (admins also manage the server)",
@@ -30,6 +33,18 @@ func panelCmd() *cobra.Command {
 				return err
 			}
 			link := strings.TrimRight(e.Cfg.Server, "/") + path
+			if asJSON {
+				// For the macOS menu bar app: it opens the console in its own
+				// window, with this device's vault key in the URL fragment
+				// (never sent to the server), so the console makes one-time
+				// install commands without asking for the password. Only
+				// here: a fragment opened in a browser stays in its history.
+				out := map[string]string{"url": link, "server": strings.TrimRight(e.Cfg.Server, "/"), "ca": client.CAFile(e.Home)}
+				if v, err := client.LoadVault(e.Home); err == nil {
+					out["vault_key"] = base64.RawURLEncoding.EncodeToString(v.Key())
+				}
+				return printJSON(out)
+			}
 			fmt.Printf("console sign-in link (valid 10 minutes, keep it private):\n\n  %s\n\n", link)
 			if !noOpen {
 				openBrowser(link)
@@ -39,6 +54,7 @@ func panelCmd() *cobra.Command {
 		},
 	}
 	c.Flags().BoolVar(&noOpen, "no-open", false, "only print the link")
+	c.Flags().BoolVar(&asJSON, "json", false, "print the link and this device's vault key as JSON and open nothing (for the menu bar app; keep the output private)")
 	return c
 }
 

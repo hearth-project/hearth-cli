@@ -154,6 +154,15 @@ hearth server restart --data $D
 
 之后在线客户端的后台同步进程会在 30 分钟内自动更新（同时更新本机 agent 中的 `hearth` skill）；想立即更新就执行 `hearth self-update`。不希望客户端自动更新时，服务器加 `--no-client-auto-update`。
 
+要提供 Mac 菜单栏小程序（`hearth app install`），在 Mac 上构建，把 zip 放到二进制文件旁边；服务器下次重启时生效：
+
+```bash
+desktop/macos/scripts/build-app.sh /tmp/hearth-app <版本号>    # 需要 Swift 5.9 及以上（Xcode 或 Command Line Tools）
+cp /tmp/hearth-app/hearth-menubar-darwin.zip $D/dist/
+```
+
+GitHub 上的 `macos-app` workflow 也会构建同一个 zip（artifact 名为 `hearth-menubar`）。小程序是 ad hoc 签名；`hearth app install` 会去掉下载隔离标记，Gatekeeper 不会拦。
+
 ## 性能
 
 服务端以检索和恢复速度优先：会话按最近活动建索引并分页，列表只读索引；对象按会话追加分块存储，读写都是顺序的。多实例下各实例缓存有界：撤销的 token 30 秒内在其他实例失效，团队发布的内容 2 秒内可被检索，GC 同一时间只在一个实例运行。基准数据见 [技术参考](../en/reference.md#server-performance)。

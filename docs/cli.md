@@ -122,6 +122,7 @@ Generated from `hearth --help` by `hearth docs cli > docs/cli.md`; every command
 | [`hearth machine inspect`](#hearth-machine-inspect) | Show a machine's public health report |
 | [`hearth machine check`](#hearth-machine-check) | Check this machine's environment now and report it (the daemon does it every 5 minutes) |
 | [`hearth machine add`](#hearth-machine-add) | Add or update a profile (--here: match machines like this one) |
+| [`hearth machine install-command`](#hearth-machine-install-command) | Print a one-time command that installs hearth on a new machine and logs it in (30 minutes, once) |
 | [`hearth machine rm`](#hearth-machine-rm) | Remove a profile |
 | [`hearth machine use`](#hearth-machine-use) | Apply profiles to this machine even if they do not match (no names: clear) |
 | [`hearth machine facts`](#hearth-machine-facts) | Print the detected facts as JSON |
@@ -184,6 +185,10 @@ Generated from `hearth --help` by `hearth docs cli > docs/cli.md`; every command
 | [`hearth site enable`](#hearth-site-enable) | Apply a site recipe you disabled |
 | [`hearth site pull`](#hearth-site-pull) | Fetch the site defaults now (works before login with --server) |
 | [`hearth site status`](#hearth-site-status) | List the site defaults on this machine |
+| [`hearth app`](#hearth-app) | The macOS menu bar app: your machines at a glance, and the console in a window |
+| [`hearth app install`](#hearth-app-install) | Install (or update) the menu bar app from your server into ~/Applications and start it |
+| [`hearth app open`](#hearth-app-open) | Start the menu bar app |
+| [`hearth app uninstall`](#hearth-app-uninstall) | Quit and remove the menu bar app |
 | [`hearth codex-import`](#hearth-codex-import) | Import Claude Code sessions into Codex (alias for `agent import codex --from claude`) |
 | [`hearth codex-threads`](#hearth-codex-threads) | Make restored sessions show up in Codex Desktop (index threads, names, sidebar sections) |
 | [`hearth docs`](#hearth-docs) | Documentation: how to install the agents' software (env), the command reference (cli) |
@@ -1429,7 +1434,8 @@ List your machines, architecture and agent readiness
 hearth machine list [flags]
 
 Flags:
-      --all   also revoked machines
+      --all    also revoked machines
+      --json   machine-readable (the macOS menu bar app reads it)
 ```
 
 ## hearth machine inspect
@@ -1460,6 +1466,17 @@ Flags:
       --here                   match machines like this one (by GPU model, else OS and architecture)
       --match stringToString   conditions, e.g. --match gpu=h800,h100 --match arch=x86_64 (keys: os, arch, gpu, hostname, label) (default [])
       --workspace string       working directory on these machines, e.g. /mnt/ssd/$USER/work
+```
+
+## hearth machine install-command
+
+Print a one-time command that installs hearth on a new machine and logs it in (30 minutes, once)
+
+```text
+hearth machine install-command [flags]
+
+Flags:
+      --json   machine-readable (the macOS menu bar app reads it)
 ```
 
 ## hearth machine rm
@@ -1765,6 +1782,7 @@ password. Admins (hearth server admin grant <email>) also see the administration
 hearth panel [flags]
 
 Flags:
+      --json      print the link and this device's vault key as JSON and open nothing (for the menu bar app; keep the output private)
       --no-open   only print the link
 ```
 
@@ -2103,6 +2121,38 @@ List the site defaults on this machine
 
 ```text
 hearth site status
+```
+
+## hearth app
+
+The macOS menu bar app: your machines at a glance, and the console in a window
+
+```text
+hearth app
+```
+
+## hearth app install
+
+Install (or update) the menu bar app from your server into ~/Applications and start it
+
+```text
+hearth app install
+```
+
+## hearth app open
+
+Start the menu bar app
+
+```text
+hearth app open
+```
+
+## hearth app uninstall
+
+Quit and remove the menu bar app
+
+```text
+hearth app uninstall
 ```
 
 ## hearth codex-import

@@ -1,6 +1,16 @@
 "use strict";
 // Sign-in screen, navigation and view switching.
 
+// A console opened by the menu bar app carries this device's vault key in
+// the URL fragment (#hearth-vk=..., never sent to the server): taken here,
+// removed from the address at once, then kept like a password sign-in's.
+var HANDED_VK = null;
+(function () {
+  var m = /(?:^#|&)hearth-vk=([A-Za-z0-9_-]+)/.exec(location.hash);
+  if (!m) return;
+  try { var k = HC.b64dec(m[1].replace(/-/g, "+").replace(/_/g, "/") + "===".slice((m[1].length + 3) % 4)); if (k.length === 32) HANDED_VK = k; } catch (e) { HANDED_VK = null; }
+  history.replaceState(null, "", location.pathname + location.search);
+})();
 var ME = "", IS_ADMIN = false, VIEWS = {}, ORDER = [], current = location.hash.slice(1) || "home", pendingCount = 0;
 // view registers a page: group "me" (everyone) or "admin".
 function view(id, title, fn, group, ic) { VIEWS[id] = { title: title, fn: fn, group: group || "admin", icon: ic || "chart" }; ORDER.push(id); }
@@ -132,7 +142,7 @@ function drawTabs() {
     ORDER.forEach(function (id) {
       var v = VIEWS[id];
       if (v.group !== g[0]) return;
-      nav.appendChild(h("a", { class: id === current ? "on" : "", href: "#" + id, onclick: function () { document.getElementById("side").classList.remove("open"); } },
+      nav.appendChild(h("a", { class: "t-" + v.icon + (id === current ? " on" : ""), href: "#" + id, onclick: function () { document.getElementById("side").classList.remove("open"); } },
         icon(v.icon), h("span", {}, t(v.title)), id === "approvals" && pendingCount ? badge(pendingCount, "warn") : null));
     });
   });

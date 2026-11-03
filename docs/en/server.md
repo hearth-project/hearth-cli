@@ -154,6 +154,15 @@ hearth server restart --data $D
 
 Online clients' daemons then update themselves within 30 minutes (refreshing the `hearth` skill in their agents too); `hearth self-update` updates right away. Start the server with `--no-client-auto-update` to stop clients from updating by themselves.
 
+To offer the Mac menu bar app (`hearth app install`), build it on a Mac and put the zip next to the binaries; the server picks it up at its next restart:
+
+```bash
+desktop/macos/scripts/build-app.sh /tmp/hearth-app <version>    # needs Swift 5.9+ (Xcode or the Command Line Tools)
+cp /tmp/hearth-app/hearth-menubar-darwin.zip $D/dist/
+```
+
+The `macos-app` GitHub workflow builds the same zip (artifact `hearth-menubar`). The app is signed ad hoc; `hearth app install` removes the download quarantine, so Gatekeeper does not block it.
+
 ## Performance
 
 Search and restore speed come first: sessions are indexed by last activity and paged, listing reads only the index, blobs are stored as per-session append chunks with sequential reads and writes. With several instances the per-instance caches are bounded: a revoked token stops working everywhere within 30 s, team publications are searchable within 2 s, GC runs on one instance at a time. Benchmarks: [technical reference](reference.md#server-performance).

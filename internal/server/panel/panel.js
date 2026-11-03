@@ -103,7 +103,7 @@ function act(promise, ok) {
 }
 
 function kpi(label, value, ic, cls) {
-  return h("div", { class: "card kpi" }, h("div", { class: "ic" }, icon(ic || "chart")),
+  return h("div", { class: "card kpi" }, h("div", { class: "ic t-" + (ic || "chart") }, icon(ic || "chart")),
     h("div", {}, h("div", { class: "v " + (cls || "") }, value), h("div", { class: "l" }, label)));
 }
 function badge(text, cls) { return h("span", { class: "badge " + (cls || "") }, text); }

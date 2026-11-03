@@ -1,0 +1,22 @@
+{
+  "server": "https://hearth.example.com:8787",
+  "email": "you@example.com",
+  "machines": [
+    {"id": "a1", "name": "gpu-node-07.example.com", "alias": "train-box", "label": "train-box (gpu-node-07.example.com)", "host": "train-box",
+     "status": "active", "online": true, "last_seen": 1793600000, "os": "linux", "arch": "x86_64", "gpu": "h100", "version": "0.1.0-20261101.2118",
+     "env": "warn", "problems": [
+       {"code": "outdated", "level": "warn", "tool": "codex", "have": "0.162.1", "latest": "0.166.0", "behind": 4, "text": "codex 4 behind (0.162.1 → 0.166.0)"},
+       {"code": "missing", "level": "warn", "tool": "claude", "text": "claude not installed"},
+       {"code": "steps", "level": "warn", "behind": 3, "text": "3 restore step(s) left"}],
+     "ssh": "ok", "ssh_addr": "10.0.0.7:8022"},
+    {"id": "a2", "name": "MacBook-Pro.local", "alias": "MacBook-Pro", "label": "MacBook-Pro (MacBook-Pro.local)", "host": "MacBook-Pro", "this": true,
+     "status": "active", "online": true, "last_seen": 1793600000, "os": "darwin", "arch": "aarch64", "gpu": "apple", "version": "0.1.0-20261101.2118",
+     "env": "ok", "problems": [], "ssh": "off"},
+    {"id": "a3", "name": "dev-vm-3.example.com", "label": "dev-vm-3.example.com", "host": "dev-vm-3",
+     "status": "active", "online": true, "last_seen": 1793600000, "os": "linux", "arch": "aarch64", "version": "0.1.0-20261101.2118",
+     "env": "error", "problems": [{"code": "ssh_down", "level": "error", "text": "remote ssh does not work: connection refused"}], "ssh": "down", "ssh_addr": "10.0.0.3:8022"},
+    {"id": "a4", "name": "old-node.example.com", "alias": "old-node", "label": "old-node (old-node.example.com)", "host": "old-node",
+     "status": "active", "online": false, "last_seen": 1793500000, "os": "linux", "arch": "x86_64", "version": "0.1.0-20261101.1800",
+     "env": "warn", "problems": [{"code": "missing", "level": "warn", "tool": "codex", "text": "codex not installed"}], "ssh": "stale"}
+  ]
+}

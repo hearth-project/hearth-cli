@@ -231,3 +231,15 @@ hearth recovery-key rotate             # 恢复密钥泄露时换新
 
 - **公钥定期过期、自动续期。** 每台机器对一把设备公钥只放行 7 天（`[ssh] key_days`，`0` 表示不过期；需要 OpenSSH 8.2 及以上），daemon 每天续期。设备被吊销后，在下一轮同步时失效；daemon 没在运行的机器上，最晚 7 天后失效。
 - **ssh-agent 转发**（`[ssh] forward_agent`，默认开启）：连接时转发本设备的 ssh-agent，机器上 `git push` 用的是本机已加载的 key（`ssh-add`，Mac 上 `ssh-add --apple-use-keychain`），私钥不用放到那台机器上。连接期间，那台机器上的 root 能借用转发过去的 agent（拿不走私钥）；不信任的机器请关掉。
+
+## 9. Mac 菜单栏小程序
+
+```bash
+hearth app install      # 从服务器下载到 ~/Applications 并启动（再执行一次就是更新）
+hearth app open         # 启动
+hearth app uninstall    # 退出并删除
+```
+
+小程序在菜单栏显示一个火焰图标（有机器环境出错时变成实心）。下拉菜单列出你的机器（离线超过 12 小时的不显示，控制台里仍能看到）：是否在线、最近上线时间、GPU 和 SSH 状态、环境是否正常。鼠标移到一台机器上点复制按钮，或者右键它，可以复制机器名。单击展开能看到它的问题和操作按钮：「恢复环境」「检查」会打开 Codex 并填好针对这台机器的提示词（同时复制到剪贴板），「SSH 连接」打开终端连上它；在线的机器可以在这里改名（清空即恢复为主机名，同 `hearth device rename`）。列表下面：「打开控制台…」在窗口里打开网页控制台，已经登录好，也不用输主密码；「新增开发机」把一次性安装命令（`hearth machine install-command`，30 分钟内可用一次）复制到剪贴板，不在界面上显示；还有「刷新」「登录时启动」「退出 Hearth」。
+
+小程序的所有操作都通过 `hearth` 命令完成（`hearth machine list --json`、`hearth panel --json`、`hearth machine install-command --json`、`hearth device rename`），所以这台 Mac 要先登录 Hearth；提示命令版本太旧时执行 `hearth self-update`。只有管理员在服务器上发布了小程序才能安装（见[服务器指南](server.md#发布新版本客户端)）。
