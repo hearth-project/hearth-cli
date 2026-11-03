@@ -253,6 +253,35 @@ func TestUpgradeLearnedCodexMixin(t *testing.T) {
 	if err := r.Validate(); err != nil {
 		t.Fatal(err)
 	}
+	// The user gave the login step its command (run in the chat): kept,
+	// also when another step is upgraded.
+	for i, s := range r.Steps {
+		if s.Name == "codex-mixin-login" {
+			r.Steps[i].Run, r.Steps[i].Set = "codex-mixin setup --key \"$K\"", map[string]string{"K": "${secret:K}"}
+		}
+	}
+	if upgradeLearned(r) {
+		t.Fatal("the user's command for the login step counted as outdated")
+	}
+	for i, s := range r.Steps {
+		if s.Name == "codex-mixin-import" {
+			r.Steps[i].Run = "an old import"
+		}
+	}
+	if !upgradeLearned(r) {
+		t.Fatal("not upgraded")
+	}
+	for _, s := range r.Steps {
+		if s.Name == "codex-mixin-login" && (s.Run == "" || s.Set["K"] == "") {
+			t.Fatalf("login command dropped: %+v", s)
+		}
+		if s.Name == "codex-mixin-import" && s.Run == "an old import" {
+			t.Fatal("import not upgraded")
+		}
+	}
+	if err := r.Validate(); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestCodexMixinStepsParse(t *testing.T) {
