@@ -227,7 +227,29 @@ func machineCmd() *cobra.Command {
 		}
 		return nil
 	}}
-	c.AddCommand(list, inspect, check, add,
+	var cmdJSON bool
+	installCmd := &cobra.Command{Use: "install-command", Short: "Print a one-time command that installs hearth on a new machine and logs it in (30 minutes, once)", Args: cobra.NoArgs, RunE: func(*cobra.Command, []string) error {
+		e, err := engine()
+		if err != nil {
+			return err
+		}
+		ic, err := e.MakeInstallCommand()
+		if err != nil {
+			return err
+		}
+		if cmdJSON {
+			return printJSON(ic)
+		}
+		fmt.Println(ic.Command)
+		if ic.OneTime {
+			fmt.Fprintln(os.Stderr, "Run it on the new machine within 30 minutes; it works once.")
+		} else {
+			fmt.Fprintln(os.Stderr, "Run it on the new machine; it asks for your master password.")
+		}
+		return nil
+	}}
+	installCmd.Flags().BoolVar(&cmdJSON, "json", false, "machine-readable (the macOS menu bar app reads it)")
+	c.AddCommand(list, inspect, check, add, installCmd,
 		&cobra.Command{Use: "rm <name>", Short: "Remove a profile", Args: cobra.ExactArgs(1), RunE: func(_ *cobra.Command, a []string) error {
 			home := client.Home()
 			m, err := client.Machine(home)

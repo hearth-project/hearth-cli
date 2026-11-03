@@ -2,18 +2,21 @@ import SwiftUI
 
 /// One machine in a group card: an icon for the kind of machine with its
 /// online dot, the name, and the environment state as a small glyph. Opening
-/// it shows the facts, the problems and the actions.
+/// it shows the facts, the problems and the actions. A double click copies
+/// the machine name without opening it.
 struct MachineRow: View {
     var m: Machine
     var open: Bool
     var toggle: () -> Void
     var say: (String) -> Void
+    var rename: (String) async throws -> Void
     @State private var hover = false
+    @State private var draft = ""
+    @State private var saving = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Button(action: toggle) {
-                HStack(spacing: 10) {
+            HStack(spacing: 10) {
                     MachineIcon(m: m)
                     HStack(spacing: 6) {
                         Text(m.title)
@@ -27,27 +30,40 @@ struct MachineRow: View {
                     if !m.online {
                         Text(Words.ago(m.last_seen)).font(.system(size: 11)).foregroundStyle(.tertiary).lineLimit(1).fixedSize()
                     }
+                    if hover {
+                        Button(action: copyName) {
+                            Image(systemName: "doc.on.doc").font(.system(size: 11))
+                        }
+                        .buttonStyle(.borderless)
+                        .foregroundStyle(.secondary)
+                        .help("复制 \(m.host)")
+                    }
                     EnvGlyph(m: m)
                     Image(systemName: "chevron.right")
                         .font(.system(size: 9, weight: .semibold))
                         .foregroundStyle(.tertiary)
                         .rotationEffect(.degrees(open ? 90 : 0))
-                }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 7)
-                .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
-            .help(m.host)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .contentShape(Rectangle())
+            .gesture(TapGesture(count: 2).onEnded(copyName).exclusively(before: TapGesture().onEnded(toggle)))
+            .help("\(m.host)\n单击展开，双击复制机器名")
             if open { detail }
         }
         .background(Color.primary.opacity(open ? 0.035 : (hover ? 0.03 : 0)))
         .onHover { hover = $0 }
     }
 
+    private func copyName() {
+        Actions.copy(m.host)
+        say("已复制 \(m.host)")
+    }
+
     private var detail: some View {
         VStack(alignment: .leading, spacing: 10) {
             VStack(spacing: 5) {
+                if m.online { nameField }
                 Fact(label: "主机", value: m.name, selectable: true)
                 let f = Words.facts(m)
                 if !f.isEmpty { Fact(label: "系统", value: f) }
@@ -81,13 +97,6 @@ struct MachineRow: View {
                 if m.sshUsable {
                     Button { say(Actions.ssh(m)) } label: { Text("SSH 连接") }
                 }
-                Spacer()
-                Button {
-                    Actions.copy(m.host)
-                    say("已复制 \(m.host)")
-                } label: { Image(systemName: "doc.on.doc") }
-                    .buttonStyle(.borderless)
-                    .help("复制机器名")
             }
             .controlSize(.small)
         }
@@ -95,6 +104,48 @@ struct MachineRow: View {
         .padding(.trailing, 12)
         .padding(.top, 2)
         .padding(.bottom, 12)
+        .onAppear { draft = m.alias ?? "" }
+        .onChange(of: m.alias) { draft = $0 ?? "" }
+    }
+
+    /// The machine's name, editable in place. Empty goes back to the host name.
+    private var nameField: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Text("名称").font(.system(size: 11)).foregroundStyle(.secondary).frame(width: 34, alignment: .leading)
+            TextField(m.name, text: $draft)
+                .textFieldStyle(.roundedBorder)
+                .font(.system(size: 11))
+                .controlSize(.small)
+                .disabled(saving)
+                .onSubmit(save)
+            if saving {
+                ProgressView().controlSize(.small).scaleEffect(0.7)
+            } else if changed {
+                Button("保存", action: save).controlSize(.small)
+            }
+        }
+    }
+
+    private var changed: Bool { draft.trimmingCharacters(in: .whitespaces) != (m.alias ?? "") }
+
+    private func save() {
+        let name = draft.trimmingCharacters(in: .whitespaces)
+        guard changed, !saving else { return }
+        if !name.isEmpty, name.range(of: #"^[A-Za-z0-9][A-Za-z0-9._-]{0,62}$"#, options: .regularExpression) == nil {
+            say("名称只能用字母、数字、. _ -，不超过 63 个字符")
+            return
+        }
+        saving = true
+        Task {
+            do {
+                try await rename(name)
+                say(name.isEmpty ? "已恢复为 \(m.name)" : "已改名为 \(name)")
+            } catch {
+                let s = error.localizedDescription
+                say(s.contains("has that name") ? "已有机器叫 \(name)" : s)
+            }
+            saving = false
+        }
     }
 }
 

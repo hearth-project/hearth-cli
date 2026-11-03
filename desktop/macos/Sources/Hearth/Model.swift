@@ -45,6 +45,12 @@ struct Machine: Decodable, Identifiable, Hashable {
     var sshUsable: Bool { !isThis && (ssh == "ok" || ssh == "blocked") }
 }
 
+/// What `hearth machine install-command --json` prints.
+struct InstallCommand: Decodable {
+    var command: String
+    var one_time: Bool
+}
+
 /// The CLI the app talks to. A Finder-started app has a minimal PATH, so the
 /// usual install locations are tried first.
 enum HearthCLI {
@@ -94,7 +100,7 @@ enum HearthCLI {
                 if p.terminationStatus != 0 {
                     var msg = String(data: errData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                     if msg.hasPrefix("error: ") { msg = String(msg.dropFirst(7)) }
-                    if msg.contains("unknown flag: --json") {
+                    if msg.contains("unknown flag: --json") || msg.contains("unknown command") {
                         cont.resume(throwing: Failure.tooOld)
                     } else {
                         cont.resume(throwing: Failure.failed(msg.isEmpty ? "hearth 退出码 \(p.terminationStatus)" : msg))
@@ -166,5 +172,25 @@ final class MachineStore: ObservableObject {
         } catch {
             self.error = error.localizedDescription
         }
+    }
+
+    /// Copies the command that adds a machine (one-time, 30 minutes) without
+    /// showing it; returns what to tell the user.
+    func copyInstallCommand() async -> String {
+        do {
+            let data = try await HearthCLI.run(["machine", "install-command", "--json"], timeout: 30)
+            let c = try JSONDecoder().decode(InstallCommand.self, from: data)
+            Actions.copy(c.command)
+            return c.one_time ? "已复制新增机器的命令，30 分钟内可用一次" : "已复制新增机器的命令，新机器上需要输入主密码"
+        } catch {
+            return error.localizedDescription
+        }
+    }
+
+    /// Names a machine (`hearth device rename <id> <name>`; "" clears it),
+    /// then reloads the list.
+    func rename(_ m: Machine, to name: String) async throws {
+        _ = try await HearthCLI.run(["device", "rename", m.id, name])
+        await refresh()
     }
 }

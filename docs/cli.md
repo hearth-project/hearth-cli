@@ -117,6 +117,7 @@ Generated from `hearth --help` by `hearth docs cli > docs/cli.md`; every command
 | [`hearth machine inspect`](#hearth-machine-inspect) | Show a machine's public health report |
 | [`hearth machine check`](#hearth-machine-check) | Check this machine's environment now and report it (the daemon does it every 5 minutes) |
 | [`hearth machine add`](#hearth-machine-add) | Add or update a profile (--here: match machines like this one) |
+| [`hearth machine install-command`](#hearth-machine-install-command) | Print a one-time command that installs hearth on a new machine and logs it in (30 minutes, once) |
 | [`hearth machine rm`](#hearth-machine-rm) | Remove a profile |
 | [`hearth machine use`](#hearth-machine-use) | Apply profiles to this machine even if they do not match (no names: clear) |
 | [`hearth machine facts`](#hearth-machine-facts) | Print the detected facts as JSON |
@@ -1392,6 +1393,17 @@ Flags:
       --here                   match machines like this one (by GPU model, else OS and architecture)
       --match stringToString   conditions, e.g. --match gpu=h800,h100 --match arch=x86_64 (keys: os, arch, gpu, hostname, label) (default [])
       --workspace string       working directory on these machines, e.g. /mnt/ssd/$USER/work
+```
+
+## hearth machine install-command
+
+Print a one-time command that installs hearth on a new machine and logs it in (30 minutes, once)
+
+```text
+hearth machine install-command [flags]
+
+Flags:
+      --json   machine-readable (the macOS menu bar app reads it)
 ```
 
 ## hearth machine rm

@@ -9,6 +9,7 @@ struct MenuView: View {
     var snapshot = false
     @State var expanded: String? = nil
     @State var note: String? = nil
+    @State private var copying = false
     /// Height of the machine list. A MenuBarExtra window sizes itself to its
     /// content's ideal size and a ScrollView has none, so the list gets this
     /// height (at most 460) explicitly; without it the list collapses to zero.
@@ -17,13 +18,23 @@ struct MenuView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
-            content
+            content.overlay(alignment: .bottom) { noteView }
             Divider().opacity(0.5)
             footer
         }
         .frame(width: 360)
         .background(snapshot ? AnyView(Color(nsColor: .windowBackgroundColor)) : AnyView(Color.clear))
         .background(snapshot ? nil : MenuWindowAnchor())
+    }
+
+    /// Makes a one-time install command and copies it; the command is never shown.
+    private func copyInstallCommand() {
+        copying = true
+        Task {
+            let s = await store.copyInstallCommand()
+            copying = false
+            withAnimation { note = s }
+        }
     }
 
     /// The list never makes the dropdown taller than the screen below the
@@ -103,17 +114,20 @@ struct MenuView: View {
             .onPreferenceChange(ListHeight.self) { listHeight = $0 }
             .frame(height: snapshot ? nil : min(max(listHeight, 44), maxListHeight))
             .fixedSize(horizontal: false, vertical: snapshot)
-            .overlay(alignment: .bottom) {
-                if let n = note {
-                    Text(n).font(.system(size: 11, weight: .medium)).lineLimit(1)
-                        .padding(.horizontal, 10).padding(.vertical, 5)
-                        .background(Capsule().fill(.regularMaterial))
-                        .overlay(Capsule().strokeBorder(Color.primary.opacity(0.08)))
-                        .shadow(color: .black.opacity(0.12), radius: 4, y: 1)
-                        .padding(.bottom, 8)
-                        .transition(.opacity)
-                }
-            }
+        }
+    }
+
+    /// A short message after an action ("已复制 …"), over the bottom of the list.
+    @ViewBuilder private var noteView: some View {
+        if let n = note {
+            Text(n).font(.system(size: 11, weight: .medium)).lineLimit(2).multilineTextAlignment(.center)
+                .padding(.horizontal, 10).padding(.vertical, 5)
+                .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(.regularMaterial))
+                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Color.primary.opacity(0.08)))
+                .shadow(color: .black.opacity(0.12), radius: 4, y: 1)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 8)
+                .transition(.opacity)
         }
     }
 
@@ -134,7 +148,7 @@ struct MenuView: View {
                     if i > 0 { Divider().padding(.leading, 46) }
                     MachineRow(m: m, open: expanded == m.id, toggle: {
                         withAnimation(.easeInOut(duration: 0.18)) { expanded = expanded == m.id ? nil : m.id }
-                    }, say: { note = $0 })
+                    }, say: { note = $0 }, rename: { name in try await store.rename(m, to: name) })
                 }
             }
             .background(Theme.card)
@@ -147,6 +161,15 @@ struct MenuView: View {
     private var footer: some View {
         VStack(spacing: 0) {
             MenuRow(icon: "macwindow", title: "打开控制台…", action: openConsole)
+            MenuRow(icon: "plus.rectangle.on.rectangle", title: copying ? "正在生成命令…" : "复制新增机器的命令", action: copyInstallCommand) {
+                if copying {
+                    ProgressView().controlSize(.small).scaleEffect(0.7)
+                } else {
+                    Image(systemName: "doc.on.doc").font(.system(size: 11)).foregroundStyle(.tertiary)
+                }
+            }
+            .disabled(copying)
+            .help("一次性命令：在新机器上运行即安装 Hearth 并登录，30 分钟内可用一次。命令不显示，只复制到剪贴板。")
             MenuRow(icon: "arrow.clockwise", title: "刷新", action: { Task { await store.refresh() } }) {
                 if let err = store.error, store.list != nil {
                     Label("刷新失败", systemImage: "exclamationmark.triangle.fill")
