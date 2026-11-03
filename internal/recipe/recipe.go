@@ -18,6 +18,9 @@ import (
 )
 
 // Step is one action. Which fields apply depends on Type.
+// envKeyRE: an environment variable name.
+var envKeyRE = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
 type Step struct {
 	Type string `toml:"type"` // file | env | run | check | capture | manual
 	Name string `toml:"name,omitempty"`
@@ -47,6 +50,13 @@ type Step struct {
 	Text     string `toml:"text,omitempty"`
 	DoneWhen string `toml:"done_when,omitempty"`
 	TTY      bool   `toml:"tty,omitempty"`
+	// A manual step with tty = true may name its command in run (a login
+	// that shows a QR code): agents run it under a pseudo-terminal on the
+	// machine (hearth recipe tty start) and show the code in the chat. Its
+	// environment comes from set, where "${secret:NAME}" is a Hearth secret
+	// (set = {ONEAPI_KEY = "${secret:ONEAPI_KEY}"}); secret values never
+	// appear in the output. (set and run are fields older clients know, so a
+	// shared library with such a step still loads there.)
 
 	// tool
 	Version    string            `toml:"version,omitempty"`
@@ -208,6 +218,17 @@ func (s Step) validate() error {
 			return errors.New("run and secret are required")
 		}
 	case "manual":
+		if s.Run != "" && !s.TTY {
+			return errors.New("run on a manual step is the command of an interactive step: set tty = true")
+		}
+		for k := range s.Set {
+			if !envKeyRE.MatchString(k) {
+				return fmt.Errorf("set: invalid variable name %q", k)
+			}
+		}
+		if len(s.Set) > 0 && s.Run == "" {
+			return errors.New("set on a manual step needs run (the interactive command)")
+		}
 		return need(s.Text != "", "text is required")
 	case "tool":
 		return s.validateTool()

@@ -102,6 +102,11 @@ Generated from `hearth --help` by `hearth docs cli > docs/cli.md`; every command
 | [`hearth recipe proposals`](#hearth-recipe-proposals) | Setup steps proposed by agents (MCP propose_setup_step), waiting for review |
 | [`hearth recipe proposals accept`](#hearth-recipe-proposals-accept) | Merge proposals into their recipes |
 | [`hearth recipe proposals reject`](#hearth-recipe-proposals-reject) | Drop proposals |
+| [`hearth recipe tty`](#hearth-recipe-tty) | Interactive restore steps (QR-code logins) in the background, for agents: start, status, input, stop |
+| [`hearth recipe tty start`](#hearth-recipe-tty-start) | Start an interactive step in the background |
+| [`hearth recipe tty status`](#hearth-recipe-tty-status) | A session's state, its QR code and output |
+| [`hearth recipe tty input`](#hearth-recipe-tty-input) | Type an answer into the step's terminal (Enter added) |
+| [`hearth recipe tty stop`](#hearth-recipe-tty-stop) | End a running interactive step |
 | [`hearth recipe list`](#hearth-recipe-list) | List recipes |
 | [`hearth recipe show`](#hearth-recipe-show) | Print a recipe |
 | [`hearth recipe add`](#hearth-recipe-add) | Validate a recipe and copy it into the library |
@@ -1247,6 +1252,74 @@ Drop proposals
 
 ```text
 hearth recipe proposals reject <id>...
+```
+
+## hearth recipe tty
+
+Runs a plan step that needs a terminal (manual, tty = true, with run) under a pseudo-terminal in the
+background on this machine or another (--on <machine>, over hearth ssh). status returns the QR code it
+shows as a PNG file; once the command ends, its check runs and the step is marked done.
+
+  hearth recipe tty start <key> --on <machine>        start it; waits for a code (--wait)
+  hearth recipe tty status <session> --on <machine>   state, code, output (a new code: --since <qr_hash>)
+  hearth recipe tty input <session> <text> --on ...   answer a prompt
+  hearth recipe tty stop <session> --on <machine>
+
+```text
+hearth recipe tty
+```
+
+## hearth recipe tty start
+
+Start an interactive step in the background
+
+```text
+hearth recipe tty start <step-key> [flags]
+
+Flags:
+      --json            machine-readable
+      --on string       the machine (default: this one)
+      --qr-out string   write the code to this PNG file (default: a temporary file, removed when the step ends)
+      --wait duration   wait this long for a code or the end (default 20s)
+```
+
+## hearth recipe tty status
+
+A session's state, its QR code and output
+
+```text
+hearth recipe tty status <session> [flags]
+
+Flags:
+      --json            machine-readable
+      --on string       the machine (default: this one)
+      --qr-out string   write the code to this PNG file (default: a temporary file, removed when the step ends)
+      --since string    wait for a code other than this qr_hash (or the end)
+      --wait duration   wait this long for a code or the end (default 20s)
+```
+
+## hearth recipe tty input
+
+Type an answer into the step's terminal (Enter added)
+
+```text
+hearth recipe tty input <session> <text> [flags]
+
+Flags:
+      --json        machine-readable
+      --on string   the machine (default: this one)
+```
+
+## hearth recipe tty stop
+
+End a running interactive step
+
+```text
+hearth recipe tty stop <session> [flags]
+
+Flags:
+      --json        machine-readable
+      --on string   the machine (default: this one)
 ```
 
 ## hearth recipe list

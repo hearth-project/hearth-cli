@@ -69,9 +69,20 @@ func upgradeLearned(r *recipe.Recipe) bool {
 	for _, s := range codexMixinSteps() {
 		cur[s.Name] = s
 	}
+	// The user's own command for an interactive step (run, set: the login
+	// the agent runs in the chat) is theirs, not a field of the template.
+	mine := map[string]recipe.Step{}
 	at := -1
 	for i, s := range r.Steps {
-		if c, ok := cur[s.Name]; ok && at < 0 && (c.Run != s.Run || c.Text != s.Text || c.StdinSecret != s.StdinSecret) {
+		c, ok := cur[s.Name]
+		if !ok {
+			continue
+		}
+		ownRun := c.Type == "manual" && c.TTY && c.Run == ""
+		if ownRun {
+			mine[s.Name] = s
+		}
+		if at < 0 && ((!ownRun && c.Run != s.Run) || c.Text != s.Text || c.StdinSecret != s.StdinSecret) {
 			at = i
 		}
 	}
@@ -81,7 +92,12 @@ func upgradeLearned(r *recipe.Recipe) bool {
 	var out []recipe.Step
 	for i, s := range r.Steps {
 		if i == at {
-			out = append(out, codexMixinSteps()...)
+			for _, t := range codexMixinSteps() {
+				if m, ok := mine[t.Name]; ok {
+					t.Run, t.Set = m.Run, m.Set
+				}
+				out = append(out, t)
+			}
 		}
 		if !strings.HasPrefix(s.Name, "codex-mixin-") {
 			out = append(out, s)

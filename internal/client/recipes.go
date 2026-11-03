@@ -311,3 +311,41 @@ func (e *Engine) toolsRecipe(rs []*recipe.Recipe) *recipe.Recipe {
 	}
 	return out
 }
+
+// InteractiveStep finds a step of this machine's plan that runs a command
+// in a terminal (manual, tty = true, with run): the only kind `hearth recipe
+// tty` starts. It returns the step and its environment (set: values may be
+// "${secret:NAME}").
+func (e *Engine) InteractiveStep(key string) (recipe.PlanStep, map[string]string, error) {
+	plan, err := e.Plan()
+	if err != nil {
+		return recipe.PlanStep{}, nil, err
+	}
+	var p *recipe.PlanStep
+	for i := range plan {
+		if plan[i].Key == key {
+			p = &plan[i]
+		}
+	}
+	if p == nil {
+		return recipe.PlanStep{}, nil, fmt.Errorf("no step %s in this machine's plan (hearth recipe plan)", key)
+	}
+	if !p.Interactive || p.RunWith == "" || len(p.Commands) != 1 {
+		return recipe.PlanStep{}, nil, fmt.Errorf("step %s is not an interactive step with a command (manual, tty = true, run = ...)", key)
+	}
+	if p.Status == "skipped" {
+		return recipe.PlanStep{}, nil, fmt.Errorf("step %s does not apply to this machine: %s", key, p.Why)
+	}
+	rs, err := LoadRecipes(e.Home, nil)
+	if err != nil {
+		return recipe.PlanStep{}, nil, err
+	}
+	for _, r := range rs {
+		for _, s := range r.Steps {
+			if s.Type == "manual" && recipe.StepKey(r.Name, s) == key {
+				return *p, s.Set, nil
+			}
+		}
+	}
+	return *p, nil, nil
+}
