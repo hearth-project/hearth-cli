@@ -256,28 +256,6 @@ func URLs(lines []string) []string {
 	return out
 }
 
-// Text draws the code one character per module and one line per module
-// row, light modules as █, with a quiet zone of 1 module: it reads right
-// as light text on a dark background. Chat code blocks space their lines
-// (a half-block drawing, two rows per line, no longer scans there), so
-// this is the tightest drawing that still scans in a chat; the PNG is the
-// one to show first.
-func (q *QR) Text() string {
-	n := len(q.Modules)
-	var b strings.Builder
-	for r := -1; r <= n; r++ {
-		for c := -1; c <= n; c++ {
-			if r < 0 || c < 0 || r >= n || c >= n || !q.Modules[r][c] {
-				b.WriteRune('█')
-			} else {
-				b.WriteByte(' ')
-			}
-		}
-		b.WriteByte('\n')
-	}
-	return b.String()
-}
-
 // HalfBlocks draws the code two module rows per line (▀ ▄ █), light
 // modules as glyphs: square and tight in a terminal, where lines touch.
 func (q *QR) HalfBlocks() string {
@@ -303,22 +281,27 @@ func (q *QR) HalfBlocks() string {
 	return b.String()
 }
 
-// QRFromText reads back what Text drew (for a terminal on another machine).
-func QRFromText(s string) *QR {
-	lines := strings.Split(strings.TrimRight(s, "\n"), "\n")
-	n := len(lines) - 2
+// QRFromPNG reads back what PNG drew (scale px per module, a quiet zone
+// of 4 modules): a terminal on another machine prints it with half blocks.
+func QRFromPNG(b []byte, scale int) *QR {
+	img, err := png.Decode(bytes.NewReader(b))
+	if err != nil {
+		return nil
+	}
+	w := img.Bounds().Dx()
+	if w%scale != 0 || w != img.Bounds().Dy() {
+		return nil
+	}
+	n := w/scale - 8
 	if n < 21 {
 		return nil
 	}
 	q := &QR{Modules: make([][]bool, n)}
 	for r := 0; r < n; r++ {
-		row := []rune(lines[r+1])
-		if len(row) != n+2 {
-			return nil
-		}
 		q.Modules[r] = make([]bool, n)
 		for c := 0; c < n; c++ {
-			q.Modules[r][c] = row[c+1] == ' '
+			y, _, _, _ := img.At(img.Bounds().Min.X+(c+4)*scale+scale/2, img.Bounds().Min.Y+(r+4)*scale+scale/2).RGBA()
+			q.Modules[r][c] = y < 0x8000
 		}
 	}
 	return q

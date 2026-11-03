@@ -40,7 +40,6 @@ type ttyReport struct {
 	QRHash  string   `json:"qr_hash,omitempty"`
 	QRPNG   string   `json:"qr_png,omitempty"`   // base64, over ssh only (--png)
 	QRPath  string   `json:"qr_path,omitempty"`  // the PNG on this machine (temporary, 0600)
-	QRText  string   `json:"qr_text,omitempty"`  // the code as text for a chat code block (when images do not show)
 	QRSince int64    `json:"qr_since,omitempty"` // when this code was first seen (unix), to tell how fresh it is
 	URLs    []string `json:"urls,omitempty"`
 	Tail    []string `json:"output_tail,omitempty"`
@@ -66,7 +65,7 @@ func ttyView(home, id string, withPNG bool) (*ttyReport, error) {
 	}
 	r := &ttyReport{ID: id, Key: v.Key, Name: v.Name, Status: v.Status, URLs: v.URLs, Tail: v.Tail, Exit: v.Exit, Check: v.Check, Error: v.Error}
 	if v.Status == "running" && v.Waiting && v.QR != nil {
-		r.Status, r.QRHash, r.QRText, r.qrTerm = "waiting_for_scan", v.QR.Hash, v.QR.Text(), v.QR.HalfBlocks()
+		r.Status, r.QRHash, r.qrTerm = "waiting_for_scan", v.QR.Hash, v.QR.HalfBlocks()
 		r.QRSince = qrSeen(home, id, v.QR.Hash)
 		if withPNG {
 			r.QRPNG = base64.StdEncoding.EncodeToString(v.QR.PNG(8))
@@ -135,7 +134,7 @@ func keepQR(r *ttyReport, out string) {
 func (r *ttyReport) setNext() {
 	switch r.Status {
 	case "waiting_for_scan":
-		r.Next = "show the code to the user NOW, in a message before any other tool call (it expires within minutes): the image qr_path (qr_text only when images do not show); then poll with since = qr_hash"
+		r.Next = "show the code to the user NOW, in a message before any other tool call (it expires within minutes): the image qr_path; then poll with since = qr_hash"
 	case "running", "starting":
 		r.Next = "poll again; if output_tail asks a question, answer with input"
 	case "succeeded":
@@ -209,9 +208,11 @@ func printTTY(r *ttyReport, asJSON bool) error {
 		where = " on " + r.Machine
 	}
 	fmt.Printf("session %s%s: %s\n", r.ID, where, r.Status)
-	if r.qrTerm == "" && r.QRText != "" {
-		if q := ttyrun.QRFromText(r.QRText); q != nil {
-			r.qrTerm = q.HalfBlocks()
+	if r.qrTerm == "" && r.QRPath != "" {
+		if b, err := os.ReadFile(r.QRPath); err == nil {
+			if q := ttyrun.QRFromPNG(b, 8); q != nil {
+				r.qrTerm = q.HalfBlocks()
+			}
 		}
 	}
 	if r.qrTerm != "" {

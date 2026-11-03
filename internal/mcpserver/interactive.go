@@ -49,7 +49,7 @@ func (s *Service) addInteractive(srv *mcp.Server) {
 		if rep.Status == "waiting_for_scan" && rep.QRPath != "" {
 			msg += "\nNOW, before any other tool call, send the user a message with the code (it expires within minutes; the user " +
 				"sees nothing until you write it): the image ![扫码登录](" + rep.QRPath + "), and ask them to scan it with the app the " +
-				"step names. qr_text is only a fallback when images do not show (chat code blocks often space the lines, which can make it unscannable). Only then call poll_interactive_step with " +
+				"step names; do not draw the code as text (chat code blocks space their lines, which makes it unscannable). Only then call poll_interactive_step with " +
 				"since = qr_hash; if it returns a new code, show that one at once the same way. The file is removed when the step ends."
 		}
 		out := text(msg)

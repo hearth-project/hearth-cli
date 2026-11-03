@@ -45,27 +45,14 @@ func TestFindQR(t *testing.T) {
 		if err != nil || img.Bounds().Dx() != (len(rows)+8)*8 {
 			t.Fatalf("%s: png %v", f, err)
 		}
+		if q2 := QRFromPNG(q.PNG(8), 8); q2 == nil || q2.HalfBlocks() != q.HalfBlocks() {
+			t.Fatalf("%s: png does not read back", f)
+		}
 		// The terminal drawing reads back as the same code.
 		back := NewScreen(200, 60)
 		back.Write([]byte(strings.ReplaceAll(q.HalfBlocks(), "\n", "\r\n")))
-		if q2 := back.FindQR(); q2 == nil || q2.Hash != q.Hash {
+		if q3 := back.FindQR(); q3 == nil || q3.Hash != q.Hash {
 			t.Fatalf("%s: half-block drawing does not read back", f)
-		}
-		if q3 := QRFromText(q.Text()); q3 == nil || q3.HalfBlocks() != q.HalfBlocks() {
-			t.Fatalf("%s: text does not read back", f)
-		}
-		// The text drawing: the same modules, one character each.
-		lines := strings.Split(strings.TrimSuffix(q.Text(), "\n"), "\n")
-		if len(lines) != len(rows)+2 {
-			t.Fatalf("%s: text has %d lines", f, len(lines))
-		}
-		for r, line := range rows {
-			got := []rune(lines[r+1])
-			for c, ch := range line {
-				if (got[c+1] == ' ') != (ch == '#') {
-					t.Fatalf("%s: text module %d,%d differs", f, r, c)
-				}
-			}
 		}
 		if u := URLs(s.Text()); len(u) != 1 || !strings.HasPrefix(u[0], "https://login.example.com/qrcode/scan?processId=") {
 			t.Fatalf("%s: urls %v", f, u)
