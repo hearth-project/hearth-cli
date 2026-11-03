@@ -8,6 +8,10 @@ struct MenuView: View {
     var snapshot = false
     @State var expanded: String? = nil
     @State var note: String? = nil
+    /// Height of the machine rows. A MenuBarExtra window sizes itself to its
+    /// content's ideal size and a ScrollView has none, so the list gets this
+    /// height (at most 430) explicitly; without it the list collapses to zero.
+    @State var listHeight: CGFloat = 0
 
     var body: some View {
         VStack(spacing: 0) {
@@ -72,8 +76,12 @@ struct MenuView: View {
                     }
                 }
                 .padding(6)
+                .background(GeometryReader { g in
+                    Color.clear.preference(key: ListHeight.self, value: g.size.height)
+                })
             }
-            .frame(maxHeight: snapshot ? .infinity : 430)
+            .onPreferenceChange(ListHeight.self) { listHeight = $0 }
+            .frame(height: snapshot ? nil : min(max(listHeight, 44), 430))
             .fixedSize(horizontal: false, vertical: snapshot)
         }
     }
@@ -220,4 +228,9 @@ struct MachineRow: View {
         .padding(.trailing, 10)
         .padding(.bottom, 10)
     }
+}
+
+private struct ListHeight: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
 }
