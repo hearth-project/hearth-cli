@@ -256,17 +256,33 @@ func URLs(lines []string) []string {
 	return out
 }
 
-// Text draws the code with half blocks, two modules per line, with a quiet
-// zone of 2 modules: light modules are the glyphs, so it reads right as
-// light text on a dark background (a terminal, a dark code block).
+// Text draws the code one character per module and one line per module
+// row, light modules as █, with a quiet zone of 1 module: it reads right
+// as light text on a dark background. Chat code blocks space their lines
+// (a half-block drawing, two rows per line, no longer scans there), so
+// this is the tightest drawing that still scans in a chat; the PNG is the
+// one to show first.
 func (q *QR) Text() string {
 	n := len(q.Modules)
-	light := func(r, c int) bool {
-		if r < 0 || c < 0 || r >= n || c >= n {
-			return true
+	var b strings.Builder
+	for r := -1; r <= n; r++ {
+		for c := -1; c <= n; c++ {
+			if r < 0 || c < 0 || r >= n || c >= n || !q.Modules[r][c] {
+				b.WriteRune('█')
+			} else {
+				b.WriteByte(' ')
+			}
 		}
-		return !q.Modules[r][c]
+		b.WriteByte('\n')
 	}
+	return b.String()
+}
+
+// HalfBlocks draws the code two module rows per line (▀ ▄ █), light
+// modules as glyphs: square and tight in a terminal, where lines touch.
+func (q *QR) HalfBlocks() string {
+	n := len(q.Modules)
+	light := func(r, c int) bool { return r < 0 || c < 0 || r >= n || c >= n || !q.Modules[r][c] }
 	var b strings.Builder
 	for r := -2; r < n+2; r += 2 {
 		for c := -2; c < n+2; c++ {
@@ -279,10 +295,31 @@ func (q *QR) Text() string {
 			case u:
 				b.WriteRune('▄')
 			default:
-				b.WriteRune(' ')
+				b.WriteByte(' ')
 			}
 		}
 		b.WriteByte('\n')
 	}
 	return b.String()
+}
+
+// QRFromText reads back what Text drew (for a terminal on another machine).
+func QRFromText(s string) *QR {
+	lines := strings.Split(strings.TrimRight(s, "\n"), "\n")
+	n := len(lines) - 2
+	if n < 21 {
+		return nil
+	}
+	q := &QR{Modules: make([][]bool, n)}
+	for r := 0; r < n; r++ {
+		row := []rune(lines[r+1])
+		if len(row) != n+2 {
+			return nil
+		}
+		q.Modules[r] = make([]bool, n)
+		for c := 0; c < n; c++ {
+			q.Modules[r][c] = row[c+1] == ' '
+		}
+	}
+	return q
 }

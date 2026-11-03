@@ -40,7 +40,7 @@ type ttyReport struct {
 	QRHash  string   `json:"qr_hash,omitempty"`
 	QRPNG   string   `json:"qr_png,omitempty"`   // base64, over ssh only (--png)
 	QRPath  string   `json:"qr_path,omitempty"`  // the PNG on this machine (temporary, 0600)
-	QRText  string   `json:"qr_text,omitempty"`  // the code drawn with half blocks (light glyphs), for a code block
+	QRText  string   `json:"qr_text,omitempty"`  // the code as text for a chat code block (when images do not show)
 	QRSince int64    `json:"qr_since,omitempty"` // when this code was first seen (unix), to tell how fresh it is
 	URLs    []string `json:"urls,omitempty"`
 	Tail    []string `json:"output_tail,omitempty"`
@@ -48,6 +48,7 @@ type ttyReport struct {
 	Check   string   `json:"check,omitempty"`
 	Error   string   `json:"error,omitempty"`
 	Next    string   `json:"next,omitempty"`
+	qrTerm  string   // the code for a terminal (printed without --json)
 }
 
 func (r *ttyReport) final() bool {
@@ -65,7 +66,7 @@ func ttyView(home, id string, withPNG bool) (*ttyReport, error) {
 	}
 	r := &ttyReport{ID: id, Key: v.Key, Name: v.Name, Status: v.Status, URLs: v.URLs, Tail: v.Tail, Exit: v.Exit, Check: v.Check, Error: v.Error}
 	if v.Status == "running" && v.Waiting && v.QR != nil {
-		r.Status, r.QRHash, r.QRText = "waiting_for_scan", v.QR.Hash, v.QR.Text()
+		r.Status, r.QRHash, r.QRText, r.qrTerm = "waiting_for_scan", v.QR.Hash, v.QR.Text(), v.QR.HalfBlocks()
 		r.QRSince = qrSeen(home, id, v.QR.Hash)
 		if withPNG {
 			r.QRPNG = base64.StdEncoding.EncodeToString(v.QR.PNG(8))
@@ -208,8 +209,16 @@ func printTTY(r *ttyReport, asJSON bool) error {
 		where = " on " + r.Machine
 	}
 	fmt.Printf("session %s%s: %s\n", r.ID, where, r.Status)
+	if r.qrTerm == "" && r.QRText != "" {
+		if q := ttyrun.QRFromText(r.QRText); q != nil {
+			r.qrTerm = q.HalfBlocks()
+		}
+	}
+	if r.qrTerm != "" {
+		fmt.Print(r.qrTerm)
+	}
 	if r.QRPath != "" {
-		fmt.Println("scan the code:", r.QRPath)
+		fmt.Println("scan the code above, or the image:", r.QRPath)
 	}
 	for _, u := range r.URLs {
 		fmt.Println("link:", u)
