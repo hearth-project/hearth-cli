@@ -33,6 +33,7 @@ final class ConsoleController: NSObject, WKNavigationDelegate, WKUIDelegate {
                          styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
                          backing: .buffered, defer: false)
         w.title = "Hearth 控制台"
+        w.titleVisibility = .hidden // the page has its own header; the title stays for the Window menu
         w.titlebarAppearsTransparent = true
         w.isReleasedWhenClosed = false
         w.minSize = NSSize(width: 900, height: 600)
@@ -168,16 +169,13 @@ final class ConsoleController: NSObject, WKNavigationDelegate, WKUIDelegate {
     }
 }
 
-/// The window's content: the console page under a slim native bar that
-/// follows the system appearance, like the console's own light/dark theme.
+/// The window's content: the console page under a slim native bar (traffic
+/// lights, reload, open in browser) that follows the system appearance.
 struct ConsoleShell: View {
     let web: WKWebView
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 8) {
-                Spacer().frame(width: 70) // traffic lights
-                AppTile(size: 18)
-                Text("Hearth 控制台").font(.system(size: 13, weight: .semibold))
                 Spacer()
                 Button { ConsoleController.shared.reload() } label: { Image(systemName: "arrow.clockwise") }
                     .help("重新加载")
