@@ -36,7 +36,7 @@ final class ConsoleController: NSObject, WKNavigationDelegate, WKUIDelegate {
         w.titlebarAppearsTransparent = true
         w.isReleasedWhenClosed = false
         w.minSize = NSSize(width: 900, height: 600)
-        w.backgroundColor = NSColor(red: 0.07, green: 0.08, blue: 0.10, alpha: 1)
+        w.backgroundColor = .windowBackgroundColor
         w.contentView = NSHostingView(rootView: ConsoleShell(web: web))
         w.center()
         w.setFrameAutosaveName("HearthConsole")
@@ -86,8 +86,9 @@ final class ConsoleController: NSObject, WKNavigationDelegate, WKUIDelegate {
         } catch {
             let msg = error.localizedDescription.replacingOccurrences(of: "<", with: "&lt;")
             web?.loadHTMLString("""
-            <html><body style="font:14px -apple-system;color:#c9ccd1;background:#121418;display:flex;align-items:center;justify-content:center;height:90vh">
-            <div style="text-align:center;max-width:460px"><div style="font-size:28px">🔥</div><p>打不开控制台</p><p style="color:#8b9099">\(msg)</p></div></body></html>
+            <html><head><meta name="color-scheme" content="light dark"></head>
+            <body style="font:14px -apple-system;display:flex;align-items:center;justify-content:center;height:90vh">
+            <div style="text-align:center;max-width:460px"><div style="font-size:28px">🔥</div><p>打不开控制台</p><p style="opacity:.6">\(msg)</p></div></body></html>
             """, baseURL: nil)
         }
     }
@@ -167,15 +168,16 @@ final class ConsoleController: NSObject, WKNavigationDelegate, WKUIDelegate {
     }
 }
 
-/// The window's content: the console page under a slim native bar.
+/// The window's content: the console page under a slim native bar that
+/// follows the system appearance, like the console's own light/dark theme.
 struct ConsoleShell: View {
     let web: WKWebView
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 10) {
+            HStack(spacing: 8) {
                 Spacer().frame(width: 70) // traffic lights
-                Image(systemName: "flame.fill").foregroundStyle(Theme.accent)
-                Text("Hearth 控制台").font(.system(size: 13, weight: .semibold)).foregroundStyle(.white.opacity(0.9))
+                AppTile(size: 18)
+                Text("Hearth 控制台").font(.system(size: 13, weight: .semibold))
                 Spacer()
                 Button { ConsoleController.shared.reload() } label: { Image(systemName: "arrow.clockwise") }
                     .help("重新加载")
@@ -183,10 +185,11 @@ struct ConsoleShell: View {
                     .help("在浏览器中打开")
             }
             .buttonStyle(.borderless)
-            .foregroundStyle(.white.opacity(0.75))
+            .foregroundStyle(.secondary)
             .padding(.horizontal, 12)
             .frame(height: 38)
-            .background(Color(red: 0.07, green: 0.08, blue: 0.10))
+            .background(.bar)
+            .overlay(alignment: .bottom) { Divider().opacity(0.6) }
             WebView(web: web)
         }
         .ignoresSafeArea()
