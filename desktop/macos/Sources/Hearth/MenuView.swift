@@ -112,6 +112,7 @@ struct MenuView: View {
                 })
             }
             .onPreferenceChange(ListHeight.self) { listHeight = $0 }
+            .scrollIndicators(.never) // .hidden still shows them when a mouse is connected
             .frame(height: snapshot ? nil : min(max(listHeight, 44), maxListHeight))
             .fixedSize(horizontal: false, vertical: snapshot)
         }

@@ -23,6 +23,7 @@ final class ConsoleController: NSObject, WKNavigationDelegate, WKUIDelegate {
         }
         let cfg = WKWebViewConfiguration()
         cfg.websiteDataStore = .default()
+        cfg.userContentController.addUserScript(Self.hideScrollbars)
         let web = WKWebView(frame: .zero, configuration: cfg)
         web.navigationDelegate = self
         web.uiDelegate = self
@@ -46,6 +47,23 @@ final class ConsoleController: NSObject, WKNavigationDelegate, WKUIDelegate {
         NSApp.activate(ignoringOtherApps: true)
         Task { await signIn() }
     }
+
+    /// No scroll bars in the console (pages still scroll). The page's CSP
+    /// allows no inline styles, so the rule goes in as a constructed style
+    /// sheet, or through the CSSOM on older WebKit.
+    private static let hideScrollbars = WKUserScript(source: """
+        (() => {
+          const css = "*{scrollbar-width:none}::-webkit-scrollbar{display:none;width:0;height:0}";
+          try {
+            const s = new CSSStyleSheet();
+            s.replaceSync(css);
+            document.adoptedStyleSheets = [...document.adoptedStyleSheets, s];
+          } catch (e) {
+            const s = document.styleSheets[0];
+            if (s) for (const r of css.split("}").filter(Boolean)) { try { s.insertRule(r + "}", s.cssRules.length); } catch (e) {} }
+          }
+        })();
+        """, injectionTime: .atDocumentEnd, forMainFrameOnly: false)
 
     @MainActor func reload() {
         if web?.url == nil { Task { await signIn() } } else { web?.reload() }
