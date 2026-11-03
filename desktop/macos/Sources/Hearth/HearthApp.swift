@@ -42,15 +42,26 @@ struct MenuBarLabel: View {
     }
 }
 
-/// Start Hearth when the user logs in (macOS 13 login items).
-struct LoginItemToggle: View {
+/// Start Hearth when the user logs in (macOS 13 login items), as a row of
+/// the dropdown's bottom menu with a switch at the end.
+struct LoginItemRow: View {
     @State private var on = SMAppService.mainApp.status == .enabled
+    @State private var hover = false
     var body: some View {
-        Toggle("登录时启动", isOn: Binding(get: { on }, set: { v in
-            do {
-                if v { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
-            } catch {}
-            on = SMAppService.mainApp.status == .enabled
-        }))
+        Button { set(!on) } label: {
+            MenuRowLabel(icon: "sunrise", title: "登录时启动", hover: hover) {
+                Toggle("", isOn: Binding(get: { on }, set: set))
+                    .toggleStyle(.switch).controlSize(.mini).labelsHidden()
+            }
+        }
+        .buttonStyle(.plain)
+        .onHover { hover = $0 }
+    }
+
+    private func set(_ v: Bool) {
+        do {
+            if v { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
+        } catch {}
+        on = SMAppService.mainApp.status == .enabled
     }
 }

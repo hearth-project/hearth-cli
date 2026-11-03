@@ -23,6 +23,14 @@ struct MenuView: View {
         }
         .frame(width: 360)
         .background(snapshot ? AnyView(Color(nsColor: .windowBackgroundColor)) : AnyView(Color.clear))
+        .background(snapshot ? nil : MenuWindowAnchor())
+    }
+
+    /// The list never makes the dropdown taller than the screen below the
+    /// menu bar: header and footer take about 230 points.
+    private var maxListHeight: CGFloat {
+        let screen = NSScreen.main?.visibleFrame.height ?? 800
+        return max(160, min(460, screen - 260))
     }
 
     private var header: some View {
@@ -33,23 +41,14 @@ struct MenuView: View {
                 Text(summary).font(.system(size: 11)).foregroundStyle(.secondary)
             }
             Spacer()
-            Button {
-                Task { await store.refresh() }
-            } label: {
-                Image(systemName: "arrow.clockwise")
-                    .font(.system(size: 11, weight: .semibold))
-                    .rotationEffect(.degrees(store.loading ? 180 : 0))
-                    .animation(.easeInOut(duration: 0.4), value: store.loading)
-                    .frame(width: 26, height: 26)
-                    .background(Circle().fill(Color.primary.opacity(0.06)))
+            if store.loading && store.list != nil {
+                ProgressView().controlSize(.small).scaleEffect(0.8)
             }
-            .buttonStyle(.plain)
-            .foregroundStyle(.secondary)
-            .help("刷新")
         }
         .padding(.horizontal, 14)
         .padding(.top, 12)
         .padding(.bottom, 8)
+        .help(store.list.map { "\($0.email) · \($0.server)" } ?? "")
     }
 
     private var summary: String {
@@ -102,8 +101,19 @@ struct MenuView: View {
                 })
             }
             .onPreferenceChange(ListHeight.self) { listHeight = $0 }
-            .frame(height: snapshot ? nil : min(max(listHeight, 44), 460))
+            .frame(height: snapshot ? nil : min(max(listHeight, 44), maxListHeight))
             .fixedSize(horizontal: false, vertical: snapshot)
+            .overlay(alignment: .bottom) {
+                if let n = note {
+                    Text(n).font(.system(size: 11, weight: .medium)).lineLimit(1)
+                        .padding(.horizontal, 10).padding(.vertical, 5)
+                        .background(Capsule().fill(.regularMaterial))
+                        .overlay(Capsule().strokeBorder(Color.primary.opacity(0.08)))
+                        .shadow(color: .black.opacity(0.12), radius: 4, y: 1)
+                        .padding(.bottom, 8)
+                        .transition(.opacity)
+                }
+            }
         }
     }
 
@@ -133,47 +143,119 @@ struct MenuView: View {
         }
     }
 
+    /// Menu-style rows at the bottom, like a native status menu.
     private var footer: some View {
-        HStack(spacing: 8) {
-            Button(action: openConsole) {
-                Label("打开控制台", systemImage: "macwindow")
-                    .font(.system(size: 12, weight: .medium))
+        VStack(spacing: 0) {
+            MenuRow(icon: "macwindow", title: "打开控制台…", action: openConsole)
+            MenuRow(icon: "arrow.clockwise", title: "刷新", action: { Task { await store.refresh() } }) {
+                if let err = store.error, store.list != nil {
+                    Label("刷新失败", systemImage: "exclamationmark.triangle.fill")
+                        .font(.system(size: 11)).foregroundStyle(Theme.warn).help(err)
+                } else if let u = store.updated {
+                    Text("更新于 " + u.formatted(.dateTime.hour(.twoDigits(amPM: .omitted)).minute(.twoDigits).locale(Locale(identifier: "zh_CN"))))
+                        .font(.system(size: 11)).foregroundStyle(.tertiary)
+                }
             }
-            .modifier(PrimaryButton())
-            if let n = note {
-                Text(n).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
-            } else if let err = store.error, store.list != nil {
-                Label("刷新失败", systemImage: "exclamationmark.triangle.fill")
-                    .font(.system(size: 11))
-                    .foregroundStyle(Theme.warn)
-                    .help(err)
-            } else if let u = store.updated {
-                Text("更新于 " + u.formatted(.dateTime.hour(.twoDigits(amPM: .omitted)).minute(.twoDigits).locale(Locale(identifier: "zh_CN"))))
-                    .font(.system(size: 11)).foregroundStyle(.tertiary)
-            }
-            Spacer()
-            Menu {
-                Button("刷新") { Task { await store.refresh() } }
-                LoginItemToggle()
-                Divider()
-                Button("退出 Hearth") { NSApp.terminate(nil) }
-            } label: {
-                Image(systemName: "gearshape").font(.system(size: 13))
-            }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .fixedSize()
-            .foregroundStyle(.secondary)
+            LoginItemRow()
+            Divider().opacity(0.5).padding(.horizontal, 8).padding(.vertical, 4)
+            MenuRow(icon: "power", title: "退出 Hearth", action: { NSApp.terminate(nil) })
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 6)
         .task(id: note) {
             if note != nil {
                 try? await Task.sleep(nanoseconds: 3_000_000_000)
-                note = nil
+                withAnimation { note = nil }
             }
         }
     }
+}
+
+/// One row of the bottom menu: an icon, a title, optional trailing content,
+/// highlighted under the pointer.
+struct MenuRow<Trailing: View>: View {
+    var icon: String
+    var title: String
+    var action: () -> Void
+    @ViewBuilder var trailing: () -> Trailing
+    @State private var hover = false
+
+    var body: some View {
+        Button(action: action) {
+            MenuRowLabel(icon: icon, title: title, hover: hover, trailing: trailing)
+        }
+        .buttonStyle(.plain)
+        .onHover { hover = $0 }
+    }
+}
+
+extension MenuRow where Trailing == EmptyView {
+    init(icon: String, title: String, action: @escaping () -> Void) {
+        self.init(icon: icon, title: title, action: action, trailing: { EmptyView() })
+    }
+}
+
+struct MenuRowLabel<Trailing: View>: View {
+    var icon: String
+    var title: String
+    var hover: Bool
+    @ViewBuilder var trailing: () -> Trailing
+
+    var body: some View {
+        HStack(spacing: 9) {
+            Image(systemName: icon)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(.secondary)
+                .frame(width: 18)
+            Text(title).font(.system(size: 13))
+            Spacer(minLength: 8)
+            trailing()
+        }
+        .padding(.horizontal, 8)
+        .frame(height: 28)
+        .contentShape(Rectangle())
+        .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(Color.primary.opacity(hover ? 0.08 : 0)))
+    }
+}
+
+/// Keeps the dropdown hanging from the menu bar. When its content grows (a
+/// row opens, the list gets longer) AppKit keeps the window's bottom edge and
+/// grows it upwards, under the menu bar; this puts the top edge back.
+struct MenuWindowAnchor: NSViewRepresentable {
+    final class Tracker: NSView {
+        private var top: CGFloat?
+        private var tokens: [NSObjectProtocol] = []
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            tokens.forEach(NotificationCenter.default.removeObserver)
+            tokens = []
+            guard let w = window else { return }
+            let nc = NotificationCenter.default
+            tokens.append(nc.addObserver(forName: NSWindow.didBecomeKeyNotification, object: w, queue: .main) { [weak self] _ in
+                self?.top = nil
+                self?.pin(w)
+            })
+            tokens.append(nc.addObserver(forName: NSWindow.didResizeNotification, object: w, queue: .main) { [weak self] _ in
+                self?.pin(w)
+            })
+            pin(w)
+        }
+
+        private func pin(_ w: NSWindow) {
+            let limit = (w.screen ?? NSScreen.main)?.visibleFrame.maxY ?? w.frame.maxY
+            let want = min(top ?? w.frame.maxY, limit)
+            top = want
+            if abs(w.frame.maxY - want) > 0.5 {
+                w.setFrameTopLeftPoint(NSPoint(x: w.frame.minX, y: want))
+            }
+        }
+
+        deinit { tokens.forEach(NotificationCenter.default.removeObserver) }
+    }
+
+    func makeNSView(context: Context) -> Tracker { Tracker() }
+    func updateNSView(_ nsView: Tracker, context: Context) {}
 }
 
 /// The primary action: Liquid Glass on macOS 26, the bordered style before
