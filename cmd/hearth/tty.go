@@ -134,7 +134,7 @@ func keepQR(r *ttyReport, out string) {
 func (r *ttyReport) setNext() {
 	switch r.Status {
 	case "waiting_for_scan":
-		r.Next = "show the code to the user NOW, in a message before any other tool call (it expires within minutes): the image qr_path, and qr_text in a code block; then poll with since = qr_hash"
+		r.Next = "show the code to the user NOW, in a message before any other tool call (it expires within minutes): the image qr_path (qr_text only when images do not show); then poll with since = qr_hash"
 	case "running", "starting":
 		r.Next = "poll again; if output_tail asks a question, answer with input"
 	case "succeeded":
