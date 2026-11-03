@@ -45,6 +45,12 @@ func TestFindQR(t *testing.T) {
 		if err != nil || img.Bounds().Dx() != (len(rows)+8)*8 {
 			t.Fatalf("%s: png %v", f, err)
 		}
+		// The text drawing reads back as the same code.
+		back := NewScreen(200, 60)
+		back.Write([]byte(strings.ReplaceAll(q.Text(), "\n", "\r\n")))
+		if q2 := back.FindQR(); q2 == nil || q2.Hash != q.Hash {
+			t.Fatalf("%s: text drawing does not read back", f)
+		}
 		if u := URLs(s.Text()); len(u) != 1 || !strings.HasPrefix(u[0], "https://login.example.com/qrcode/scan?processId=") {
 			t.Fatalf("%s: urls %v", f, u)
 		}

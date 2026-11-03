@@ -255,3 +255,34 @@ func URLs(lines []string) []string {
 	}
 	return out
 }
+
+// Text draws the code with half blocks, two modules per line, with a quiet
+// zone of 2 modules: light modules are the glyphs, so it reads right as
+// light text on a dark background (a terminal, a dark code block).
+func (q *QR) Text() string {
+	n := len(q.Modules)
+	light := func(r, c int) bool {
+		if r < 0 || c < 0 || r >= n || c >= n {
+			return true
+		}
+		return !q.Modules[r][c]
+	}
+	var b strings.Builder
+	for r := -2; r < n+2; r += 2 {
+		for c := -2; c < n+2; c++ {
+			t, u := light(r, c), light(r+1, c)
+			switch {
+			case t && u:
+				b.WriteRune('█')
+			case t:
+				b.WriteRune('▀')
+			case u:
+				b.WriteRune('▄')
+			default:
+				b.WriteRune(' ')
+			}
+		}
+		b.WriteByte('\n')
+	}
+	return b.String()
+}
