@@ -255,3 +255,54 @@ func URLs(lines []string) []string {
 	}
 	return out
 }
+
+// HalfBlocks draws the code two module rows per line (▀ ▄ █), light
+// modules as glyphs: square and tight in a terminal, where lines touch.
+func (q *QR) HalfBlocks() string {
+	n := len(q.Modules)
+	light := func(r, c int) bool { return r < 0 || c < 0 || r >= n || c >= n || !q.Modules[r][c] }
+	var b strings.Builder
+	for r := -2; r < n+2; r += 2 {
+		for c := -2; c < n+2; c++ {
+			t, u := light(r, c), light(r+1, c)
+			switch {
+			case t && u:
+				b.WriteRune('█')
+			case t:
+				b.WriteRune('▀')
+			case u:
+				b.WriteRune('▄')
+			default:
+				b.WriteByte(' ')
+			}
+		}
+		b.WriteByte('\n')
+	}
+	return b.String()
+}
+
+// QRFromPNG reads back what PNG drew (scale px per module, a quiet zone
+// of 4 modules): a terminal on another machine prints it with half blocks.
+func QRFromPNG(b []byte, scale int) *QR {
+	img, err := png.Decode(bytes.NewReader(b))
+	if err != nil {
+		return nil
+	}
+	w := img.Bounds().Dx()
+	if w%scale != 0 || w != img.Bounds().Dy() {
+		return nil
+	}
+	n := w/scale - 8
+	if n < 21 {
+		return nil
+	}
+	q := &QR{Modules: make([][]bool, n)}
+	for r := 0; r < n; r++ {
+		q.Modules[r] = make([]bool, n)
+		for c := 0; c < n; c++ {
+			y, _, _, _ := img.At(img.Bounds().Min.X+(c+4)*scale+scale/2, img.Bounds().Min.Y+(r+4)*scale+scale/2).RGBA()
+			q.Modules[r][c] = y < 0x8000
+		}
+	}
+	return q
+}
