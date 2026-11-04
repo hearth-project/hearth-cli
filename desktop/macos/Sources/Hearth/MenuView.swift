@@ -25,6 +25,10 @@ struct MenuView: View {
         .frame(width: 360)
         .background(snapshot ? AnyView(Color(nsColor: .windowBackgroundColor)) : AnyView(Color.clear))
         .background(snapshot ? nil : MenuWindowAnchor())
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in
+            // Opening the menu after logging in elsewhere: pick the login up now.
+            if store.loginExpired { Task { await store.refresh() } }
+        }
     }
 
     /// Makes a one-time install command and copies it; the command is never shown.
@@ -63,6 +67,7 @@ struct MenuView: View {
     }
 
     private var summary: String {
+        if store.loginExpired { return "登录已过期" }
         guard store.list != nil else { return store.error == nil ? "正在读取机器…" : "读取失败" }
         if store.machines.isEmpty { return "没有在线的机器" }
         var s = "\(store.onlineCount) 台在线"
@@ -78,7 +83,23 @@ struct MenuView: View {
     }
 
     @ViewBuilder private var content: some View {
-        if let err = store.error, store.list == nil {
+        if store.loginExpired {
+            VStack(spacing: 10) {
+                Image(systemName: "person.crop.circle.badge.exclamationmark")
+                    .font(.system(size: 26)).foregroundStyle(Theme.warn)
+                Text("登录已过期").font(.system(size: 13, weight: .semibold))
+                Text("重新登录后才能查看机器。主密码在终端里输入，不经过这个应用。")
+                    .font(.system(size: 11)).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                Button("重新登录") {
+                    note = Actions.loginInTerminal()
+                    Task { await store.waitForLogin() }
+                }
+                .modifier(PrimaryButton())
+                .controlSize(.large)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 24).padding(.vertical, 26)
+        } else if let err = store.error, store.list == nil {
             VStack(spacing: 8) {
                 Image(systemName: "exclamationmark.triangle").font(.system(size: 20)).foregroundStyle(Theme.warn)
                 Text(err).font(.system(size: 12)).foregroundStyle(.secondary).multilineTextAlignment(.center)
@@ -165,13 +186,13 @@ struct MenuView: View {
             MenuRow(icon: "plus.rectangle.on.rectangle", title: "新增开发机", action: copyInstallCommand) {
                 if copying { ProgressView().controlSize(.small).scaleEffect(0.7) }
             }
-            .disabled(copying)
+            .disabled(copying || store.loginExpired)
             .help("复制一条一次性命令，在新机器上运行即安装 Hearth 并登录")
             MenuRow(icon: "arrow.clockwise", title: "刷新", action: { Task { await store.refresh() } }) {
                 if let err = store.error, store.list != nil {
                     Label("刷新失败", systemImage: "exclamationmark.triangle.fill")
                         .font(.system(size: 11)).foregroundStyle(Theme.warn).help(err)
-                } else if let u = store.updated {
+                } else if let u = store.updated, !store.loginExpired {
                     Text("更新于 " + u.formatted(.dateTime.hour(.twoDigits(amPM: .omitted)).minute(.twoDigits).locale(Locale(identifier: "zh_CN"))))
                         .font(.system(size: 11)).foregroundStyle(.tertiary)
                 }

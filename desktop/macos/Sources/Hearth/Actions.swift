@@ -31,6 +31,23 @@ enum Actions {
         return "打不开终端"
     }
 
+    /// Opens Terminal running `hearth login`, which asks for the master
+    /// password (it must not pass through this app).
+    static func loginInTerminal() -> String {
+        guard let bin = HearthCLI.binary else { return "没有找到 hearth 命令" }
+        let quoted = "'" + bin.replacingOccurrences(of: "'", with: "'\\''") + "'"
+        let script = "#!/bin/zsh\nclear\n\(quoted) login\necho\nread -k 1 '?按任意键关闭…'\nexit\n"
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("hearth-login.command")
+        do {
+            try script.write(to: url, atomically: true, encoding: .utf8)
+            try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: url.path)
+        } catch {
+            return "打不开终端：\(error.localizedDescription)"
+        }
+        NSWorkspace.shared.open(url)
+        return "已在终端打开 hearth login"
+    }
+
     static func copy(_ s: String) {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(s, forType: .string)

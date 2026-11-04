@@ -13,12 +13,16 @@ final class ConsoleController: NSObject, WKNavigationDelegate, WKUIDelegate {
     private var web: WKWebView?
     private var pinnedCert: Data?
     private var serverHost: String?
+    /// When the console last signed in with a fresh link. The page's session
+    /// cookie lives 12 hours; the device login behind the menu lives 30 days.
+    private var lastSignIn: Date?
+    private var keyObserver: NSObjectProtocol?
 
     @MainActor func show() {
         if let w = window {
             w.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
-            if web?.url == nil { Task { await signIn() } }
+            if web?.url == nil { Task { await signIn() } } else { ensureSignedIn() }
             return
         }
         let cfg = WKWebViewConfiguration()
@@ -43,6 +47,9 @@ final class ConsoleController: NSObject, WKNavigationDelegate, WKUIDelegate {
         w.center()
         w.setFrameAutosaveName("HearthConsole")
         window = w
+        keyObserver = NotificationCenter.default.addObserver(forName: NSWindow.didBecomeKeyNotification, object: w, queue: .main) { [weak self] _ in
+            Task { @MainActor in self?.ensureSignedIn() }
+        }
         w.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         Task { await signIn() }
@@ -66,7 +73,21 @@ final class ConsoleController: NSObject, WKNavigationDelegate, WKUIDelegate {
         """, injectionTime: .atDocumentEnd, forMainFrameOnly: false)
 
     @MainActor func reload() {
-        if web?.url == nil { Task { await signIn() } } else { web?.reload() }
+        // A fresh link each time: reloading the old page would show the
+        // login form once its session has expired.
+        Task { await signIn() }
+    }
+
+    /// If the page sits on its login form (the web session expired while
+    /// this Mac's login is still good), signs in again with a fresh link.
+    /// At most once every 15 seconds, so a server that refuses the link
+    /// does not loop.
+    @MainActor func ensureSignedIn() {
+        guard let web, web.url != nil else { return }
+        if let t = lastSignIn, Date().timeIntervalSince(t) < 15 { return }
+        web.evaluateJavaScript("(()=>{const a=document.getElementById('auth');return !!a&&!a.classList.contains('hidden')})()") { [weak self] r, _ in
+            if (r as? Bool) == true { Task { @MainActor in await self?.signIn() } }
+        }
     }
 
     @MainActor func openInBrowser() {
@@ -97,13 +118,15 @@ final class ConsoleController: NSObject, WKNavigationDelegate, WKUIDelegate {
     }
 
     @MainActor private func signIn() async {
+        lastSignIn = Date()
         do {
             let l = try await Self.link()
             serverHost = l.url.host
             pinnedCert = Self.der(fromPEMFile: l.ca)
             web?.load(URLRequest(url: l.withKey))
         } catch {
-            let msg = error.localizedDescription.replacingOccurrences(of: "<", with: "&lt;")
+            var msg = error.localizedDescription.replacingOccurrences(of: "<", with: "&lt;")
+            if case HearthCLI.Failure.loginExpired = error { msg = "登录已过期。点菜单栏 Hearth 里的「重新登录」，登录后再点这里的刷新。" }
             web?.loadHTMLString("""
             <html><head><meta name="color-scheme" content="light dark"></head>
             <body style="font:14px -apple-system;display:flex;align-items:center;justify-content:center;height:90vh">
