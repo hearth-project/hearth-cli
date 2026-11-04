@@ -102,26 +102,59 @@ curl -fsSL -k https://<server>:8787/install.sh | sh -s -- --invite <code>    # f
 The installer puts `hearth` in `~/.local/bin`, adds the `hearth` skill to Codex / Claude Code / Comate, asks for your master password and your working directory on this machine, and starts SSH and background sync; conversations, credentials and the agent setup come when you ask for them:
 
 ```text
-hearth 0.1.0 installed to ~/.local/bin/hearth
-Hearth setup on gpu-node-13 (linux x86_64, 8 x NVIDIA H800)
-  account      you@example.com (from comate login you)
-  Master password:
-  login        ok, this machine is device gpu-node-13
-  workspace    /data/you, as on gpu-node-12 (GPU h800)
-               Enter to use it, or type another directory:
-  library      42 skills, 3 agents for codex
-  on demand    conversations (hearth restore --last 10), credentials (your agent asks hearth when a skill needs one),
-               shell lines (hearth shell restore), agent setup ("恢复这台机器的 Codex 环境"); everything now: hearth setup --full
-  sync         on (background)
-  ssh          h800-gpu-node-13 (10.0.0.13:8022)
+Downloading hearth for linux-amd64 ... done
+Installed hearth 0.1.0 to ~/.local/bin/hearth
 
-Next
-  1. Set up the software (codex, codex-mixin and 2 more): on any machine with Hearth, tell its agent
-     "恢复 h800-gpu-node-13 的 Codex 环境"
-  Anything else: ask Codex "用 hearth" · hearth status · details: ~/.cache/hearth/setup-….log
+Welcome to Hearth 0.1.0
+
+This sets up gpu-node-13 (linux x86_64, 8 x NVIDIA H800) from your other machines.
+
+  account     you@example.com (from comate login you)
+  password
+  login       signed in
+
+What should this machine be called?
+The name is shown in your machine list and is its SSH host name.
+Give it the name of an offline machine to continue that one (its conversations and workspace).
+
+  - Press ENTER to keep the name below
+  - Or type another
+
+[h800-gpu-node-13] >>>
+
+Where do you work on this machine?
+Hearth keeps this machine's state and your agents' homes there.
+The directory below is where gpu-node-12 (GPU h800) works.
+
+  - Press ENTER to use the directory below
+  - Or type another directory
+
+[/data/you] >>>
+
+Setting up this machine ... done
+
+  name        h800-gpu-node-13 (gpu-node-13)
+  workspace   /data/you
+  library     42 skills and 3 agents, linked into codex
+  sync        on, in the background
+  ssh         h800-gpu-node-13 (10.0.0.13:8022)
+
+Hearth is ready on h800-gpu-node-13.
+
+Next steps:
+
+  1. Set up the software (codex, codex-mixin and 2 more).
+     On any machine with Hearth, tell its agent:
+
+       恢复 h800-gpu-node-13 的 Codex 环境
+
+Conversations, credentials and shell lines come when you ask for them:
+hearth restore --last 10, or hearth setup --full for everything now.
+Anything else: ask Codex "用 hearth", or run hearth status.
+Log: ~/.cache/hearth/setup-….log
 ```
 
-The working directory proposed is the one your machines of the same kind use (same GPU model, else the same GPU family, else the same OS and CPU); with none alike it is your home. A directory on a disk this machine does not mount is not proposed. Press Enter to take it or type another.
+The working directory proposed is the one your machines of the same kind use (same GPU model, else the same GPU family, else the same OS and CPU); with none alike it is your home. A directory on a disk this machine does not mount is not proposed. Press Enter to take it or type another. A machine that continues an offline one (same host name, or given its name) goes straight to that machine's workspace.
 
 ### 3. Restore the software from another machine
 

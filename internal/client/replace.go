@@ -3,6 +3,7 @@ package client
 import (
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -82,6 +83,10 @@ func (e *Engine) NameMachine(id, alias string) (*api.Device, error) {
 		if ds, err := e.API.Devices(); err == nil {
 			if d, ok := DeviceNamed(ds, id, alias); ok && !d.Online {
 				old = &d
+			} else if ok {
+				// Online under that name (also one only made from its host
+				// name, which the server does not compare).
+				return nil, &HTTPError{Status: http.StatusConflict, Body: api.Error{Error: "another of your machines has that name"}}
 			}
 		}
 	}
