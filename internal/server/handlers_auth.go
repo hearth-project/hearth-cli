@@ -63,6 +63,7 @@ func (s *Server) routes() {
 	m.HandleFunc("PUT /v1/devices/{id}/alias", s.authed(func(w http.ResponseWriter, r *http.Request) {
 		s.putDeviceAlias(w, r, userOf(r))
 	}))
+	m.HandleFunc("POST /v1/devices/self/replace", s.authed(s.handleReplaceDevice))
 	// The heartbeat answers how many console changes wait for this user.
 	m.HandleFunc("POST /v1/devices/self/heartbeat", s.authed(func(w http.ResponseWriter, r *http.Request) {
 		var hb api.DeviceHeartbeat
@@ -328,6 +329,28 @@ func (s *Server) putDeviceAlias(w http.ResponseWriter, r *http.Request, uid int6
 
 func (s *Server) handleRevokeDevice(w http.ResponseWriter, r *http.Request) {
 	if err := s.st.revokeDevice(userOf(r), r.PathValue("id")); err != nil {
+		s.writeStoreErr(w, err)
+		return
+	}
+	s.auth.purgeUser(userOf(r))
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleReplaceDevice: this device takes over one of the user's offline
+// machines (body {"device": id, "alias": name}): a machine reinstalled
+// with the same host name, or a new one given an old machine's name. The
+// old device is logged out and leaves the list; its conversations count
+// as this device's.
+func (s *Server) handleReplaceDevice(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Device string `json:"device"`
+		Alias  string `json:"alias"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	since := s.now() - int64(onlineWindow.Seconds())
+	if err := s.st.replaceDevice(userOf(r), deviceOf(r), strings.TrimSpace(req.Device), strings.TrimSpace(req.Alias), since); err != nil {
 		s.writeStoreErr(w, err)
 		return
 	}

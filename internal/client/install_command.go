@@ -114,3 +114,12 @@ func WithInstallToken(cmd, email, token string) string {
 	}
 	return cmd + " --email " + q + " --token " + token
 }
+
+// WithReplace makes an install command a reinstall of device id: the new
+// machine takes that offline machine's place (hearth setup --replace).
+func WithReplace(cmd, id string) string {
+	if strings.HasSuffix(cmd, "| sh") {
+		cmd = strings.TrimSuffix(cmd, "| sh") + "| sh -s --"
+	}
+	return cmd + " --replace " + id
+}

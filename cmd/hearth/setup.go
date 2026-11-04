@@ -4,12 +4,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
 
+	"github.com/hearth-project/hearth-cli/internal/api"
 	"github.com/hearth-project/hearth-cli/internal/client"
 	"github.com/hearth-project/hearth-cli/internal/recipe"
 )
@@ -20,7 +22,8 @@ func setupCmd() *cobra.Command {
 	var server, email, device, caCert, invite, team string
 	var installToken string
 	var insecure, noDaemon, force, yes, create, switchLogin, noRegister, noImport, full, newLogin bool
-	var alias string
+	var alias, replace string
+	var replaced *takenOver
 	setupLast := defaultRestoreLast
 	c := &cobra.Command{
 		Use:   "setup",
@@ -151,9 +154,14 @@ func setupCmd() *cobra.Command {
 					_ = client.AutoEnableIdentityLogin(home)
 				}
 				out.line("login", "ok, this machine is device "+cfg.DeviceName+via)
+				// A machine reinstalled (its disk reset) with the same host
+				// name, or one that takes an old machine's place (--replace,
+				// the console's reinstall command): it takes over the old,
+				// offline entry, and its workspace is proposed.
+				replaced = chooseReplaced(out, home, replace)
 				// Where this person works on this machine: proposed from their
 				// machines of the same kind, confirmed (or changed) by them.
-				home = chooseSetupWorkspace(out, home, cfg)
+				home = chooseSetupWorkspace(out, home, cfg, replaced)
 				// A new machine restores credentials, conversations, shell
 				// lines and agent setup only when asked (--full: everything).
 				if err := client.SetOnDemand(home, !full); err != nil {
@@ -173,9 +181,15 @@ func setupCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if !newLogin && replace != "" {
+				replaced = chooseReplaced(out, home, replace)
+			}
 			// A name for this machine, shown as "name (host)" everywhere and
 			// used as its SSH host name.
-			if newLogin || alias != "" {
+			switch {
+			case replaced != nil && alias == "":
+				out.line("name", client.LabelOf(orDefault(replaced.alias, client.MachineAlias(e.Cfg.DeviceName, factsMap())), e.Cfg.DeviceName))
+			case newLogin || alias != "":
 				chooseSetupAlias(out, e, alias)
 			}
 			var libErr, restoreErr error
@@ -409,6 +423,7 @@ func setupCmd() *cobra.Command {
 	c.Flags().BoolVar(&force, "force", false, "overwrite local session files that differ from the server")
 	c.Flags().IntVar(&setupLast, "sessions", setupLast, "restore this many most recently active conversations (0 = all; a new machine restores none unless given)")
 	c.Flags().StringVar(&alias, "alias", "", "a name for this machine (default: asked in a terminal, proposing e.g. gb-node-e05-13); hearth device rename changes it")
+	c.Flags().StringVar(&replace, "replace", "", "take the place of this offline machine (reinstalled, or a new one in its stead): its name and conversations; the old entry leaves the list (default: an offline machine with this host name is offered)")
 	c.Flags().BoolVar(&full, "full", false, "restore everything now (credentials, conversations, shell lines, agent setup) instead of on demand")
 	c.Flags().BoolVarP(&yes, "yes", "y", false, "unused: setup no longer runs recipe commands (the hearth skill goes through hearth recipe plan)")
 	_ = c.Flags().MarkHidden("yes")
@@ -541,7 +556,7 @@ func factsMap() map[string]any {
 // new login there (<dir>/.hearth, or <dir>/.hearth/hosts/<host> when the
 // directory is on a disk another machine logged in to). Returns the home
 // to continue with.
-func chooseSetupWorkspace(out *setupOut, home string, cfg *client.Config) string {
+func chooseSetupWorkspace(out *setupOut, home string, cfg *client.Config, prev *takenOver) string {
 	if client.WorkspaceOf(home) != "" || (os.Getenv("HEARTH_WORKSPACE") != "" && os.Getenv("HEARTH_WORKSPACE_FROM_PROFILE") == "") {
 		return home // chosen already (hearth init, --workspace)
 	}
@@ -562,7 +577,19 @@ func chooseSetupWorkspace(out *setupOut, home string, cfg *client.Config) string
 		// The most alike machine works on a disk this one does not have.
 		why += fmt.Sprintf("; %s works in %s, which is not on this machine", shortHost(sug.MissingMachine), sug.Missing)
 	}
+	replacedID := ""
+	if prev != nil {
+		replacedID = prev.old.ID
+		// The machine this one replaces worked there: same place again.
+		if ws := client.WorkspaceOfDevice(prev.old); ws != "" && client.WorkspaceUsable(ws) {
+			def, why = ws, "as before on "+shortHost(client.DeviceLabel(prev.old))
+			sug.Path, sug.Machine = ws, prev.old.Name
+		}
+	}
 	if !isTTY() {
+		if prev != nil && sug.Path != "" && sug.Path == client.WorkspaceOfDevice(prev.old) {
+			return moveSetupHome(out, home, h, sug.Path, replacedID)
+		}
 		if sug.Path != "" {
 			out.line("workspace", fmt.Sprintf("your home for now; %s works in %s: hearth init --move-login %s", shortHost(sug.Machine), sug.Path, sug.Path))
 		}
@@ -576,11 +603,17 @@ func chooseSetupWorkspace(out *setupOut, home string, cfg *client.Config) string
 	if ans != "" {
 		choice = client.ExpandUserDir(ans)
 	}
+	return moveSetupHome(out, home, h, choice, replacedID)
+}
+
+// moveSetupHome moves the new login from home (~/.hearth) into workspace
+// choice; a home the replaced device left there is taken over.
+func moveSetupHome(out *setupOut, home, h, choice, replacedID string) string {
 	if filepath.Clean(choice) == filepath.Clean(h) {
 		out.line("workspace", "your home (state in ~/.hearth)")
 		return home
 	}
-	nh, err := client.MoveHome(home, choice)
+	nh, kept, err := client.MoveHomeOver(home, choice, replacedID)
 	if err != nil {
 		out.warn("workspace", fmt.Errorf("%s: %v; staying in your home (later: hearth init --move-login <dir>)", choice, err))
 		return home
@@ -589,11 +622,73 @@ func chooseSetupWorkspace(out *setupOut, home string, cfg *client.Config) string
 	os.Setenv("HEARTH_WORKSPACE", choice)
 	os.Unsetenv("HEARTH_WORKSPACE_FROM_PROFILE")
 	msg := choice
-	if dev, other := client.OtherHostHome(choice); other {
+	if kept {
+		msg += "\nthe old machine's Hearth home is still there (" + nh + "): kept, with its agent homes and state"
+	} else if dev, other := client.OtherHostHome(choice); other {
 		msg += fmt.Sprintf("\nshared disk (%s logged in there): this machine's state is in %s", shortHost(orDefault(dev, "another machine")), nh)
 	}
 	out.line("workspace", msg)
 	return nh
+}
+
+// takenOver is the offline machine this one replaced, and the name this
+// one got from it ("" = the generated one).
+type takenOver struct {
+	old   api.Device
+	alias string
+}
+
+// chooseReplaced takes over an offline machine on a new login: the one
+// --replace names, else an offline machine with this host name (this one
+// before its disk was reset), asked in a terminal, taken without one.
+func chooseReplaced(out *setupOut, home, ref string) *takenOver {
+	e, err := client.NewEngine(home)
+	if err != nil {
+		if ref != "" {
+			out.warn("reinstall", err)
+		}
+		return nil
+	}
+	ds, err := e.API.Devices()
+	if err != nil {
+		if ref != "" {
+			out.warn("reinstall", err)
+		}
+		return nil
+	}
+	var old api.Device
+	if ref != "" {
+		if old, err = client.FindDevice(ds, ref); err != nil {
+			out.warn("reinstall", err)
+			return nil
+		}
+	} else {
+		d, ok := client.PreviousSelf(ds, e.Cfg.DeviceID, e.Cfg.DeviceName)
+		if !ok {
+			return nil
+		}
+		if isTTY() {
+			a, ok := askLine(fmt.Sprintf("  %-12s this machine was set up before as %s (offline, last seen %s)\n%15sTake its place: its name and conversations, the old entry leaves the list? [Y/n] ",
+				"reinstall", client.DeviceLabel(d), agoUnix(d.LastSeen), ""))
+			if !ok || strings.HasPrefix(strings.ToLower(a), "n") {
+				out.line("reinstall", "the old entry stays; later: hearth device replace "+d.ID)
+				return nil
+			}
+		}
+		old = d
+	}
+	return takeOver(out, e, old)
+}
+
+// takeOver makes this machine old's replacement and says so.
+func takeOver(out *setupOut, e *client.Engine, old api.Device) *takenOver {
+	alias, err := e.TakeOver(old)
+	if err != nil {
+		out.warn("reinstall", err)
+		return nil
+	}
+	out.line("reinstall", "took the place of "+client.DeviceLabel(old)+": its name, and its conversations count as this machine's")
+	return &takenOver{old: old, alias: alias}
 }
 
 // chooseSetupAlias names this machine: --alias, else asked in a terminal
@@ -601,6 +696,7 @@ func chooseSetupWorkspace(out *setupOut, home string, cfg *client.Config) string
 // generated name stays (nothing stored).
 func chooseSetupAlias(out *setupOut, e *client.Engine, alias string) {
 	def := client.MachineAlias(e.Cfg.DeviceName, factsMap())
+	asked := false
 	if alias == "" {
 		if !isTTY() {
 			return
@@ -613,8 +709,28 @@ func chooseSetupAlias(out *setupOut, e *client.Engine, alias string) {
 		if a = strings.TrimSpace(a); a != "" {
 			alias = a
 		}
+		asked = true
 	}
 	if err := e.API.SetDeviceAlias("self", alias); err != nil {
+		// The name of an offline machine: take its place (asked in a
+		// terminal; --alias only says how).
+		if ds, derr := e.API.Devices(); derr == nil && client.StatusOf(err) == http.StatusConflict {
+			old, ok := client.DeviceNamed(ds, e.Cfg.DeviceID, alias)
+			if ok && !old.Online && !asked {
+				out.warn("name", fmt.Errorf("%v: %s, offline; to take its place: hearth device replace %s", err, client.DeviceLabel(old), old.ID))
+				return
+			}
+			if ok && !old.Online {
+				a, ok := askLine(fmt.Sprintf("%15s%s is the name of %s (offline, last seen %s). Take its place: its conversations count as this machine's, the old entry leaves the list? [y/N] ",
+					"", alias, client.DeviceLabel(old), agoUnix(old.LastSeen)))
+				if ok && strings.HasPrefix(strings.ToLower(a), "y") {
+					if t := takeOver(out, e, old); t != nil {
+						out.line("name", client.LabelOf(orDefault(t.alias, def), e.Cfg.DeviceName))
+					}
+					return
+				}
+			}
+		}
 		out.warn("name", fmt.Errorf("%v; later: hearth device rename <name>", err))
 		return
 	}

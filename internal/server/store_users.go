@@ -194,6 +194,72 @@ func (s *store) revokeDevice(userID int64, id string) error {
 	return err
 }
 
+// errDeviceOnline: a machine that is still online cannot be replaced.
+var errDeviceOnline = errors.New("that machine is online; only an offline machine can be replaced (remove it first if it is really gone)")
+
+// replaceDevice lets device newID take over oldID, an offline machine of
+// the same user (reinstalled, or a new machine given its name): newID gets
+// alias, the conversations oldID wrote count as newID's, and oldID is
+// removed (logged out, out of the list). alias "" keeps newID's own name.
+func (s *store) replaceDevice(userID int64, newID, oldID, alias string, onlineSince int64) error {
+	if newID == oldID {
+		return fmt.Errorf("%w: a machine cannot replace itself", errBadRequest)
+	}
+	if alias != "" && !aliasRE.MatchString(alias) {
+		return fmt.Errorf("%w: a name is 1-63 letters, digits, '.', '_' or '-'", errBadRequest)
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var status string
+	var lastSeen, offlineAt int64
+	err = tx.QueryRow(`SELECT status,last_seen,offline_at FROM devices WHERE user_id=? AND id=?`, userID, oldID).Scan(&status, &lastSeen, &offlineAt)
+	if errors.Is(err, sql.ErrNoRows) || err == nil && status != "active" {
+		return errNotFound
+	} else if err != nil {
+		return err
+	}
+	if lastSeen >= onlineSince && offlineAt == 0 {
+		return errDeviceOnline
+	}
+	if _, err := tx.Exec(`UPDATE devices SET status='revoked' WHERE user_id=? AND id=?`, userID, oldID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`DELETE FROM tokens WHERE device_id=?`, oldID); err != nil {
+		return err
+	}
+	if alias != "" {
+		var n int
+		if err := tx.QueryRow(`SELECT COUNT(*) FROM devices WHERE user_id=? AND id<>? AND status='active' AND (alias=? OR (alias='' AND name=?))`, userID, newID, alias, alias).Scan(&n); err != nil {
+			return err
+		}
+		if n > 0 {
+			return errAliasTaken
+		}
+	}
+	var mine int
+	if err := tx.QueryRow(`SELECT COUNT(*) FROM devices WHERE user_id=? AND id=? AND status='active'`, userID, newID).Scan(&mine); err != nil {
+		return err
+	}
+	if mine == 0 {
+		return errNotFound
+	}
+	if alias != "" {
+		if _, err := tx.Exec(`UPDATE devices SET alias=? WHERE user_id=? AND id=?`, alias, userID, newID); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.Exec(`UPDATE sessions SET updated_by=? WHERE user_id=? AND updated_by=?`, newID, userID, oldID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`UPDATE sessions SET lease_device=NULL, lease_expires_at=NULL WHERE user_id=? AND lease_device=?`, userID, oldID); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 func (s *store) emailOf(uid int64) (string, error) {
 	var e string
 	err := s.rdb.QueryRow(`SELECT email FROM users WHERE id=?`, uid).Scan(&e)

@@ -22,7 +22,10 @@ function cmdLine(text) { return h("div", { class: "cmd" }, h("code", {}, text), 
 // vault key for it: the one kept since sign-in (loadVault), else the user
 // types the password once for this session (checked in this browser). The
 // plain command, which asks for the password on the new machine, stays below.
-function installBox(plain) {
+// replace: the id of the offline machine the new one takes the place of
+// (a reinstall command), or nothing.
+function installBox(plain, replace) {
+  if (replace) plain = withReplace(plain, replace);
   var out = h("div", {}), err = h("p", { class: "err" });
   var make = h("button", { class: "pri", type: "button" }, t("Make a one-time install command"));
   var pw = h("input", { type: "password", autocomplete: "current-password", placeholder: t("Master password") });
@@ -70,6 +73,12 @@ function installBox(plain) {
 function withInstallToken(cmd, email, token) {
   var q = /^[A-Za-z0-9@._+-]+$/.test(email) ? email : "'" + email.replace(/'/g, "'\\''") + "'";
   return cmd.replace(/\| sh$/, "| sh -s --") + " --email " + q + " --token " + token;
+}
+
+// withReplace makes the install one-liner a reinstall of device id
+// (hearth setup --replace id).
+function withReplace(cmd, id) {
+  return cmd.replace(/\| sh$/, "| sh -s --") + " --replace " + id;
 }
 
 // dialog shows a modal; returns a close function.

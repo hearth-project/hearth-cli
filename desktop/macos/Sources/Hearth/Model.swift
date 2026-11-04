@@ -201,13 +201,18 @@ final class MachineStore: ObservableObject {
     }
 
     /// Copies the command that adds a machine (one-time, 30 minutes) without
-    /// showing it; returns what to tell the user.
-    func copyInstallCommand() async -> String {
+    /// showing it; returns what to tell the user. With `replacing`, an
+    /// offline machine, it is a reinstall command: the machine it runs on
+    /// takes that one's place (its name and conversations).
+    func copyInstallCommand(replacing old: Machine? = nil) async -> String {
+        var args = ["machine", "install-command", "--json"]
+        if let old { args += ["--replace", old.id] }
         do {
-            let data = try await HearthCLI.run(["machine", "install-command", "--json"], timeout: 30)
+            let data = try await HearthCLI.run(args, timeout: 30)
             let c = try JSONDecoder().decode(InstallCommand.self, from: data)
             Actions.copy(c.command)
-            return c.one_time ? "已复制新增机器的命令，30 分钟内可用一次" : "已复制新增机器的命令，新机器上需要输入主密码"
+            let what = old.map { "重装 \($0.title) " } ?? "新增机器"
+            return c.one_time ? "已复制\(what)的命令，30 分钟内可用一次" : "已复制\(what)的命令，执行时需要输入主密码"
         } catch {
             return error.localizedDescription
         }

@@ -225,6 +225,20 @@ hearth recovery-key rotate             # the recovery key was exposed
 
 Any device that logs in with the master password can decrypt every credential (no approval by an existing device), so the master password is their only protection: use a strong one, and after a suspected leak run `device revoke`, `passwd` and rotate the affected credentials.
 
+### Reinstalled machines
+
+A machine whose disk was reset (its container image restarted) logs in again as a new device. When it keeps its host name, `hearth setup` finds the old, offline entry and asks whether to take its place (without a terminal it does): the new machine gets the old one's name (its SSH host name), the conversations the old one uploaded count as the new one's (`hearth restore --last 10` brings them back), and the old entry is logged out and leaves the list. When the workspace survived (cluster storage), setup proposes it again and keeps the old Hearth home there (agent homes, library, state); only the new login moves in.
+
+A new machine can take an old machine's place the same way, with another host name:
+
+```bash
+hearth machine install-command --replace <machine>   # a reinstall command (one-time, 30 minutes); the console's Reinstall button and the Mac app make the same
+hearth setup --replace <machine>                     # the same during setup
+hearth device replace <machine>                      # later, on the new machine
+```
+
+Only an offline machine can be replaced. Typing an offline machine's name at setup's name prompt offers the same.
+
 ### Copying files between machines
 
 ```bash
@@ -252,6 +266,6 @@ hearth app open         # start it
 hearth app uninstall    # quit and remove it
 ```
 
-The app puts a flame in the menu bar (filled when a machine's environment has an error). Its menu lists your machines (machines offline for more than 12 hours are left out; the console still shows them): online or offline, when they were last seen, their GPU and SSH state, and whether their environment is fine. To copy a machine's name, hover over it and click the copy button, or right-click it. Click a machine for its problems and buttons: *Restore environment* and *Check* open Codex with a prompt for that machine (the prompt is also copied), *SSH* opens a terminal on it; an online machine can be renamed there (empty goes back to its host name, like `hearth device rename`). Below the list: *Open console* opens the web console in a window, already signed in and without asking for the master password; *Add machine* copies a one-time install command (`hearth machine install-command`, valid once for 30 minutes) without showing it; then *Refresh*, *Start at login* and *Quit*. When the login on this Mac has expired (device logins last 30 days) the menu lists nothing and offers *Log in again*, which opens Terminal on `hearth login`; the master password is typed there. The console window signs in again by itself when its page has fallen back to the login form (its web session lasts 12 hours), and *Reload* always uses a fresh link.
+The app puts a flame in the menu bar (filled when a machine's environment has an error). Its menu lists your machines (machines offline for more than 12 hours are left out; the console still shows them): online or offline, when they were last seen, their GPU and SSH state, and whether their environment is fine. To copy a machine's name, hover over it and click the copy button, or right-click it. Click a machine for its problems and buttons: *Restore environment* and *Check* open Codex with a prompt for that machine (the prompt is also copied), *SSH* opens a terminal on it; an online machine can be renamed there (empty goes back to its host name, like `hearth device rename`). Below the list: *Open console* opens the web console in a window, already signed in and without asking for the master password; *Add machine* copies a one-time install command (`hearth machine install-command`, valid once for 30 minutes) without showing it; an offline machine has *Reinstall*, which copies the same kind of command for the machine that takes its place ([reinstalled machines](#reinstalled-machines)); then *Refresh*, *Start at login* and *Quit*. When the login on this Mac has expired (device logins last 30 days) the menu lists nothing and offers *Log in again*, which opens Terminal on `hearth login`; the master password is typed there. The console window signs in again by itself when its page has fallen back to the login form (its web session lasts 12 hours), and *Reload* always uses a fresh link.
 
 The app does everything through the `hearth` command (`hearth machine list --json`, `hearth panel --json`, `hearth machine install-command --json`, `hearth device rename`), so this Mac must be logged in; if the app says the command is too old, run `hearth self-update`. It is only on servers whose admin publishes it ([server guide](server.md#releasing-a-new-client-version)).

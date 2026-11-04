@@ -12,6 +12,8 @@ struct MachineRow: View {
     var toggle: () -> Void
     var say: (String) -> Void
     var rename: (String) async throws -> Void
+    /// Copies a reinstall command for this (offline) machine; returns what to say.
+    var reinstall: () async -> String
     @State private var hover = false
     @State private var draft = ""
     @State private var saving = false
@@ -102,6 +104,10 @@ struct MachineRow: View {
                 Button { say(Actions.fix(m)) } label: { Text("检查") }
                 if m.sshUsable {
                     Button { say(Actions.ssh(m)) } label: { Text("SSH 连接") }
+                }
+                if !m.online && !m.isThis {
+                    Button { Task { say(await reinstall()) } } label: { Text("重装") }
+                        .help("机器磁盘被重置，或换一台新机器顶替它：复制安装命令，新机器接管这台的名字和会话")
                 }
             }
             .controlSize(.small)
