@@ -66,11 +66,13 @@ enum HearthCLI {
     enum Failure: LocalizedError {
         case notInstalled
         case tooOld
+        case loginExpired
         case failed(String)
         var errorDescription: String? {
             switch self {
             case .notInstalled: return "没有找到 hearth 命令。先在终端安装并登录 Hearth。"
             case .tooOld: return "hearth 命令版本太旧。在终端运行 hearth self-update 后再刷新。"
+            case .loginExpired: return "登录已过期或还没有登录，重新登录后才能查看机器。"
             case .failed(let s): return s
             }
         }
@@ -102,6 +104,10 @@ enum HearthCLI {
                     if msg.hasPrefix("error: ") { msg = String(msg.dropFirst(7)) }
                     if msg.contains("unknown flag: --json") || msg.contains("unknown command") {
                         cont.resume(throwing: Failure.tooOld)
+                    } else if msg.contains("server: 401") || msg.contains("not logged in") {
+                        // The device token ran out (30 days) or was revoked, or
+                        // there is no login on this Mac.
+                        cont.resume(throwing: Failure.loginExpired)
                     } else {
                         cont.resume(throwing: Failure.failed(msg.isEmpty ? "hearth 退出码 \(p.terminationStatus)" : msg))
                     }
@@ -119,6 +125,9 @@ final class MachineStore: ObservableObject {
     @Published var error: String?
     @Published var loading = false
     @Published var updated: Date?
+    /// The login on this Mac is gone or expired: nothing is listed until it
+    /// is renewed.
+    @Published var loginExpired = false
     private var timer: Timer?
     /// The clock the 12-hour cutoff is measured against. Fixtures use the
     /// newest last_seen in the file so snapshots do not change with the date.
@@ -168,9 +177,26 @@ final class MachineStore: ObservableObject {
             let data = try await HearthCLI.run(["machine", "list", "--json"])
             list = try JSONDecoder().decode(MachineList.self, from: data)
             error = nil
+            loginExpired = false
             updated = Date()
         } catch {
-            self.error = error.localizedDescription
+            if case HearthCLI.Failure.loginExpired = error {
+                // Do not keep showing the last list as if it were current.
+                loginExpired = true
+                list = nil
+                self.error = nil
+            } else {
+                self.error = error.localizedDescription
+            }
+        }
+    }
+
+    /// After "重新登录" opened Terminal: checks every few seconds until the
+    /// login works again (at most 10 minutes).
+    func waitForLogin() async {
+        for _ in 0..<200 where loginExpired {
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            await refresh()
         }
     }
 
