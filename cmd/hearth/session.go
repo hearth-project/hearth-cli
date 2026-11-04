@@ -542,7 +542,7 @@ func deviceCmd() *cobra.Command {
 			return tw.Flush()
 		},
 	}, &cobra.Command{
-		Use: "rename [<machine>] <name>", Short: "Name a machine (shown as name (host), its SSH host name); one argument: this machine; \"\" clears it",
+		Use: "rename [<machine>] <name>", Short: "Name a machine (shown as name (host), its SSH host name; an offline machine's name continues that machine); one argument: this machine; \"\" clears it",
 		Args: cobra.RangeArgs(1, 2),
 		RunE: func(_ *cobra.Command, args []string) error {
 			e, err := engine()
@@ -562,12 +562,16 @@ func deviceCmd() *cobra.Command {
 				}
 				id, label = d.ID, d.Name
 			}
-			if err := e.API.SetDeviceAlias(id, alias); err != nil {
+			old, err := e.NameMachine(id, alias)
+			if err != nil {
 				return err
 			}
-			if alias == "" {
+			switch {
+			case alias == "":
 				fmt.Printf("%s: name cleared\n", label)
-			} else {
+			case old != nil:
+				fmt.Printf("%s is now %s and continues the offline machine of that name: its conversations count as this one's (hearth restore --last 10)\n", label, client.LabelOf(alias, label))
+			default:
 				fmt.Printf("%s is now %s\n", label, client.LabelOf(alias, label))
 			}
 			_, _, _ = writeSSHConfig(e, false)

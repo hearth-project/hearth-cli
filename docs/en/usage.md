@@ -225,6 +225,10 @@ hearth recovery-key rotate             # the recovery key was exposed
 
 Any device that logs in with the master password can decrypt every credential (no approval by an existing device), so the master password is their only protection: use a strong one, and after a suspected leak run `device revoke`, `passwd` and rotate the affected credentials.
 
+### A name stands for a machine
+
+A machine whose disk was reset (its container image restarted) logs in again as a new device. When it keeps its host name, `hearth setup` continues the old, offline entry without asking. A new machine continues an old one when it is given that machine's name: at setup's name prompt, with `--alias`, or later with `hearth device rename` (also the console and the Mac app). Continuing means: the new machine has the old one's name (its SSH host name); the conversations the old one uploaded count as the new one's (`hearth restore --last 10` brings them back); when the old workspace is on this machine (cluster storage that survived), setup proposes it again and keeps the old Hearth home there (agent homes, library, state), only the new login moves in; the old entry is logged out and leaves the list. A machine that is online keeps its name.
+
 ### Copying files between machines
 
 ```bash
