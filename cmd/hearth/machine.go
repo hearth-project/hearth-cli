@@ -228,55 +228,27 @@ func machineCmd() *cobra.Command {
 		return nil
 	}}
 	var cmdJSON bool
-	var reinstall string
 	installCmd := &cobra.Command{Use: "install-command", Short: "Print a one-time command that installs hearth on a new machine and logs it in (30 minutes, once)", Args: cobra.NoArgs, RunE: func(*cobra.Command, []string) error {
 		e, err := engine()
 		if err != nil {
 			return err
 		}
-		var old api.Device
-		if reinstall != "" {
-			ds, err := e.API.Devices()
-			if err != nil {
-				return err
-			}
-			if old, err = client.FindDevice(ds, reinstall); err != nil {
-				return err
-			}
-			if old.ID == e.Cfg.DeviceID {
-				return fmt.Errorf("%s is this machine", client.DeviceLabel(old))
-			}
-			if old.Online {
-				return fmt.Errorf("%s is online; a reinstall command is for an offline machine", client.DeviceLabel(old))
-			}
-		}
 		ic, err := e.MakeInstallCommand()
 		if err != nil {
 			return err
-		}
-		if old.ID != "" {
-			ic.Command = client.WithReplace(ic.Command, old.ID)
 		}
 		if cmdJSON {
 			return printJSON(ic)
 		}
 		fmt.Println(ic.Command)
-		switch {
-		case old.ID != "":
-			how := "; it asks for your master password"
-			if ic.OneTime {
-				how = " within 30 minutes; it works once"
-			}
-			fmt.Fprintf(os.Stderr, "Run it on the machine that takes the place of %s (reinstalled, or its successor)%s.\n", client.DeviceLabel(old), how)
-		case ic.OneTime:
+		if ic.OneTime {
 			fmt.Fprintln(os.Stderr, "Run it on the new machine within 30 minutes; it works once.")
-		default:
+		} else {
 			fmt.Fprintln(os.Stderr, "Run it on the new machine; it asks for your master password.")
 		}
 		return nil
 	}}
 	installCmd.Flags().BoolVar(&cmdJSON, "json", false, "machine-readable (the macOS menu bar app reads it)")
-	installCmd.Flags().StringVar(&reinstall, "replace", "", "a reinstall command: the machine it runs on takes the place of this offline machine (its name and conversations)")
 	c.AddCommand(list, inspect, check, add, installCmd,
 		&cobra.Command{Use: "rm <name>", Short: "Remove a profile", Args: cobra.ExactArgs(1), RunE: func(_ *cobra.Command, a []string) error {
 			home := client.Home()

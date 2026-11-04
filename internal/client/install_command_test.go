@@ -80,11 +80,4 @@ func TestWithInstallToken(t *testing.T) {
 			t.Errorf("got  %s\nwant %s", got, c.want)
 		}
 	}
-	// A reinstall command, made before or after the token is added.
-	if got := WithReplace(WithInstallToken("curl x | sh", "a@b.c", "T"), "0123abcd"); got != "curl x | sh -s -- --email a@b.c --token T --replace 0123abcd" {
-		t.Errorf("reinstall: %s", got)
-	}
-	if got := WithInstallToken(WithReplace("curl x | sh", "0123abcd"), "a@b.c", "T"); got != "curl x | sh -s -- --replace 0123abcd --email a@b.c --token T" {
-		t.Errorf("reinstall first: %s", got)
-	}
 }

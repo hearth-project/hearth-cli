@@ -170,8 +170,7 @@ struct MenuView: View {
                     if i > 0 { Divider().padding(.leading, 46) }
                     MachineRow(m: m, open: expanded == m.id, toggle: {
                         withAnimation(.easeInOut(duration: 0.18)) { expanded = expanded == m.id ? nil : m.id }
-                    }, say: { note = $0 }, rename: { name in try await store.rename(m, to: name) },
-                    reinstall: { await store.copyInstallCommand(replacing: m) })
+                    }, say: { note = $0 }, rename: { name in try await store.rename(m, to: name) })
                 }
             }
             .background(Theme.card)

@@ -78,23 +78,43 @@ func TestReplaceDevice(t *testing.T) {
 	}
 }
 
-// A new machine with another host name takes an offline machine's
-// generated name when that one had none of its own.
-func TestReplaceDeviceOtherHost(t *testing.T) {
+// A new machine given an offline machine's name continues it: a given
+// name (the server takes it over), and the name made from a host name
+// (sent as a takeover). An online machine keeps its name.
+func TestNameContinuesOfflineMachine(t *testing.T) {
 	en := newEnv(t)
-	old := en.machine("gpu-node-7.example")
-	if err := old.API.SignOff(); err != nil {
+	named := en.machine("gpu-node-7.example")
+	if err := named.API.SetDeviceAlias("self", "h800-07"); err != nil {
 		t.Fatal(err)
 	}
+	plain := en.machine("gpu-node-8.example")
 	nu := en.machine("gpu-node-9.example")
-	ds, _ := nu.API.Devices()
-	d, ok := DeviceNamed(ds, nu.Cfg.DeviceID, "gpu-node-7.example")
-	if !ok {
-		t.Fatal("not found by host name")
+	if _, err := nu.NameMachine(nu.Cfg.DeviceID, "h800-07"); StatusOf(err) != 409 {
+		t.Fatalf("online machine's name: %v", err)
 	}
-	alias, err := nu.TakeOver(d)
-	if err != nil || alias != NameOf(d) || alias == "" {
-		t.Fatalf("take over: %q %v", alias, err)
+	named.API.SignOff()
+	plain.API.SignOff()
+	old, err := nu.NameMachine(nu.Cfg.DeviceID, "h800-07")
+	if err != nil || old == nil || old.ID != named.Cfg.DeviceID {
+		t.Fatalf("given name: %+v %v", old, err)
+	}
+	if _, err := named.API.Devices(); StatusOf(err) != 401 {
+		t.Fatalf("old login still works: %v", err)
+	}
+	other := en.machine("gpu-node-10.example")
+	ds, _ := other.API.Devices()
+	d, _ := FindDevice(ds, plain.Cfg.DeviceID)
+	made := NameOf(d)
+	if made == "" || made == d.Name {
+		t.Fatalf("made name %q", made)
+	}
+	old, err = other.NameMachine(other.Cfg.DeviceID, made)
+	if err != nil || old == nil || old.ID != plain.Cfg.DeviceID {
+		t.Fatalf("made name: %+v %v", old, err)
+	}
+	ds, _ = other.API.Devices()
+	if d, err := FindDevice(ds, made); err != nil || d.ID != other.Cfg.DeviceID {
+		t.Fatalf("name goes to the new machine: %+v %v", d, err)
 	}
 }
 

@@ -147,8 +147,7 @@ Generated from `hearth --help` by `hearth docs cli > docs/cli.md`; every command
 | [`hearth whoami`](#hearth-whoami) | Show the local identity and this workspace's hearth login |
 | [`hearth device`](#hearth-device) | Manage devices |
 | [`hearth device list`](#hearth-device-list) | List devices |
-| [`hearth device rename`](#hearth-device-rename) | Name a machine (shown as name (host), its SSH host name); one argument: this machine; "" clears it |
-| [`hearth device replace`](#hearth-device-replace) | Take the place of an offline machine (this one is it reinstalled, or its successor): its name and conversations; the old entry leaves the list |
+| [`hearth device rename`](#hearth-device-rename) | Name a machine (shown as name (host), its SSH host name; an offline machine's name continues that machine); one argument: this machine; "" clears it |
 | [`hearth device revoke`](#hearth-device-revoke) | Revoke a device's access (rotate any credentials it had) |
 | [`hearth passwd`](#hearth-passwd) | Change the master password (other devices keep working) |
 | [`hearth recover`](#hearth-recover) | Forgot the password: set a new one with the recovery key (signs out all devices) |
@@ -241,7 +240,7 @@ Log in, restore the newest conversations, skills and credentials, and start back
 hearth setup [flags]
 
 Flags:
-      --alias string     a name for this machine (default: asked in a terminal, proposing e.g. gb-node-e05-13); hearth device rename changes it
+      --alias string     a name for this machine (default: asked in a terminal, proposing e.g. gb-node-e05-13); an offline machine's name continues that machine; hearth device rename changes it
       --ca-cert string   PEM certificate to trust for a self-signed server
       --device string    device name (default: hostname)
       --email string     account email (default: this machine's local identity, as hearth login)
@@ -253,7 +252,6 @@ Flags:
       --no-daemon        do not start background sync
       --no-import        do not record this machine for new ones (its skills and agents, new setup items, shell lines)
       --no-register      never create the account; fail when the login does not exist
-      --replace string   take the place of this offline machine (reinstalled, or a new one in its stead): its name and conversations; the old entry leaves the list (default: an offline machine with this host name is offered)
       --server string    server URL (default: this login's, $HEARTH_SERVER, or the server hearth was installed from)
       --sessions int     restore this many most recently active conversations (0 = all; a new machine restores none unless given) (default 10)
       --switch           replace an existing login to another account or server
@@ -1479,8 +1477,7 @@ Print a one-time command that installs hearth on a new machine and logs it in (3
 hearth machine install-command [flags]
 
 Flags:
-      --json             machine-readable (the macOS menu bar app reads it)
-      --replace string   a reinstall command: the machine it runs on takes the place of this offline machine (its name and conversations)
+      --json   machine-readable (the macOS menu bar app reads it)
 ```
 
 ## hearth machine rm
@@ -1723,18 +1720,10 @@ hearth device list
 
 ## hearth device rename
 
-Name a machine (shown as name (host), its SSH host name); one argument: this machine; "" clears it
+Name a machine (shown as name (host), its SSH host name; an offline machine's name continues that machine); one argument: this machine; "" clears it
 
 ```text
 hearth device rename [<machine>] <name>
-```
-
-## hearth device replace
-
-Take the place of an offline machine (this one is it reinstalled, or its successor): its name and conversations; the old entry leaves the list
-
-```text
-hearth device replace <machine>
 ```
 
 ## hearth device revoke

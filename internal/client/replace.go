@@ -11,15 +11,16 @@ import (
 	"github.com/hearth-project/hearth-cli/internal/api"
 )
 
-// Reinstalled machines. A machine whose disk was reset (a container image
-// restarted) logs in again as a new device with the same host name, and a
-// new machine may be meant to take an old one's place. Either takes over
-// the old, offline device: its name, the conversations it wrote (they
-// count as this machine's from then on) and, when its workspace survived,
-// its Hearth home there. The old device is logged out and leaves the list.
+// A name stands for a machine. A machine whose disk was reset (a container
+// image restarted) logs in again as a new device with the same host name,
+// and a new machine may be given an old one's name. Either continues the
+// old, offline device: its name, the conversations it wrote (they count as
+// this machine's from then on) and, when its workspace survived, its
+// Hearth home there. The old device is logged out and leaves the list.
 
-// ReplaceDevice lets this device take over device id, an offline machine
-// of the same account; alias "" keeps this device's own name.
+// ReplaceDevice makes this device continue device id, an offline machine
+// of the same account; alias "" keeps this device's own name. Names the
+// server knows (given ones, host names) do it through SetDeviceAlias.
 func (a *API) ReplaceDevice(id, alias string) error {
 	_, err := a.do("POST", "/v1/devices/self/replace", map[string]string{"device": id, "alias": alias}, nil, nil, nil)
 	return err
@@ -60,17 +61,48 @@ func PreviousSelf(ds []api.Device, self, name string) (api.Device, bool) {
 	return best, found
 }
 
-// DeviceNamed finds the other machine (not self) that goes by name.
+// DeviceNamed finds the other machine (not self) that goes by name: the
+// name it was given, else its host name or the name made from it.
 func DeviceNamed(ds []api.Device, self, name string) (api.Device, bool) {
 	for _, d := range ds {
-		if d.ID != self && activeDevice(d) && (NameOf(d) == name || d.Name == name) {
+		if d.ID != self && activeDevice(d) && (NameOf(d) == name || d.Alias == "" && d.Name == name) {
 			return d, true
 		}
 	}
 	return api.Device{}, false
 }
 
-// TakeOver makes this machine the replacement of old (offline): it gets
+// NameMachine names device id. When an offline machine goes by that name,
+// id continues it (returned): the server does that for the names it knows;
+// a name only made from a host name is sent as a takeover (this device
+// only). An online machine keeps its name (409).
+func (e *Engine) NameMachine(id, alias string) (*api.Device, error) {
+	var old *api.Device
+	if alias != "" {
+		if ds, err := e.API.Devices(); err == nil {
+			if d, ok := DeviceNamed(ds, id, alias); ok && !d.Online {
+				old = &d
+			}
+		}
+	}
+	madeName := old != nil && old.Alias == "" && old.Name != alias
+	if madeName && id != e.Cfg.DeviceID {
+		old = nil // another machine: the server only compares the names it knows
+	}
+	if old != nil && madeName {
+		if err := e.API.ReplaceDevice(old.ID, alias); err != nil {
+			return nil, err
+		}
+	} else if err := e.API.SetDeviceAlias(id, alias); err != nil {
+		return nil, err
+	}
+	if old != nil {
+		_ = e.DeleteSecret(sshHostPrefix + old.ID)
+	}
+	return old, nil
+}
+
+// TakeOver makes this machine continue old (offline): it gets
 // old's name, unless both have the same host name and old had none of its
 // own (then the generated one is the same), and old's conversations.
 // Returns the name it was given ("" = it keeps the generated one).
@@ -79,7 +111,7 @@ func (e *Engine) TakeOver(old api.Device) (string, error) {
 		return "", fmt.Errorf("%s is this machine", DeviceLabel(old))
 	}
 	if old.Online {
-		return "", fmt.Errorf("%s is online; only an offline machine can be replaced (hearth device revoke %s if it is really gone)", DeviceLabel(old), old.ID)
+		return "", fmt.Errorf("%s is online; only an offline machine can be continued by another", DeviceLabel(old))
 	}
 	alias := old.Alias
 	if alias == "" && !strings.EqualFold(old.Name, e.Cfg.DeviceName) {
@@ -93,7 +125,7 @@ func (e *Engine) TakeOver(old api.Device) (string, error) {
 	return alias, nil
 }
 
-// MoveHomeOver is MoveHome for a machine that replaced device replaced:
+// MoveHomeOver is MoveHome for a machine that continues device replaced:
 // when ws still holds that device's Hearth home (the workspace survived
 // the reinstall), the home is kept, with its agent homes, library and
 // state, and only this login (config.json, vault.key) and what the home

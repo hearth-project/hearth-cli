@@ -159,27 +159,84 @@ var aliasRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,62}$`)
 var errAliasTaken = errors.New("another of your machines has that name")
 
 // setDeviceAlias names a device of the user ("" = back to its host name).
-func (s *store) setDeviceAlias(userID int64, id, alias string) error {
+// A name that belongs to offline machines only is taken over with them:
+// the device continues those machines (see inheritTx). A machine online
+// under that name keeps it (errAliasTaken).
+func (s *store) setDeviceAlias(userID int64, id, alias string, onlineSince int64) error {
 	if alias != "" && !aliasRE.MatchString(alias) {
 		return fmt.Errorf("%w: a name is 1-63 letters, digits, '.', '_' or '-'", errBadRequest)
 	}
-	if alias != "" {
-		var n int
-		if err := s.db.QueryRow(`SELECT COUNT(*) FROM devices WHERE user_id=? AND id<>? AND status='active' AND (alias=? OR (alias='' AND name=?))`, userID, id, alias, alias).Scan(&n); err != nil {
-			return err
-		}
-		if n > 0 {
-			return errAliasTaken
-		}
-	}
-	res, err := s.db.Exec(`UPDATE devices SET alias=? WHERE user_id=? AND id=?`, alias, userID, id)
+	tx, err := s.db.Begin()
 	if err != nil {
 		return err
 	}
-	if n, _ := res.RowsAffected(); n == 0 {
+	defer tx.Rollback()
+	if err := nameTx(tx, userID, id, alias, onlineSince); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// nameTx gives device id the name alias, taking over the offline machines
+// that go by it.
+func nameTx(tx *txx, userID int64, id, alias string, onlineSince int64) error {
+	var mine int
+	if err := tx.QueryRow(`SELECT COUNT(*) FROM devices WHERE user_id=? AND id=? AND status='active'`, userID, id).Scan(&mine); err != nil {
+		return err
+	}
+	if mine == 0 {
 		return errNotFound
 	}
-	return nil
+	if alias != "" {
+		rows, err := tx.Query(`SELECT id,last_seen,offline_at FROM devices WHERE user_id=? AND id<>? AND status='active' AND (alias=? OR (alias='' AND name=?))`, userID, id, alias, alias)
+		if err != nil {
+			return err
+		}
+		var olds []string
+		online := false
+		for rows.Next() {
+			var o string
+			var seen, off int64
+			if err := rows.Scan(&o, &seen, &off); err != nil {
+				rows.Close()
+				return err
+			}
+			online = online || (seen >= onlineSince && off == 0)
+			olds = append(olds, o)
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return err
+		}
+		if online {
+			return errAliasTaken
+		}
+		for _, o := range olds {
+			if err := inheritTx(tx, userID, id, o); err != nil {
+				return err
+			}
+		}
+	}
+	_, err := tx.Exec(`UPDATE devices SET alias=? WHERE user_id=? AND id=?`, alias, userID, id)
+	return err
+}
+
+// inheritTx makes device newID continue oldID, an offline machine of the
+// same user (its disk was reset, or a new machine took its name): the
+// conversations oldID wrote count as newID's, its leases end, and oldID is
+// logged out and leaves the list.
+func inheritTx(tx *txx, userID int64, newID, oldID string) error {
+	if _, err := tx.Exec(`UPDATE devices SET status='revoked' WHERE user_id=? AND id=?`, userID, oldID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`DELETE FROM tokens WHERE device_id=?`, oldID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`UPDATE sessions SET updated_by=? WHERE user_id=? AND updated_by=?`, newID, userID, oldID); err != nil {
+		return err
+	}
+	_, err := tx.Exec(`UPDATE sessions SET lease_device=NULL, lease_expires_at=NULL WHERE user_id=? AND lease_device=?`, userID, oldID)
+	return err
 }
 
 func (s *store) revokeDevice(userID int64, id string) error {
@@ -194,16 +251,16 @@ func (s *store) revokeDevice(userID int64, id string) error {
 	return err
 }
 
-// errDeviceOnline: a machine that is still online cannot be replaced.
-var errDeviceOnline = errors.New("that machine is online; only an offline machine can be replaced (remove it first if it is really gone)")
+// errDeviceOnline: a machine that is still online cannot be continued.
+var errDeviceOnline = errors.New("that machine is online; only an offline machine can be continued by another")
 
-// replaceDevice lets device newID take over oldID, an offline machine of
-// the same user (reinstalled, or a new machine given its name): newID gets
-// alias, the conversations oldID wrote count as newID's, and oldID is
-// removed (logged out, out of the list). alias "" keeps newID's own name.
+// replaceDevice makes device newID continue oldID, an offline machine of
+// the same user (this machine before its disk was reset: same host name,
+// or a name only the client knows, the one made from the host name), and
+// gives newID alias ("" = keep its own).
 func (s *store) replaceDevice(userID int64, newID, oldID, alias string, onlineSince int64) error {
 	if newID == oldID {
-		return fmt.Errorf("%w: a machine cannot replace itself", errBadRequest)
+		return fmt.Errorf("%w: a machine cannot continue itself", errBadRequest)
 	}
 	if alias != "" && !aliasRE.MatchString(alias) {
 		return fmt.Errorf("%w: a name is 1-63 letters, digits, '.', '_' or '-'", errBadRequest)
@@ -224,37 +281,18 @@ func (s *store) replaceDevice(userID int64, newID, oldID, alias string, onlineSi
 	if lastSeen >= onlineSince && offlineAt == 0 {
 		return errDeviceOnline
 	}
-	if _, err := tx.Exec(`UPDATE devices SET status='revoked' WHERE user_id=? AND id=?`, userID, oldID); err != nil {
+	if err := inheritTx(tx, userID, newID, oldID); err != nil {
 		return err
 	}
-	if _, err := tx.Exec(`DELETE FROM tokens WHERE device_id=?`, oldID); err != nil {
-		return err
-	}
-	if alias != "" {
-		var n int
-		if err := tx.QueryRow(`SELECT COUNT(*) FROM devices WHERE user_id=? AND id<>? AND status='active' AND (alias=? OR (alias='' AND name=?))`, userID, newID, alias, alias).Scan(&n); err != nil {
+	if alias == "" {
+		var mine int
+		if err := tx.QueryRow(`SELECT COUNT(*) FROM devices WHERE user_id=? AND id=? AND status='active'`, userID, newID).Scan(&mine); err != nil {
 			return err
 		}
-		if n > 0 {
-			return errAliasTaken
+		if mine == 0 {
+			return errNotFound
 		}
-	}
-	var mine int
-	if err := tx.QueryRow(`SELECT COUNT(*) FROM devices WHERE user_id=? AND id=? AND status='active'`, userID, newID).Scan(&mine); err != nil {
-		return err
-	}
-	if mine == 0 {
-		return errNotFound
-	}
-	if alias != "" {
-		if _, err := tx.Exec(`UPDATE devices SET alias=? WHERE user_id=? AND id=?`, alias, userID, newID); err != nil {
-			return err
-		}
-	}
-	if _, err := tx.Exec(`UPDATE sessions SET updated_by=? WHERE user_id=? AND updated_by=?`, newID, userID, oldID); err != nil {
-		return err
-	}
-	if _, err := tx.Exec(`UPDATE sessions SET lease_device=NULL, lease_expires_at=NULL WHERE user_id=? AND lease_device=?`, userID, oldID); err != nil {
+	} else if err := nameTx(tx, userID, newID, alias, onlineSince); err != nil {
 		return err
 	}
 	return tx.Commit()

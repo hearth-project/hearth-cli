@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"os"
 	"path"
 	"strconv"
@@ -543,7 +542,7 @@ func deviceCmd() *cobra.Command {
 			return tw.Flush()
 		},
 	}, &cobra.Command{
-		Use: "rename [<machine>] <name>", Short: "Name a machine (shown as name (host), its SSH host name); one argument: this machine; \"\" clears it",
+		Use: "rename [<machine>] <name>", Short: "Name a machine (shown as name (host), its SSH host name; an offline machine's name continues that machine); one argument: this machine; \"\" clears it",
 		Args: cobra.RangeArgs(1, 2),
 		RunE: func(_ *cobra.Command, args []string) error {
 			e, err := engine()
@@ -563,45 +562,18 @@ func deviceCmd() *cobra.Command {
 				}
 				id, label = d.ID, d.Name
 			}
-			if err := e.API.SetDeviceAlias(id, alias); err != nil {
-				if ds, derr := e.API.Devices(); derr == nil && client.StatusOf(err) == http.StatusConflict && id == e.Cfg.DeviceID {
-					if old, ok := client.DeviceNamed(ds, id, alias); ok && !old.Online {
-						return fmt.Errorf("%w; %s is offline: to take its place (its name and conversations), hearth device replace %s", err, client.DeviceLabel(old), old.ID)
-					}
-				}
+			old, err := e.NameMachine(id, alias)
+			if err != nil {
 				return err
 			}
-			if alias == "" {
+			switch {
+			case alias == "":
 				fmt.Printf("%s: name cleared\n", label)
-			} else {
+			case old != nil:
+				fmt.Printf("%s is now %s and continues the offline machine of that name: its conversations count as this one's (hearth restore --last 10)\n", label, client.LabelOf(alias, label))
+			default:
 				fmt.Printf("%s is now %s\n", label, client.LabelOf(alias, label))
 			}
-			_, _, _ = writeSSHConfig(e, false)
-			return nil
-		},
-	}, &cobra.Command{
-		Use:   "replace <machine>",
-		Short: "Take the place of an offline machine (this one is it reinstalled, or its successor): its name and conversations; the old entry leaves the list",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(_ *cobra.Command, args []string) error {
-			e, err := engine()
-			if err != nil {
-				return err
-			}
-			ds, err := e.API.Devices()
-			if err != nil {
-				return err
-			}
-			old, err := client.FindDevice(ds, args[0])
-			if err != nil {
-				return err
-			}
-			alias, err := e.TakeOver(old)
-			if err != nil {
-				return err
-			}
-			name := client.LabelOf(orDefault(alias, client.MachineAlias(e.Cfg.DeviceName, factsMap())), e.Cfg.DeviceName)
-			fmt.Printf("this machine is now %s, in place of %s; its conversations count as this machine's: hearth restore --last 10\n", name, client.DeviceLabel(old))
 			_, _, _ = writeSSHConfig(e, false)
 			return nil
 		},

@@ -1,8 +1,7 @@
 "use strict";
 // The signed-in user's own pages.
 
-// install: the install one-liner (offline machines get a reinstall button).
-function deviceRows(ds, mine, install) {
+function deviceRows(ds, mine) {
   if (!ds.length) return empty(t("No machines yet. Install Hearth on a machine and run hearth setup."), "💻");
   var cols = ["Machine", "IP", "Status", "Environment", "SSH", "Version", "Conversations", "Last seen", ""];
   var body = h("tbody", {});
@@ -26,25 +25,12 @@ function deviceRows(ds, mine, install) {
       h("td", { class: "mono" }, d.version || (d.status === "active" && d.online ? h("span", { class: "badge warn", title: t(OLD_CLIENT_HINT) }, t("old version: run hearth self-update there")) : h("span", { class: "muted" }, "-"))),
       h("td", {}, d.sessions ? h("span", {}, d.sessions, h("div", { class: "muted small" }, t("newest") + " " + ago(d.last_active))) : h("span", { class: "muted" }, "0")),
       h("td", { title: t("Created") + " " + when(d.created_at) }, ago(d.last_seen)),
-      h("td", { class: "acts" }, mine && d.status === "active" && !d.online && install ? h("button", { class: "sm", title: t("For a machine whose disk was reset, or a new one in its place: it takes this one's name and conversations."), onclick: function () {
-        reinstallDialog(d, install);
-      } }, t("Reinstall")) : null,
-      mine && d.status === "active" ? h("button", { class: "sm bad", onclick: function () {
+      h("td", {}, mine && d.status === "active" ? h("button", { class: "sm bad", onclick: function () {
         if (confirm(t("Remove this machine? It is logged out and leaves this list; to use it again, run hearth setup on it.") + "\n" + devLabel(d))) act(me("DELETE", "/devices/" + encodeURIComponent(d.id)));
       } }, t("Remove")) : null));
     add(body, row);
   });
   return wrap(h("table", { class: "devs" }, h("thead", {}, h("tr", {}, cols.map(function (k) { return h("th", {}, t(k)); }))), body));
-}
-
-// reinstallDialog: the install command for the machine that takes d's
-// place (d's disk was reset, or a new machine replaces it). It logs in as
-// a new device, then takes over d: d's name, its conversations, and its
-// Hearth home when the workspace survived; d leaves the list.
-function reinstallDialog(d, install) {
-  dialog(t("Reinstall") + " " + devLabel(d), [
-    h("p", { class: "muted small" }, t("Run on the reinstalled machine (or the one that takes its place), in a terminal. It installs Hearth and takes over this entry: its name and conversations; the old entry leaves the list.")),
-    installBox(install, d.id)], null, true);
 }
 
 view("home", "Overview", function () {
@@ -88,7 +74,7 @@ view("home", "Overview", function () {
 view("machines", "Machines", function () {
   return Promise.all([me("GET", "/devices"), me("GET", "")]).then(function (r) {
     var ds = r[0], o = r[1];
-    return [card(t("Machines") + " (" + ds.length + ")", deviceRows(ds, true, o.install),
+    return [card(t("Machines") + " (" + ds.length + ")", deviceRows(ds, true),
       h("span", { class: "muted small" }, t("Online = background sync reported in the last 15 minutes."))),
       o.install ? card(t("Add a machine"), [h("p", { class: "muted small" }, t("Run on the new machine, in a terminal. It installs Hearth, signs in and restores your setup:")), installBox(o.install),
         h("p", { class: "muted small" }, t("Then, on any other machine with Hearth, tell its agent the sentence the installer prints; it sets up the new machine's software over hearth ssh:")),
