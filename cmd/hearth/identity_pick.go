@@ -27,15 +27,17 @@ func pickIdentity(home string) (string, error) {
 }
 
 func chooseIdentity(choices []client.LocalIdentity, ask func(string) (string, bool), w io.Writer) (string, error) {
+	fmt.Fprintln(w, "\nWhich Hearth account is yours?")
 	if len(choices) > 0 {
-		fmt.Fprintln(w, "      which account is yours? (accounts known on this machine)")
+		fmt.Fprintln(w, "These people are known on this machine:")
+		fmt.Fprintln(w)
 		for i, c := range choices {
-			fmt.Fprintf(w, "        %d) %s  (%s)\n", i+1, choiceName(c), c.Source)
+			fmt.Fprintf(w, "  %d) %s  (%s)\n", i+1, choiceName(c), c.Source)
 		}
 	}
-	prompt := "      your account email (new or existing): "
+	prompt := "\nYour account email, new or existing\n\n[email] >>> "
 	if len(choices) > 0 {
-		prompt = "      number, or your account email: "
+		prompt = "\n  - Type a number from the list\n  - Or your account email\n\n[number or email] >>> "
 	}
 	for tries := 0; tries < 3; tries++ {
 		a, ok := ask(prompt)
@@ -47,7 +49,7 @@ func chooseIdentity(choices []client.LocalIdentity, ask func(string) (string, bo
 			if c.Email != "" {
 				return c.Email, nil
 			}
-			if a, ok = ask("      email for " + c.Username + ": "); ok && strings.Contains(a, "@") {
+			if a, ok = ask("\nThe email of " + c.Username + "\n\n[email] >>> "); ok && strings.Contains(a, "@") {
 				return a, nil
 			}
 			continue
