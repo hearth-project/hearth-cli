@@ -225,6 +225,18 @@ hearth recovery-key rotate             # 恢复密钥泄露时换新
 
 任何设备只要用主密码登录就能解密全部凭证，没有旧设备审批，所以主密码是凭证的唯一保护：请使用强密码，疑似泄露时立即 `device revoke`、`passwd` 并轮换相关凭证。
 
+### 在机器之间传文件
+
+```bash
+hearth cp ./ckpt gpu-a:/data/            # 推送：gpu-a 上的 /data/ckpt
+hearth cp gpu-a:/data/ckpt .              # 拉取
+hearth cp gpu-a:/data/ckpt gpu-b:/data/   # 从 gpu-a 直接传到 gpu-b
+```
+
+控制信息走 Hearth 的 SSH；数据在两台机器之间直连，用多条并行 TCP 连接传输，以 AES-256-GCM 加密，密钥只经过 SSH，不经过 Hearth 服务器。大文件切成 4 MiB 的块，同时在所有连接上传（同机房 16 条，跨地域最多 64 条，`-j` 可指定），直接写到目标位置；多个文件的块交错传输，写入不会排队等同一个文件。中断后重新执行同一条命令即可续传；大小和修改时间一致的文件会跳过（`--force` 强制传，`-n` 保留目标端已有的文件）。跨地域时，能压缩的块用 zstd 压缩（`--compress auto|on|off`）。两台机器互相都连不上时，数据走 SSH 端口转发；对方的路径在本机也挂载的共享盘上时，直接在盘上复制。在两台别的机器之间传时，命令在源机器上执行；源机器连不到目标时，改在目标机器上执行。
+
+实测（内存到内存，16 个 2 GiB 文件）：两台 bzz2 机器之间（400 Gb/s）9.7 GiB/s，yq01 到 johor（76 ms，64 条连接）1.4 GiB/s；单个大文件写本地盘约等于盘的速度（O_DIRECT，这里 3 GiB/s）。
+
 ### 机器之间的 SSH
 
 已登录的 Linux 机器只接受你自己设备的 SSH 连接：只认公钥、不开密码登录，只放行你未吊销设备的公钥；host key 从端到端加密发布的连接信息里校验，不需要手动确认"信任这台主机"。`hearth ssh <机器>` 和 Hearth 在 Mac 上写的 `~/.ssh/config` 条目，都用本设备的 Hearth 密钥连接。

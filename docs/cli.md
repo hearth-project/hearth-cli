@@ -191,6 +191,7 @@ Generated from `hearth --help` by `hearth docs cli > docs/cli.md`; every command
 | [`hearth app uninstall`](#hearth-app-uninstall) | Quit and remove the menu bar app |
 | [`hearth codex-import`](#hearth-codex-import) | Import Claude Code sessions into Codex (alias for `agent import codex --from claude`) |
 | [`hearth codex-threads`](#hearth-codex-threads) | Make restored sessions show up in Codex Desktop (index threads, names, sidebar sections) |
+| [`hearth cp`](#hearth-cp) | Copy files or directories between your machines, directly (parallel connections, resumable) |
 | [`hearth docs`](#hearth-docs) | Documentation: how to install the agents' software (env), the command reference (cli) |
 | [`hearth docs env`](#hearth-docs-env) | How to install and check Node, Codex CLI, Claude Code and codex-mixin, plus your organisation's notes from the server |
 | [`hearth docs cli`](#hearth-docs-cli) | Print the command reference as Markdown |
@@ -2172,6 +2173,33 @@ Codex rebuilds its thread list from restored rollouts but not names or sidebar s
 
 ```text
 hearth codex-threads
+```
+
+## hearth cp
+
+Copies a file or a directory to, from or between your machines. The control channel goes over
+Hearth's SSH; the data goes straight between the two machines over parallel TCP connections,
+encrypted with a key that only went through SSH (never through the Hearth server). Large files
+travel in chunks over every connection at once; an interrupted copy resumes when run again; files
+whose size and time already match are skipped. When the machines cannot connect directly in either
+direction, the data goes through SSH port forwards. When both see the target on a shared disk,
+it is copied there directly.
+
+  hearth cp ./ckpt gpu-a:/data/            push into /data/ckpt on gpu-a
+  hearth cp gpu-a:/data/ckpt .              pull
+  hearth cp gpu-a:/data/ckpt gpu-b:/data/   between two machines (straight from gpu-a to gpu-b)
+
+A target that is an existing directory or ends in / receives the source inside it (like cp -r).
+
+```text
+hearth cp <[machine:]source> <[machine:]target> [flags]
+
+Flags:
+      --compress string   zstd per chunk, kept where it helps: auto (across regions), on, off (default "auto")
+      --force             copy files even when their size and time match
+  -n, --no-clobber        keep files that already exist at the target
+  -q, --quiet             no progress
+  -j, --streams int       parallel data connections (default: 16 nearby, up to 64 across regions)
 ```
 
 ## hearth docs

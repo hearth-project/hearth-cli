@@ -225,6 +225,18 @@ hearth recovery-key rotate             # the recovery key was exposed
 
 Any device that logs in with the master password can decrypt every credential (no approval by an existing device), so the master password is their only protection: use a strong one, and after a suspected leak run `device revoke`, `passwd` and rotate the affected credentials.
 
+### Copying files between machines
+
+```bash
+hearth cp ./ckpt gpu-a:/data/            # push: /data/ckpt on gpu-a
+hearth cp gpu-a:/data/ckpt .              # pull
+hearth cp gpu-a:/data/ckpt gpu-b:/data/   # straight from gpu-a to gpu-b
+```
+
+The control channel goes over Hearth's SSH; the data goes directly between the two machines over parallel TCP connections, encrypted with AES-256-GCM under a key that only went through SSH, never through the Hearth server. Large files travel in 4 MiB chunks over every connection at once (16 nearby, up to 64 across regions, `-j` to set) and are written in place; chunks of several files go at once, so writers do not queue on one file. An interrupted copy resumes when the same command runs again; files whose size and time match are skipped (`--force` copies them anyway, `-n` keeps any existing file). Across regions chunks are compressed with zstd where it helps (`--compress auto|on|off`). When neither machine can open a connection to the other, the data goes through SSH port forwards; when the other machine's path is on a disk this one mounts too, it is copied there directly. Between two other machines the copy runs on the source, or, when the source cannot reach the target, on the target.
+
+Measured (memory to memory, 16 files of 2 GiB): 9.7 GiB/s between two bzz2 machines (400 Gb/s), 1.4 GiB/s from yq01 to johor (76 ms, 64 connections); one large file to a local disk goes at about the disk's speed (O_DIRECT, 3 GiB/s here).
+
 ### SSH between your machines
 
 Logged-in Linux machines accept SSH from your own devices only: public keys only (no passwords), the keys of your active devices, the host keys checked from the end-to-end encrypted endpoints (no "trust this host?"). `hearth ssh <machine>` and the `~/.ssh/config` entries Hearth writes on a Mac connect with this device's Hearth key.
