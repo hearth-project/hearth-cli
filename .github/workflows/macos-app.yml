@@ -29,7 +29,7 @@ jobs:
           "$RUNNER_TEMP/out/Hearth.app/Contents/MacOS/Hearth" --snapshot Fixtures/machines.json "$RUNNER_TEMP/out/snapshots"
           ls -l "$RUNNER_TEMP/out/snapshots"
           "$RUNNER_TEMP/out/Hearth.app/Contents/MacOS/Hearth" --icon "$RUNNER_TEMP/out/snapshots/icon.png"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: hearth-menubar
           path: |
