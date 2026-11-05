@@ -51,11 +51,11 @@ type Step struct {
 	DoneWhen string `toml:"done_when,omitempty"`
 	TTY      bool   `toml:"tty,omitempty"`
 	// A manual step with tty = true may name its command in run (a login
-	// that shows a QR code): agents run it under a pseudo-terminal on the
-	// machine (hearth recipe tty start) and show the code in the chat. Its
+	// that shows a QR code): the user runs it in their own terminal with
+	// hearth recipe login (hearth ssh -t <machine> ... for another machine);
+	// the code is drawn there, and the step's check marks it done. Its
 	// environment comes from set, where "${secret:NAME}" is a Hearth secret
-	// (set = {ONEAPI_KEY = "${secret:ONEAPI_KEY}"}); secret values never
-	// appear in the output. (set and run are fields older clients know, so a
+	// (set = {ONEAPI_KEY = "${secret:ONEAPI_KEY}"}), filled in on the machine. (set and run are fields older clients know, so a
 	// shared library with such a step still loads there.)
 
 	// tool

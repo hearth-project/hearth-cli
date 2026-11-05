@@ -145,9 +145,9 @@ hearth learn --accept id1,id2 --here id3 --never id4 \
 
 新机器上 `hearth setup` 只恢复其中的文件（凭证、配置）和环境变量；装软件、执行命令、扫码登录这些步骤组成这台机器的**恢复流程**（`hearth recipe plan`），由 agent 用 hearth skill 带着你一步步完成：推荐在另一台已登录 Hearth 的机器上说「恢复 <机器> 的 Codex 环境」（通过 `hearth ssh` 远程执行；`hearth machine list` 能看到每台机器的环境检查），也可以在这台机器上说「用 hearth 恢复这台机器的环境」：先跑每步的检查命令，按 [客户端软件环境安装指南](client-env.md)（`hearth docs env`）安装，再检查，完成后 `hearth recipe done <key>`。这台机器需要不同做法时，agent 会把新做法记回流程（`--here-step` 只给同类机器）。自己在终端执行也可以：`hearth recipe run <key>`，或整体 `hearth recipe apply`（列出全部命令、只问一次）。在任意一台机器上批准过的命令，在你的其他机器上直接执行，不再询问；批准记录端到端加密，服务器无法伪造，命令内容一改就会重新询问。不想共享批准时在 config.toml 设置 `[recipes] share_approvals = false`。机器档案：`hearth machine`（查看）、`hearth machine add <名字> --here`、`hearth machine use <名字>`。
 
-### 在聊天里完成扫码登录
+### 扫码登录
 
-在终端里显示二维码的登录（比如通过 DUCX 的 `codex-mixin setup`）是 `tty = true` 的 `manual` 步骤。在 `run` 里写上命令后，agent 可以替你执行，不用离开聊天窗口：Hearth 通过 `hearth ssh` 在目标机器的后台用伪终端运行它，从输出里读出二维码并转成 PNG，agent 把图片显示出来，你扫码；命令结束后运行该步骤的检查，通过就标记完成。命令的环境变量写在 `set` 里，`${secret:NAME}` 表示你的一个 Hearth 密钥；输出里的密钥值会被替换成 `********`。
+在终端里显示二维码的登录（比如通过 DUCX 的 `codex-mixin setup`）是 `tty = true` 的 `manual` 步骤。在 `run` 里写上命令后，`hearth recipe login <key>` 会在你终端的前台运行它，二维码由程序自己画出来；命令成功后运行该步骤的检查并标记完成。环境变量来自 `set`，其中 `${secret:NAME}` 是你的某个 Hearth 密钥，在运行步骤的机器上取值（不会出现在命令行里）。
 
 ```toml
 [[step]]
@@ -160,7 +160,13 @@ set = { ONEAPI_KEY = "${secret:ONEAPI_KEY}", https_proxy = "http://proxy.example
 done_when = 'PATH="$HOME/.local/bin:$PATH"; codex-mixin doctor --no-tui | grep -q "doctor: ok"'
 ```
 
-agent 用 `hearth` MCP 工具 `run_interactive_step`、`poll_interactive_step`、`answer_interactive_step` 和 `stop_interactive_step`；在终端里：`hearth recipe tty start <key> --on <机器>`（打印 PNG 的路径）、`hearth recipe tty status <会话> --on <机器>`。只能启动计划里这一类步骤；二维码图片只放在你当前所用机器的临时目录里（权限 0600），步骤结束即删除，会话内容不会上传。目标机器需要是 Linux，并且装的是这个版本的 Hearth。
+agent 恢复另一台机器、走到这样的步骤时，不会在聊天里显示二维码：它执行 `hearth recipe login <key> --on <机器>`，先确认那台机器能运行这个步骤，再打印出一条命令交给你：
+
+```bash
+hearth ssh -t gpu-a -- 'PATH="$HOME/.local/bin:$PATH"; exec hearth recipe login learned/5dc36cca78'
+```
+
+在你自己的终端里运行它，扫那里画出的二维码，然后告诉 agent，它会检查结果。`hearth recipe login <key> --print` 在终端里也只打印命令；不带 `--on` 时在本机运行。只能运行计划里这类步骤（目标机器上的 Hearth 要有 `recipe login`：`hearth self-update`）。
 
 ### 组织默认配置
 

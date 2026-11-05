@@ -314,7 +314,7 @@ func (e *Engine) toolsRecipe(rs []*recipe.Recipe) *recipe.Recipe {
 
 // InteractiveStep finds a step of this machine's plan that runs a command
 // in a terminal (manual, tty = true, with run): the only kind `hearth recipe
-// tty` starts. It returns the step and its environment (set: values may be
+// login` runs. It returns the step and its environment (set: values may be
 // "${secret:NAME}").
 func (e *Engine) InteractiveStep(key string) (recipe.PlanStep, map[string]string, error) {
 	plan, err := e.Plan()

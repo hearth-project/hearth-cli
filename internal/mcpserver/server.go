@@ -54,9 +54,6 @@ type Service struct {
 	PrepareCredentials func(names []string) (string, error)
 	Remember           func(text, scope string) (string, error)
 	Forget             func(id string) error
-	// Interactive runs `hearth recipe tty <op>` (start, status, input, stop)
-	// for the interactive-step tools (interactive.go); nil leaves them out.
-	Interactive func(op, machine, arg, extra string) (InteractiveResult, error)
 
 	mu        sync.Mutex
 	sig       string
@@ -414,9 +411,6 @@ func (s *Service) New(version string) *mcp.Server {
 			}
 			return text("Recorded as proposal " + id + ". Tell the user to review it with `hearth recipe proposals`."), nil, nil
 		})
-	}
-	if s.Interactive != nil {
-		s.addInteractive(srv)
 	}
 	return srv
 }
