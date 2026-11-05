@@ -13,6 +13,8 @@ var PortalDocs = map[string]string{
 	"library":  "/v1/me/library",
 	"teams":    "/v1/me/teams",
 	"settings": "/v1/me/settings",
+	"devices":  "/v1/me/devices",
+	"intents":  "/v1/me/intents",
 }
 
 // Portal returns the console's documents (see PortalDocs) as JSON, read
@@ -44,6 +46,15 @@ func (e *Engine) AdminPortal() (map[string]json.RawMessage, map[string]string, e
 func (e *Engine) AdminCall(method, path string, body json.RawMessage) (json.RawMessage, error) {
 	if !strings.HasPrefix(path, "/v1/admin/") {
 		return nil, fmt.Errorf("only /v1/admin/ paths are allowed: %s", path)
+	}
+	return e.ConsoleCall(method, path, body)
+}
+
+// ConsoleCall runs one console request (/v1/me... or /v1/admin/...) in a
+// short console session and returns the JSON reply (nil for an empty one).
+func (e *Engine) ConsoleCall(method, path string, body json.RawMessage) (json.RawMessage, error) {
+	if path != "/v1/me" && !strings.HasPrefix(path, "/v1/me/") && !strings.HasPrefix(path, "/v1/admin/") {
+		return nil, fmt.Errorf("only /v1/me and /v1/admin/ paths are allowed: %s", path)
 	}
 	web, hdr, err := e.consoleAPI()
 	if err != nil {

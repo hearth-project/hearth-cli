@@ -53,9 +53,10 @@ enum Snapshot {
         let portal = PortalStore(fixture: reply)
         let pages: [(String, AnyView)] = [
             ("overview", AnyView(OverviewPage(portal: portal, machines: store, go: { _ in }))),
-            ("machines", AnyView(MachinesPage(store: store))),
+            ("machines", AnyView(MachinesPage(store: store, portal: portal))),
             ("library", AnyView(LibraryPage(portal: portal))),
             ("teams", AnyView(TeamsPage(portal: portal))),
+            ("settings", AnyView(MySettingsPage(portal: portal))),
         ]
         for (name, scheme) in [("light", ColorScheme.light), ("dark", ColorScheme.dark)] {
             for (page, v) in pages {

@@ -75,6 +75,7 @@ struct AdminUsersPage: View {
     @State private var query = ""
     @State private var pendingDelete: AdminUser?
     @State private var pendingRevoke: AdminUser?
+    @State private var devicesOf: AdminUser?
 
     private var shown: [AdminUser] {
         let q = query.trimmingCharacters(in: .whitespaces).lowercased()
@@ -87,6 +88,21 @@ struct AdminUsersPage: View {
             let waiting = shown.filter { $0.status == "pending" }
             if !waiting.isEmpty {
                 Panel(title: "等待审批") {
+                    if waiting.count > 1 {
+                        HStack {
+                            Text("\(waiting.count) 位用户等待审批").font(.system(size: 11.5)).foregroundStyle(.secondary)
+                            Spacer()
+                            Button("全部批准") {
+                                Task {
+                                    for u in waiting {
+                                        await store.call("POST", "/v1/admin/users/\(adminPath(u.email))/status", ["status": "active"], done: "已批准 \(waiting.count) 位用户", reload: false)
+                                    }
+                                    await store.refresh()
+                                }
+                            }
+                            .modifier(PrimaryButton()).controlSize(.small)
+                        }
+                    }
                     ForEach(waiting) { u in
                         HStack(spacing: 10) {
                             Avatar(email: u.email, tint: Theme.warn)
@@ -117,6 +133,7 @@ struct AdminUsersPage: View {
                 }
             }
         }
+        .sheet(item: $devicesOf) { u in UserDevicesSheet(store: store, user: u) }
         .confirmationDialog("删除 \(pendingDelete?.email ?? "")？", isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }), titleVisibility: .visible) {
             Button("删除用户及其全部数据", role: .destructive) {
                 if let u = pendingDelete { Task { await store.call("DELETE", "/v1/admin/users/\(adminPath(u.email))", done: "已删除 \(u.email)") } }
@@ -152,6 +169,8 @@ struct AdminUsersPage: View {
                     .font(.system(size: 10)).foregroundStyle(.tertiary)
             }
             Menu {
+                Button("查看设备…") { devicesOf = u }
+                Divider()
                 Menu("配额") {
                     Button("使用默认") { quota(u, -1) }
                     Button("不限") { quota(u, 0) }
@@ -186,5 +205,63 @@ struct Avatar: View {
     var body: some View {
         Circle().fill(tint.opacity(0.15)).frame(width: 30, height: 30)
             .overlay(Text(String(email.first.map(String.init) ?? "?").uppercased()).font(.system(size: 13, weight: .semibold)).foregroundStyle(tint))
+    }
+}
+
+/// Devices one user is logged in on, as the web Users page shows them.
+struct UserDevicesSheet: View {
+    @ObservedObject var store: AdminStore
+    var user: AdminUser
+    @Environment(\.dismiss) private var dismiss
+    @State private var devices: [Device]?
+    @State private var failed = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            SheetHeader(icon: "desktopcomputer", title: user.email, subtitle: "登录中的设备", close: { dismiss() })
+            if let ds = devices {
+                if ds.isEmpty { Text("这位用户没有登录中的设备。").font(.system(size: 12)).foregroundStyle(.tertiary) }
+                ScrollView {
+                    VStack(spacing: 0) {
+                        ForEach(Array(ds.enumerated()), id: \.element.id) { i, d in
+                            if i > 0 { Divider().opacity(0.4) }
+                            row(d)
+                        }
+                    }
+                }
+                .scrollIndicators(.never)
+            } else if failed {
+                Text("读取设备失败。").font(.system(size: 12)).foregroundStyle(Theme.warn)
+            } else {
+                HStack { Spacer(); ProgressView().controlSize(.small); Spacer() }.padding(.vertical, 20)
+            }
+        }
+        .padding(18)
+        .frame(width: 520, height: 420, alignment: .top)
+        .task { await load() }
+    }
+
+    private func row(_ d: Device) -> some View {
+        HStack(spacing: 10) {
+            Circle().fill(d.online == true ? Theme.ok : Color.secondary.opacity(0.35)).frame(width: 7, height: 7)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(d.alias?.isEmpty == false ? d.alias! : d.name).font(.system(size: 13, weight: .medium))
+                    if d.alias?.isEmpty == false { Text(d.name).font(.system(size: 11)).foregroundStyle(.tertiary) }
+                }
+                Text([d.ip, d.version.map { "v" + $0 }, "\(d.sessions ?? 0) 个会话"].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "))
+                    .font(.system(size: 11)).foregroundStyle(.secondary)
+            }
+            Spacer()
+            Text(d.online == true ? "在线" : (d.last_seen.map { Fmt.ago($0) } ?? "")).font(.system(size: 11)).foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 7)
+    }
+
+    private func load() async {
+        guard let data = await store.call("GET", "/v1/admin/users/\(adminPath(user.email))/devices", reload: false) else { failed = true; return }
+        if let ds = try? JSONDecoder().decode([Device].self, from: data) { devices = ds }
+        else if let w = try? JSONDecoder().decode([String: [Device]].self, from: data), let ds = w.values.first { devices = ds }
+        else { failed = true }
     }
 }

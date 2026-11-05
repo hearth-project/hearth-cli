@@ -79,7 +79,7 @@ enum Dest: Hashable {
 }
 
 enum NativePage: String, CaseIterable, Identifiable {
-    case overview, machines, library, teams
+    case overview, machines, library, teams, settings
     var id: String { rawValue }
     var title: String {
         switch self {
@@ -87,6 +87,7 @@ enum NativePage: String, CaseIterable, Identifiable {
         case .machines: return "机器"
         case .library: return "技能与 Agent"
         case .teams: return "团队"
+        case .settings: return "我的设置"
         }
     }
     var icon: String {
@@ -95,6 +96,7 @@ enum NativePage: String, CaseIterable, Identifiable {
         case .machines: return "desktopcomputer"
         case .library: return "books.vertical"
         case .teams: return "person.2"
+        case .settings: return "gearshape"
         }
     }
     var tint: Color {
@@ -103,6 +105,7 @@ enum NativePage: String, CaseIterable, Identifiable {
         case .machines: return Theme.ok
         case .library: return Theme.accent
         case .teams: return Color(red: 0.55, green: 0.40, blue: 0.85)
+        case .settings: return .gray
         }
     }
 }
@@ -155,9 +158,10 @@ struct NativeRoot: View {
                 } else {
                     switch dest {
                     case .user(.overview): OverviewPage(portal: portal, machines: machines, go: { dest = .user($0) })
-                    case .user(.machines): MachinesPage(store: machines)
+                    case .user(.machines): MachinesPage(store: machines, portal: portal)
                     case .user(.library): LibraryPage(portal: portal)
                     case .user(.teams): TeamsPage(portal: portal)
+                    case .user(.settings): MySettingsPage(portal: portal)
                     case .admin(.dashboard): AdminDashboardPage(store: admin)
                     case .admin(.users): AdminUsersPage(store: admin)
                     case .admin(.invites): AdminInvitesPage(store: admin)
