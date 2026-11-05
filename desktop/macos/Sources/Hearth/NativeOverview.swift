@@ -194,3 +194,32 @@ struct OverviewPage: View {
         Text("会话和凭证是端到端加密的，这里看不到它们的标题和内容。").font(.system(size: 11)).foregroundStyle(.tertiary)
     }
 }
+
+struct CountChart: View {
+    var series: [(String, Int)]
+    var tint: Color
+    var unit: String
+    var body: some View {
+        let peak = max(series.map(\.1).max() ?? 0, 1)
+        VStack(spacing: 4) {
+            HStack(alignment: .bottom, spacing: 3) {
+                ForEach(Array(series.enumerated()), id: \.offset) { _, d in
+                    RoundedRectangle(cornerRadius: 2, style: .continuous)
+                        .fill(d.1 > 0 ? tint : tint.opacity(0.18))
+                        .frame(height: max(3, 90 * CGFloat(d.1) / CGFloat(peak)))
+                        .frame(maxWidth: .infinity)
+                        .help("\(d.0)  \(d.1) \(unit)")
+                }
+            }
+            .frame(height: 90, alignment: .bottom)
+            HStack {
+                Text(String((series.first?.0 ?? "").dropFirst(5)))
+                Spacer()
+                Text("最高 \(peak) \(unit)")
+                Spacer()
+                Text(String((series.last?.0 ?? "").dropFirst(5)))
+            }
+            .font(.system(size: 10)).foregroundStyle(.tertiary)
+        }
+    }
+}

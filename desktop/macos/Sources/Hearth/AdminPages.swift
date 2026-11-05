@@ -60,6 +60,14 @@ struct AdminDashboardPage: View {
             }
         }
         HStack(alignment: .top, spacing: 12) {
+            Panel(title: "每日活跃用户") {
+                CountChart(series: (o.series ?? []).map { ($0.day, $0.active_users ?? 0) }, tint: Theme.ok, unit: "人")
+            }
+            Panel(title: "每日注册") {
+                CountChart(series: (o.series ?? []).map { ($0.day, $0.signups ?? 0) }, tint: Theme.accent, unit: "人")
+            }
+        }
+        HStack(alignment: .top, spacing: 12) {
             Panel(title: "常用 Skills（30 天）") { RankBars(items: (o.top_skills ?? []).map { NameCount(name: $0.name, count: $0.count) }, tint: Theme.accent) }
             Panel(title: "常用 Agents（30 天）") { RankBars(items: (o.top_agents ?? []).map { NameCount(name: $0.name, count: $0.count) }, tint: Color(red: 0.55, green: 0.40, blue: 0.85)) }
         }
