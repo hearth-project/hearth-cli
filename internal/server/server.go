@@ -57,6 +57,10 @@ type Config struct {
 	// SiteAuth requires a login for GET /v1/site. Off by default: the
 	// installer fetches the defaults before the user has an account.
 	SiteAuth bool
+	// TransferFile is the admin's settings for `hearth transfer` (service
+	// address, shared token, path rules), served to logged-in users;
+	// "" = <DataDir>/transfer.json. Keep it mode 0600: it holds a token.
+	TransferFile string
 	// IdentityBrokerURL/Key configure passwordless login through a
 	// platform identity broker. The broker answers GET
 	// <url>/v3/user/userAuth?userName=<erp> with {"data":{"sk":...}} when
@@ -102,6 +106,9 @@ type Server struct {
 func New(cfg Config) (*Server, error) {
 	if cfg.SiteDir == "" {
 		cfg.SiteDir = filepath.Join(cfg.DataDir, "site")
+	}
+	if cfg.TransferFile == "" {
+		cfg.TransferFile = filepath.Join(cfg.DataDir, "transfer.json")
 	}
 	if cfg.ExpireAfter == 0 {
 		cfg.ExpireAfter = 30 * 24 * time.Hour
@@ -240,7 +247,7 @@ func (s *Server) writeStoreErr(w http.ResponseWriter, err error) {
 		writeErr(w, http.StatusGone, "session deleted")
 	case errors.Is(err, errLocked):
 		writeErr(w, http.StatusLocked, "session leased by another device")
-	case errors.Is(err, errAliasTaken):
+	case errors.Is(err, errAliasTaken), errors.Is(err, errDeviceOnline):
 		writeErr(w, http.StatusConflict, err.Error())
 	case errors.Is(err, errExists):
 		writeErr(w, http.StatusConflict, "already exists")

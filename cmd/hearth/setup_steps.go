@@ -19,14 +19,14 @@ func joinMax(items []string, n int) string {
 	return strings.Join(items[:n], ", ") + fmt.Sprintf(" and %d more", len(items)-n)
 }
 
-// setupHeader names this machine in one line.
+// setupHeader welcomes the user and names this machine.
 func setupHeader() string {
 	f := client.Facts()
 	hw := f.OS + " " + f.Arch
 	if f.GPU != "" {
 		hw += fmt.Sprintf(", %d x %s", f.GPUCount, f.GPUName)
 	}
-	return fmt.Sprintf("Hearth setup on %s (%s)", shortHost(f.Hostname), hw)
+	return fmt.Sprintf("\nWelcome to Hearth %s\n\nThis sets up %s (%s) from your other machines.\n", version, shortHost(f.Hostname), hw)
 }
 
 // reportProxy says once when this process reaches the server through a
@@ -34,15 +34,17 @@ func setupHeader() string {
 func reportProxy(out *setupOut) {
 	if client.AutoProxy != "" && !proxyReported {
 		proxyReported = true
-		out.line("network", "no direct route to the server; using proxy "+client.AutoProxy+" (remembered)")
+		out.fact("network", "no direct route to the server; using proxy "+client.AutoProxy+" (remembered)")
 	}
 }
 
 var proxyReported bool
 
 func printRecoveryKey(email, rk string) {
-	fmt.Printf("  %-12s %s created. Recovery key, shown once: store it offline (a password manager),\n"+
-		"%15snever in a chat or ticket. Lost or leaked: hearth recovery-key rotate\n%15s%s\n", "account", email, "", "", rk)
+	fmt.Printf("  %-*s  %s created\n\n"+
+		"Your recovery key, shown once. Store it offline (a password manager), never in a\n"+
+		"chat or ticket; it resets the master password. Lost or leaked: hearth recovery-key rotate\n\n"+
+		"    %s\n\n", labelWidth, "account", email, rk)
 }
 
 // libraryCounts are the skills and agents this machine has (own and linked).
@@ -62,51 +64,83 @@ func libraryCounts(home string) (skills, agents int) {
 	return
 }
 
-// printSetupSummary ends setup with the few next steps that apply,
-// numbered, the one that matters most first.
-func printSetupSummary(out *setupOut, e *client.Engine, envLeft, withSkill []string, codexTrust bool) {
-	home := e.Home
-	var next []string
+// printSetupSummary ends setup: the next steps that apply, numbered, the
+// one that matters most first, with the command to type on its own line;
+// then where the rest is.
+func printSetupSummary(out *setupOut, e *client.Engine, envLeft, withSkill []string, codexTrust, onDemand bool) {
+	type step struct{ text, cmd string }
+	var next []step
 	if len(envLeft) > 0 {
-		agent := "Codex"
-		if ma := client.MachineAgents(home); len(ma) > 0 && ma[0] != "codex" {
-			agent = map[string]string{"claude": "Claude Code", "comate": "Comate"}[ma[0]]
-		}
-		alias := thisAlias(e)
-		next = append(next, fmt.Sprintf("Set up the software (%s): on any machine with Hearth, tell its agent\n     \"恢复 %s 的 %s 环境\"",
-			joinMax(envLeft, 3), alias, agent))
+		agent := map[string]string{"codex": "Codex", "claude": "Claude Code", "comate": "Comate"}[restoreAgent(e)]
+		next = append(next, step{fmt.Sprintf("Set up the software (%s).\nOn any machine with Hearth, tell its agent:", joinMax(envLeft, 3)),
+			fmt.Sprintf("恢复 %s 的 %s 环境", thisAlias(e), agent)})
 	}
 	if exe, err := os.Executable(); err == nil {
 		if p, err := exec.LookPath("hearth"); err != nil || !sameFile(p, exe) {
 			// Installed in a directory this terminal's PATH does not have yet.
-			next = append(next, fmt.Sprintf("Open a new terminal (this one does not find hearth yet), or: export PATH=\"%s:$PATH\"", filepath.Dir(exe)))
+			next = append(next, step{"Open a new terminal (this one does not find hearth yet), or run:", fmt.Sprintf("export PATH=\"%s:$PATH\"", filepath.Dir(exe))})
 		}
 	}
 	if codexTrust {
-		next = append(next, "Codex asks once at its next start to trust Hearth's memory hooks: choose \"Trust all and continue\"")
+		next = append(next, step{"At its next start, Codex asks once to trust Hearth's memory hooks:\nchoose \"Trust all and continue\".", ""})
 	}
 	if n := len(e.LearnPending()); n > 0 {
-		next = append(next, fmt.Sprintf("hearth learn: %s here need your choice", plural(n, "item", "items")))
+		verb := "needs"
+		if n > 1 {
+			verb = "need"
+		}
+		next = append(next, step{fmt.Sprintf("%s here %s your choice:", plural(n, "item", "items"), verb), "hearth learn"})
+	}
+	fmt.Printf("\nHearth is ready on %s.\n", thisAlias(e))
+	if len(next) > 0 {
+		fmt.Println("\nNext steps:")
+		for i, n := range next {
+			fmt.Printf("\n  %d. %s\n", i+1, strings.ReplaceAll(n.text, "\n", "\n     "))
+			if n.cmd != "" {
+				fmt.Printf("\n       %s\n", n.cmd)
+			}
+		}
 	}
 	fmt.Println()
-	if len(next) > 0 {
-		fmt.Println("Next")
-		for i, n := range next {
-			fmt.Printf("  %d. %s\n", i+1, n)
-		}
+	if onDemand {
+		fmt.Println("Your agents' skills, skill search and memory, credentials and shell lines are set up when")
+		fmt.Println("you restore this machine's environment; conversations with hearth restore --last 10;")
+		fmt.Println("everything now: hearth setup --full.")
 	}
 	where := "your coding agent"
 	if len(withSkill) > 0 {
 		where = strings.Join(withSkill, " / ")
 	}
-	tail := []string{"Anything else: ask " + where + " \"用 hearth\"", "hearth status"}
-	if h := out.logHint(); h != "" {
-		tail = append(tail, h)
-	}
-	fmt.Println("  " + strings.Join(tail, " · "))
+	fmt.Printf("Anything else: ask %s \"用 hearth\", or run hearth status.\n", where)
 	if inContainer() {
-		fmt.Println("  In a container: add `hearth flush` as a preStop hook so a graceful stop loses nothing")
+		fmt.Println("In a container, add `hearth flush` as a preStop hook so a graceful stop loses nothing.")
 	}
+	if out.logPath != "" {
+		fmt.Println("Log: " + strings.TrimPrefix(out.logHint(), "details: "))
+	}
+}
+
+// restoreAgent is the agent whose environment the next step restores: the
+// one set up here, else the one the user worked with last (installed here
+// first), else codex.
+func restoreAgent(e *client.Engine) string {
+	if ma := client.MachineAgents(e.Home); len(ma) > 0 {
+		return ma[0]
+	}
+	all, err := e.List()
+	if err != nil {
+		return "codex"
+	}
+	recent, _ := client.RecentAgents(e.Home, client.AgentUse(all))
+	for _, a := range recent {
+		if client.AgentInstalledHere(a) {
+			return a
+		}
+	}
+	if len(recent) > 0 {
+		return recent[0]
+	}
+	return "codex"
 }
 
 // inContainer guesses whether this runs in a container (Docker, Kubernetes).

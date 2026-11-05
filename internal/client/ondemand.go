@@ -56,37 +56,3 @@ func AgentInstalledHere(agent string) bool {
 	_, err := LookTool(cli)
 	return err == nil
 }
-
-// InstalledAgents keeps the agents of list whose CLI is on this machine.
-func InstalledAgents(list []string) []string {
-	out := []string{}
-	for _, a := range list {
-		if AgentInstalledHere(a) {
-			out = append(out, a)
-		}
-	}
-	return out
-}
-
-// AdoptInstalledAgents: on an on-demand machine, an agent the user works
-// with that got installed since (the user restored its environment) joins
-// this machine's agents, so the library is rendered for it and its
-// hooks and skill search are registered. Returns the agents added.
-func AdoptInstalledAgents(home string, used []string) ([]string, error) {
-	if !OnDemand(home) {
-		return nil, nil
-	}
-	have := machineSet(home)
-	on := enabledSet(home)
-	var added []string
-	for _, a := range used {
-		if on[a] && !have[a] && AgentInstalledHere(a) {
-			if err := AddMachineAgent(home, a); err != nil {
-				return added, err
-			}
-			have[a] = true
-			added = append(added, a)
-		}
-	}
-	return added, nil
-}

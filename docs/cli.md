@@ -102,11 +102,7 @@ Generated from `hearth --help` by `hearth docs cli > docs/cli.md`; every command
 | [`hearth recipe proposals`](#hearth-recipe-proposals) | Setup steps proposed by agents (MCP propose_setup_step), waiting for review |
 | [`hearth recipe proposals accept`](#hearth-recipe-proposals-accept) | Merge proposals into their recipes |
 | [`hearth recipe proposals reject`](#hearth-recipe-proposals-reject) | Drop proposals |
-| [`hearth recipe tty`](#hearth-recipe-tty) | Interactive restore steps (QR-code logins) in the background, for agents: start, status, input, stop |
-| [`hearth recipe tty start`](#hearth-recipe-tty-start) | Start an interactive step in the background |
-| [`hearth recipe tty status`](#hearth-recipe-tty-status) | A session's state, its QR code and output |
-| [`hearth recipe tty input`](#hearth-recipe-tty-input) | Type an answer into the step's terminal (Enter added) |
-| [`hearth recipe tty stop`](#hearth-recipe-tty-stop) | End a running interactive step |
+| [`hearth recipe login`](#hearth-recipe-login) | Run a QR-code login step in this terminal (--on <machine>: over hearth ssh); without a terminal, print the command for the user |
 | [`hearth recipe list`](#hearth-recipe-list) | List recipes |
 | [`hearth recipe show`](#hearth-recipe-show) | Print a recipe |
 | [`hearth recipe add`](#hearth-recipe-add) | Validate a recipe and copy it into the library |
@@ -147,7 +143,7 @@ Generated from `hearth --help` by `hearth docs cli > docs/cli.md`; every command
 | [`hearth whoami`](#hearth-whoami) | Show the local identity and this workspace's hearth login |
 | [`hearth device`](#hearth-device) | Manage devices |
 | [`hearth device list`](#hearth-device-list) | List devices |
-| [`hearth device rename`](#hearth-device-rename) | Name a machine (shown as name (host), its SSH host name); one argument: this machine; "" clears it |
+| [`hearth device rename`](#hearth-device-rename) | Name a machine (shown as name (host), its SSH host name; an offline machine's name continues that machine); one argument: this machine; "" clears it |
 | [`hearth device revoke`](#hearth-device-revoke) | Revoke a device's access (rotate any credentials it had) |
 | [`hearth passwd`](#hearth-passwd) | Change the master password (other devices keep working) |
 | [`hearth recover`](#hearth-recover) | Forgot the password: set a new one with the recovery key (signs out all devices) |
@@ -235,6 +231,12 @@ Generated from `hearth --help` by `hearth docs cli > docs/cli.md`; every command
 | [`hearth ssh keys`](#hearth-ssh-keys) | Keys your machines accept |
 | [`hearth ssh unauthorize`](#hearth-ssh-unauthorize) | Remove a key added with authorize |
 | [`hearth ssh config`](#hearth-ssh-config) | Write Host entries for your machines into ~/.ssh/config (kept up to date by the daemon) |
+| [`hearth transfer`](#hearth-transfer) | Copy large directories between storage systems with a DataTool-compatible service (asynchronous, server-side) |
+| [`hearth transfer meta`](#hearth-transfer-meta) | What the service can copy: storages, allowed directions, path hints, defaults and limits |
+| [`hearth transfer submit`](#hearth-transfer-submit) | Submit a copy task (shows the plan and asks first) |
+| [`hearth transfer list`](#hearth-transfer-list) | Tasks submitted from this machine (--all: every task on the service) |
+| [`hearth transfer status`](#hearth-transfer-status) | State, progress and error of one task |
+| [`hearth transfer cancel`](#hearth-transfer-cancel) | Cancel a task (only your own, unless --force) |
 
 ## hearth setup
 
@@ -244,7 +246,7 @@ Log in, restore the newest conversations, skills and credentials, and start back
 hearth setup [flags]
 
 Flags:
-      --alias string     a name for this machine (default: asked in a terminal, proposing e.g. gb-node-e05-13); hearth device rename changes it
+      --alias string     a name for this machine (default: asked in a terminal, proposing e.g. gb-node-e05-13); an offline machine's name continues that machine; hearth device rename changes it
       --ca-cert string   PEM certificate to trust for a self-signed server
       --device string    device name (default: hostname)
       --email string     account email (default: this machine's local identity, as hearth login)
@@ -1259,72 +1261,21 @@ Drop proposals
 hearth recipe proposals reject <id>...
 ```
 
-## hearth recipe tty
+## hearth recipe login
 
-Runs a plan step that needs a terminal (manual, tty = true, with run) under a pseudo-terminal in the
-background on this machine or another (--on <machine>, over hearth ssh). status returns the QR code it
-shows as a PNG file; once the command ends, its check runs and the step is marked done.
+Runs an interactive plan step (manual, tty = true, with run) in the foreground of this terminal, so the
+program draws its QR code itself; when the command succeeds the step's check runs and the step is marked
+done. With --on <machine> it goes over hearth ssh -t. Without a terminal (an agent runs it), or with
+--print, it prints the command the user runs in their own terminal instead:
 
-  hearth recipe tty start <key> --on <machine>        start it; waits for a code (--wait)
-  hearth recipe tty status <session> --on <machine>   state, code, output (a new code: --since <qr_hash>)
-  hearth recipe tty input <session> <text> --on ...   answer a prompt
-  hearth recipe tty stop <session> --on <machine>
+  hearth ssh -t <machine> -- 'PATH="$HOME/.local/bin:$PATH"; exec hearth recipe login <key>'
 
 ```text
-hearth recipe tty
-```
-
-## hearth recipe tty start
-
-Start an interactive step in the background
-
-```text
-hearth recipe tty start <step-key> [flags]
+hearth recipe login <step-key> [flags]
 
 Flags:
-      --json            machine-readable
-      --on string       the machine (default: this one)
-      --qr-out string   write the code to this PNG file (default: a temporary file, removed when the step ends)
-      --wait duration   wait this long for a code or the end (default 20s)
-```
-
-## hearth recipe tty status
-
-A session's state, its QR code and output
-
-```text
-hearth recipe tty status <session> [flags]
-
-Flags:
-      --json            machine-readable
-      --on string       the machine (default: this one)
-      --qr-out string   write the code to this PNG file (default: a temporary file, removed when the step ends)
-      --since string    wait for a code other than this qr_hash (or the end)
-      --wait duration   wait this long for a code or the end (default 20s)
-```
-
-## hearth recipe tty input
-
-Type an answer into the step's terminal (Enter added)
-
-```text
-hearth recipe tty input <session> <text> [flags]
-
-Flags:
-      --json        machine-readable
       --on string   the machine (default: this one)
-```
-
-## hearth recipe tty stop
-
-End a running interactive step
-
-```text
-hearth recipe tty stop <session> [flags]
-
-Flags:
-      --json        machine-readable
-      --on string   the machine (default: this one)
+      --print       only print the command for the user's terminal
 ```
 
 ## hearth recipe list
@@ -1724,7 +1675,7 @@ hearth device list
 
 ## hearth device rename
 
-Name a machine (shown as name (host), its SSH host name); one argument: this machine; "" clears it
+Name a machine (shown as name (host), its SSH host name; an offline machine's name continues that machine); one argument: this machine; "" clears it
 
 ```text
 hearth device rename [<machine>] <name>
@@ -2614,4 +2565,92 @@ Write Host entries for your machines into ~/.ssh/config (kept up to date by the 
 
 ```text
 hearth ssh config
+```
+
+## hearth transfer
+
+Submits copy tasks to a transfer service that moves a directory from one storage system to another
+on its own side (e.g. between two clusters' shared file systems), tracks them, and cancels them.
+The data does not pass through this machine or the Hearth server, and it is not encrypted or versioned
+by Hearth: use `hearth cp` or the normal sync for personal state, small files and anything that must
+stay end-to-end encrypted. The server admin provides the service address, token and path rules
+(transfer.json in the server's data directory); [transfer] in config.toml overrides them
+(see docs/en/usage.md).
+
+  hearth transfer meta                      storages, allowed directions, limits
+  hearth transfer submit --from a@one:/data/ckpt --to b@two:/data/ckpt
+  hearth transfer list | status <id> | cancel <id>
+
+```text
+hearth transfer
+```
+
+## hearth transfer meta
+
+What the service can copy: storages, allowed directions, path hints, defaults and limits
+
+```text
+hearth transfer meta
+```
+
+## hearth transfer submit
+
+Copies the source directory to the destination on the service's side. STORAGE is a name from
+`hearth transfer meta`; PATH is the path on that storage. A path under a prefix listed in
+[transfer.paths."STORAGE"] of config.toml is translated first (so a path as seen on this machine
+works); a URL such as afs://... and any other absolute path are sent as given.
+
+The destination directory must be empty. The plan is printed and you confirm it; without a terminal
+pass --yes. --dry-run asks the service for a dry run. AFS needs a UGI: [transfer] afs_ugi_secret.
+
+```text
+hearth transfer submit --from STORAGE:PATH --to STORAGE:PATH [flags]
+
+Flags:
+      --checkers int    parallel checkers (default: the service's, at most its limit)
+      --dry-run         ask the service for a dry run
+      --from string     source, STORAGE:PATH
+      --name string     task name (default: hearth-<destination directory>-<date>)
+      --to string       destination, STORAGE:PATH (an empty directory)
+      --transfers int   parallel file transfers (default: the service's, at most its limit)
+  -y, --yes             do not ask; you confirm the destination directory is empty
+```
+
+## hearth transfer list
+
+The service does not tell users apart, so by default only the tasks this machine submitted are shown
+(their current state is fetched). --all lists the service's tasks, whoever created them.
+
+```text
+hearth transfer list [flags]
+
+Flags:
+      --all              every task on the service, not only this machine's
+      --json             JSON output
+      --keyword string   only tasks whose name or id contains this
+  -n, --limit int        at most this many tasks (default 20)
+      --status string    only this state (pending, serving, running, cleaning, succeeded, failed, canceling, canceled)
+```
+
+## hearth transfer status
+
+State, progress and error of one task
+
+```text
+hearth transfer status <task-id> [flags]
+
+Flags:
+      --json   JSON output
+```
+
+## hearth transfer cancel
+
+Asks the service to stop the task. The service does not tell users apart, so Hearth only cancels tasks
+this machine submitted; --force cancels any task id, which can stop somebody else's copy.
+
+```text
+hearth transfer cancel <task-id> [flags]
+
+Flags:
+      --force   cancel a task this machine did not submit
 ```

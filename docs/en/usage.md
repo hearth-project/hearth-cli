@@ -145,9 +145,9 @@ hearth learn --accept id1,id2 --here id3 --never id4 \
 
 On a new machine `hearth setup` restores only their files (credentials, configs) and environment variables; installing software, running commands and QR-code logins make up this machine's **restore flow** (`hearth recipe plan`), which an agent goes through with the hearth skill: preferably from another machine with Hearth ("restore the Codex environment of <machine>", over `hearth ssh`; `hearth machine list` shows each machine's environment check), or on the machine itself ("use hearth to restore this machine's environment"): it runs each step's check, installs following the [client software setup guide](client-env.md) (`hearth docs env`), checks again and marks it with `hearth recipe done <key>`. When this machine needed another way, the agent records it back into the flow (`--here-step` for machines like this one). In a terminal: `hearth recipe run <key>`, or all at once `hearth recipe apply` (lists the commands, asks once). A command approved on any of your machines runs on the others without asking; the approvals are end-to-end encrypted, so the server cannot forge them, and a changed command is asked about again. `[recipes] share_approvals = false` in config.toml approves per machine instead. Machine profiles: `hearth machine` (show), `hearth machine add <name> --here`, `hearth machine use <name>`.
 
-### QR-code logins in the chat
+### QR-code logins
 
-A login that shows a QR code in the terminal (for example `codex-mixin setup` through DUCX) is a `manual` step with `tty = true`. Give it the command in `run` and the agent runs it for you without leaving the chat: Hearth starts it under a pseudo-terminal in the background on the target machine (over `hearth ssh`), reads the QR code from the output as a PNG, the agent shows it, you scan it, and when the command ends the step's check runs and the step is marked done. Environment comes from `set`, where `${secret:NAME}` is one of your Hearth secrets; secret values are replaced by `********` in the output.
+A login that shows a QR code in the terminal (for example `codex-mixin setup` through DUCX) is a `manual` step with `tty = true`. Give it the command in `run` and `hearth recipe login <key>` runs it in the foreground of your terminal, so the program draws the code itself; when the command succeeds the step's check runs and the step is marked done. Environment comes from `set`, where `${secret:NAME}` is one of your Hearth secrets, filled in on the machine that runs the step (never on a command line).
 
 ```toml
 [[step]]
@@ -160,7 +160,13 @@ set = { ONEAPI_KEY = "${secret:ONEAPI_KEY}", https_proxy = "http://proxy.example
 done_when = 'PATH="$HOME/.local/bin:$PATH"; codex-mixin doctor --no-tui | grep -q "doctor: ok"'
 ```
 
-Agents use the `hearth` MCP tools `run_interactive_step`, `poll_interactive_step`, `answer_interactive_step` and `stop_interactive_step`; in a terminal: `hearth recipe tty start <key> --on <machine>` (prints the PNG's path), `hearth recipe tty status <session> --on <machine>`. Only plan steps of this kind can be started, the code images stay in a temporary directory of the machine you work on (mode 0600) and are removed when the step ends, and nothing of the session is uploaded. The target machine runs Linux and needs this version of Hearth.
+When an agent restores another machine and reaches such a step, it does not show a code in the chat: it runs `hearth recipe login <key> --on <machine>`, which checks that the machine can run the step and prints one command, and gives it to you:
+
+```bash
+hearth ssh -t gpu-a -- 'PATH="$HOME/.local/bin:$PATH"; exec hearth recipe login learned/5dc36cca78'
+```
+
+Run it in your own terminal, scan the code drawn there, and tell the agent; it checks the result. `hearth recipe login <key> --print` prints the command even in a terminal; without `--on` the step runs on this machine. Only plan steps of this kind can run (the target needs a Hearth that has `recipe login`: `hearth self-update`).
 
 ### Organisation defaults
 
@@ -225,6 +231,10 @@ hearth recovery-key rotate             # the recovery key was exposed
 
 Any device that logs in with the master password can decrypt every credential (no approval by an existing device), so the master password is their only protection: use a strong one, and after a suspected leak run `device revoke`, `passwd` and rotate the affected credentials.
 
+### A name stands for a machine
+
+A machine whose disk was reset (its container image restarted) logs in again as a new device. When it keeps its host name, `hearth setup` continues the old, offline entry without asking. A new machine continues an old one when it is given that machine's name: at setup's name prompt, with `--alias`, or later with `hearth device rename` (also the console and the Mac app). Continuing means: the new machine has the old one's name (its SSH host name); the conversations the old one uploaded count as the new one's (`hearth restore --last 10` brings them back); when the old workspace is on this machine (cluster storage that survived), setup proposes it again and keeps the old Hearth home there (agent homes, library, state), only the new login moves in; the old entry is logged out and leaves the list. A machine that is online keeps its name.
+
 ### Copying files between machines
 
 ```bash
@@ -236,6 +246,46 @@ hearth cp gpu-a:/data/ckpt gpu-b:/data/   # straight from gpu-a to gpu-b
 The control channel goes over Hearth's SSH; the data goes directly between the two machines over parallel TCP connections, encrypted with AES-256-GCM under a key that only went through SSH, never through the Hearth server. Large files travel in 4 MiB chunks over every connection at once (16 nearby, up to 64 across regions, `-j` to set) and are written in place; chunks of several files go at once, so writers do not queue on one file. An interrupted copy resumes when the same command runs again; files whose size and time match are skipped (`--force` copies them anyway, `-n` keeps any existing file). Across regions chunks are compressed with zstd where it helps (`--compress auto|on|off`). When neither machine can open a connection to the other, the data goes through SSH port forwards; when the other machine's path is on a disk this one mounts too, it is copied there directly. Between two other machines the copy runs on the source, or, when the source cannot reach the target, on the target.
 
 Measured (memory to memory, 16 files of 2 GiB): 9.7 GiB/s between two bzz2 machines (400 Gb/s), 1.4 GiB/s from yq01 to johor (76 ms, 64 connections); one large file to a local disk goes at about the disk's speed (O_DIRECT, 3 GiB/s here).
+
+### Copying large data between storages
+
+`hearth cp` moves data between your machines. For a large directory (a model, a dataset) that lives on a shared file system and has to reach another cluster's file system, an organisation may run a DataTool-compatible transfer service: the storages copy to each other on their own side, the data never passes through this machine, and the task keeps running after you log out. `hearth transfer` talks to that service.
+
+**The server admin sets it up once**; users configure nothing. Put `transfer.json` in the server's data directory (`<data>/transfer.json`, mode 0600; edits apply at once):
+
+```json
+{
+  "url": "http://datatool.example.com",
+  "token": "shared-service-token",
+  "afs_ugi_secret": "afs_ugi",
+  "paths": {
+    "a@one": [
+      {"from": "/mnt/personal", "to": "/data/{user}"},
+      {"from": "/mnt",          "to": "/data"}
+    ]
+  }
+}
+```
+
+Every logged-in client fetches it (`GET /v1/transfer/config`, login required, never part of the public site bundle), so the address, the token and the path rules are not in the open-source code or on the users' machines. `{user}` is the account name (the email without the domain); the first rule whose `from` is a prefix of the path wins. Optional keys: `api_prefix` (default `/v1/datatool/api`), `timeout`. The token is visible to every user who can log in to this server; it is the service's shared token, not a personal credential.
+
+What stays personal is the AFS UGI, only needed for `afs` storages: `hearth secret set afs_ugi` stores it end-to-end encrypted (the name comes from `afs_ugi_secret`).
+
+A user can override any of it under `[transfer]` in config.toml (`hearth config --edit`; nothing there is a secret, and `url` may not carry a password): `url`, `token_secret` (a Hearth secret) or `token_env` (an environment variable), `afs_ugi_secret`, `api_prefix`, `timeout`, `use_proxy = true` (requests go direct by default, the service is usually internal) and `[[transfer.paths."STORAGE"]]` rules, which replace the server's rules for that storage. The server's token is only ever sent to the server's own address: a user's `url` that differs gets no token unless the user sets one.
+
+```bash
+hearth transfer meta                                    # storages, allowed directions, limits
+hearth transfer submit --from a@one:/mnt/personal/ckpt --to b@two:/data/alice/ckpt
+hearth transfer list                                    # tasks submitted from this machine (--all: every task)
+hearth transfer status dt-20261105-3dbb92fd             # state, bytes, speed, ETA, error
+hearth transfer cancel dt-20261105-3dbb92fd
+```
+
+- **The path is the storage's, not this machine's.** `STORAGE:PATH` names a storage from `hearth transfer meta`. A path under a rule's `from` prefix is translated and the plan shows it; a URL (`afs://...`) and any other absolute path go as given. A relative path is accepted only when a rule translates it, and `..` is refused.
+- **Plan first.** `submit` checks the request against the service's directions and limits, prints the plan, and asks; without a terminal it needs `--yes`. **The destination directory must be empty**; the service cannot check that for you. `--dry-run` asks the service for a dry run, `--transfers` and `--checkers` set the parallelism up to its limits.
+- **Credentials never appear in output.** The AFS UGI goes only into the create request: not in the plan, the task record or errors.
+- **Whose tasks.** The service does not tell users apart (everyone is the same creator), so `list` shows the tasks this machine submitted, recorded in `transfers.json` next to the Hearth state without any credential, and `cancel` refuses other ids unless `--force`: it could stop a colleague's copy.
+- **Not encrypted or versioned by Hearth.** Use it for bulk data between storages. Personal state, skills, small files and anything that must stay end-to-end encrypted go through the normal sync or `hearth cp`.
 
 ### SSH between your machines
 

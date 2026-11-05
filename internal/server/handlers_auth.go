@@ -63,6 +63,7 @@ func (s *Server) routes() {
 	m.HandleFunc("PUT /v1/devices/{id}/alias", s.authed(func(w http.ResponseWriter, r *http.Request) {
 		s.putDeviceAlias(w, r, userOf(r))
 	}))
+	m.HandleFunc("POST /v1/devices/self/replace", s.authed(s.handleReplaceDevice))
 	// The heartbeat answers how many console changes wait for this user.
 	m.HandleFunc("POST /v1/devices/self/heartbeat", s.authed(func(w http.ResponseWriter, r *http.Request) {
 		var hb api.DeviceHeartbeat
@@ -90,6 +91,7 @@ func (s *Server) routes() {
 	m.HandleFunc("PUT /v1/secrets/{id}", s.authed(s.handlePutSecret))
 	m.HandleFunc("DELETE /v1/secrets/{id}", s.authed(s.handleDeleteSecret))
 	m.HandleFunc("GET /v1/library", s.authed(s.handleGetLibrary))
+	m.HandleFunc("GET /v1/transfer/config", s.authed(s.handleTransferConfig))
 	if s.cfg.SiteAuth {
 		m.HandleFunc("GET /v1/site", s.authed(s.handleSite))
 	} else {
@@ -307,7 +309,9 @@ func (s *Server) handleListDevices(w http.ResponseWriter, r *http.Request) {
 }
 
 // putDeviceAlias names one of the user's machines (body {"alias": ...};
-// "" clears it).
+// "" clears it). The name of offline machines only is taken over with
+// them: the machine continues them (their conversations; they leave the
+// list).
 func (s *Server) putDeviceAlias(w http.ResponseWriter, r *http.Request, uid int64) {
 	var req struct {
 		Alias string `json:"alias"`
@@ -319,15 +323,39 @@ func (s *Server) putDeviceAlias(w http.ResponseWriter, r *http.Request, uid int6
 	if dev, ok := r.Context().Value(ctxDevice).(string); ok && id == "self" {
 		id = dev // a device naming itself
 	}
-	if err := s.st.setDeviceAlias(uid, id, strings.TrimSpace(req.Alias)); err != nil {
+	since := s.now() - int64(onlineWindow.Seconds())
+	if err := s.st.setDeviceAlias(uid, id, strings.TrimSpace(req.Alias), since); err != nil {
 		s.writeStoreErr(w, err)
 		return
 	}
+	s.auth.purgeUser(uid) // a machine it took the name of is logged out
 	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) handleRevokeDevice(w http.ResponseWriter, r *http.Request) {
 	if err := s.st.revokeDevice(userOf(r), r.PathValue("id")); err != nil {
+		s.writeStoreErr(w, err)
+		return
+	}
+	s.auth.purgeUser(userOf(r))
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleReplaceDevice: this device continues one of the user's offline
+// machines (body {"device": id, "alias": name}), one the server cannot
+// find by name: this machine before its disk was reset (same host name),
+// or the name the client makes from a host name. The old device is logged
+// out and leaves the list; its conversations count as this device's.
+func (s *Server) handleReplaceDevice(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Device string `json:"device"`
+		Alias  string `json:"alias"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	since := s.now() - int64(onlineWindow.Seconds())
+	if err := s.st.replaceDevice(userOf(r), deviceOf(r), strings.TrimSpace(req.Device), strings.TrimSpace(req.Alias), since); err != nil {
 		s.writeStoreErr(w, err)
 		return
 	}

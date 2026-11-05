@@ -145,9 +145,9 @@ hearth learn --accept id1,id2 --here id3 --never id4 \
 
 新机器上 `hearth setup` 只恢复其中的文件（凭证、配置）和环境变量；装软件、执行命令、扫码登录这些步骤组成这台机器的**恢复流程**（`hearth recipe plan`），由 agent 用 hearth skill 带着你一步步完成：推荐在另一台已登录 Hearth 的机器上说「恢复 <机器> 的 Codex 环境」（通过 `hearth ssh` 远程执行；`hearth machine list` 能看到每台机器的环境检查），也可以在这台机器上说「用 hearth 恢复这台机器的环境」：先跑每步的检查命令，按 [客户端软件环境安装指南](client-env.md)（`hearth docs env`）安装，再检查，完成后 `hearth recipe done <key>`。这台机器需要不同做法时，agent 会把新做法记回流程（`--here-step` 只给同类机器）。自己在终端执行也可以：`hearth recipe run <key>`，或整体 `hearth recipe apply`（列出全部命令、只问一次）。在任意一台机器上批准过的命令，在你的其他机器上直接执行，不再询问；批准记录端到端加密，服务器无法伪造，命令内容一改就会重新询问。不想共享批准时在 config.toml 设置 `[recipes] share_approvals = false`。机器档案：`hearth machine`（查看）、`hearth machine add <名字> --here`、`hearth machine use <名字>`。
 
-### 在聊天里完成扫码登录
+### 扫码登录
 
-在终端里显示二维码的登录（比如通过 DUCX 的 `codex-mixin setup`）是 `tty = true` 的 `manual` 步骤。在 `run` 里写上命令后，agent 可以替你执行，不用离开聊天窗口：Hearth 通过 `hearth ssh` 在目标机器的后台用伪终端运行它，从输出里读出二维码并转成 PNG，agent 把图片显示出来，你扫码；命令结束后运行该步骤的检查，通过就标记完成。命令的环境变量写在 `set` 里，`${secret:NAME}` 表示你的一个 Hearth 密钥；输出里的密钥值会被替换成 `********`。
+在终端里显示二维码的登录（比如通过 DUCX 的 `codex-mixin setup`）是 `tty = true` 的 `manual` 步骤。在 `run` 里写上命令后，`hearth recipe login <key>` 会在你终端的前台运行它，二维码由程序自己画出来；命令成功后运行该步骤的检查并标记完成。环境变量来自 `set`，其中 `${secret:NAME}` 是你的某个 Hearth 密钥，在运行步骤的机器上取值（不会出现在命令行里）。
 
 ```toml
 [[step]]
@@ -160,7 +160,13 @@ set = { ONEAPI_KEY = "${secret:ONEAPI_KEY}", https_proxy = "http://proxy.example
 done_when = 'PATH="$HOME/.local/bin:$PATH"; codex-mixin doctor --no-tui | grep -q "doctor: ok"'
 ```
 
-agent 用 `hearth` MCP 工具 `run_interactive_step`、`poll_interactive_step`、`answer_interactive_step` 和 `stop_interactive_step`；在终端里：`hearth recipe tty start <key> --on <机器>`（打印 PNG 的路径）、`hearth recipe tty status <会话> --on <机器>`。只能启动计划里这一类步骤；二维码图片只放在你当前所用机器的临时目录里（权限 0600），步骤结束即删除，会话内容不会上传。目标机器需要是 Linux，并且装的是这个版本的 Hearth。
+agent 恢复另一台机器、走到这样的步骤时，不会在聊天里显示二维码：它执行 `hearth recipe login <key> --on <机器>`，先确认那台机器能运行这个步骤，再打印出一条命令交给你：
+
+```bash
+hearth ssh -t gpu-a -- 'PATH="$HOME/.local/bin:$PATH"; exec hearth recipe login learned/5dc36cca78'
+```
+
+在你自己的终端里运行它，扫那里画出的二维码，然后告诉 agent，它会检查结果。`hearth recipe login <key> --print` 在终端里也只打印命令；不带 `--on` 时在本机运行。只能运行计划里这类步骤（目标机器上的 Hearth 要有 `recipe login`：`hearth self-update`）。
 
 ### 组织默认配置
 
@@ -225,6 +231,10 @@ hearth recovery-key rotate             # 恢复密钥泄露时换新
 
 任何设备只要用主密码登录就能解密全部凭证，没有旧设备审批，所以主密码是凭证的唯一保护：请使用强密码，疑似泄露时立即 `device revoke`、`passwd` 并轮换相关凭证。
 
+### 名字即机器
+
+机器的磁盘被重置（比如容器镜像重启）后，再登录会成为一台新设备。主机名没变时，`hearth setup` 会直接接续那条离线的旧记录，不用确认。新机器用了某台离线机器的名字，也会接续它：可以在 setup 起名时输入，也可以用 `--alias`，或之后执行 `hearth device rename`（控制台和 Mac 菜单栏 App 里改名也一样）。接续之后：新机器用旧机器的名字（也就是它的 SSH 主机名）；旧机器上传过的会话都归到新机器名下，`hearth restore --last 10` 可以恢复回来；旧的工作目录在这台机器上也能访问时（集群共享盘没丢），setup 会再次推荐它，并沿用那里旧的 Hearth 目录（agent 目录、库、状态），只换上新的登录信息；旧记录退出登录，并从列表中移除。在线的机器名字不会被占用。
+
 ### 在机器之间传文件
 
 ```bash
@@ -236,6 +246,46 @@ hearth cp gpu-a:/data/ckpt gpu-b:/data/   # 从 gpu-a 直接传到 gpu-b
 控制信息走 Hearth 的 SSH；数据在两台机器之间直连，用多条并行 TCP 连接传输，以 AES-256-GCM 加密，密钥只经过 SSH，不经过 Hearth 服务器。大文件切成 4 MiB 的块，同时在所有连接上传（同机房 16 条，跨地域最多 64 条，`-j` 可指定），直接写到目标位置；多个文件的块交错传输，写入不会排队等同一个文件。中断后重新执行同一条命令即可续传；大小和修改时间一致的文件会跳过（`--force` 强制传，`-n` 保留目标端已有的文件）。跨地域时，能压缩的块用 zstd 压缩（`--compress auto|on|off`）。两台机器互相都连不上时，数据走 SSH 端口转发；对方的路径在本机也挂载的共享盘上时，直接在盘上复制。在两台别的机器之间传时，命令在源机器上执行；源机器连不到目标时，改在目标机器上执行。
 
 实测（内存到内存，16 个 2 GiB 文件）：两台 bzz2 机器之间（400 Gb/s）9.7 GiB/s，yq01 到 johor（76 ms，64 条连接）1.4 GiB/s；单个大文件写本地盘约等于盘的速度（O_DIRECT，这里 3 GiB/s）。
+
+### 在存储系统之间传大数据
+
+`hearth cp` 在你的机器之间传数据。大目录（模型、数据集）放在共享文件系统上、要送到另一个集群的文件系统时，组织可以运行一个兼容 DataTool 的传输服务：存储系统之间在各自一侧直接复制，数据不经过本机，你退出登录后任务也继续运行。`hearth transfer` 就是这个服务的命令行。
+
+**服务器管理员配置一次，用户不用配置任何东西。** 在服务器数据目录放 `transfer.json`（`<data>/transfer.json`，权限 0600；修改立即生效）：
+
+```json
+{
+  "url": "http://datatool.example.com",
+  "token": "shared-service-token",
+  "afs_ugi_secret": "afs_ugi",
+  "paths": {
+    "a@one": [
+      {"from": "/mnt/personal", "to": "/data/{user}"},
+      {"from": "/mnt",          "to": "/data"}
+    ]
+  }
+}
+```
+
+每个已登录的客户端会自动取这份配置（`GET /v1/transfer/config`，必须登录，不在默认公开的 site 目录里），所以服务地址、token 和路径规则既不在开源代码里，也不在用户机器上。`{user}` 是账号名（邮箱去掉域名）；取第一条 `from` 是路径前缀的规则。可选项：`api_prefix`（默认 `/v1/datatool/api`）、`timeout`。token 对所有能登录这台服务器的用户可见；它是服务的共享 token，不是个人凭证。
+
+属于个人的只有 AFS UGI，只有 `afs` 存储才需要：`hearth secret set afs_ugi` 把它端到端加密保存（名字来自 `afs_ugi_secret`）。
+
+用户可以在 config.toml 的 `[transfer]` 里覆盖其中任何一项（`hearth config --edit`；这里不放任何密钥，`url` 也不能带密码）：`url`、`token_secret`（Hearth secret）或 `token_env`（环境变量）、`afs_ugi_secret`、`api_prefix`、`timeout`、`use_proxy = true`（默认直连，服务通常在内网）和 `[[transfer.paths."STORAGE"]]` 规则（会替换服务器上该存储的规则）。服务器的 token 只会发给服务器配置的那个地址：用户把 `url` 改成别的地址时，除非自己设置了 token，否则不带 token。
+
+```bash
+hearth transfer meta                                    # 存储、允许的方向、限制
+hearth transfer submit --from a@one:/mnt/personal/ckpt --to b@two:/data/alice/ckpt
+hearth transfer list                                    # 本机提交的任务（--all：服务上的全部任务）
+hearth transfer status dt-20261105-3dbb92fd             # 状态、字节数、速度、剩余时间、错误
+hearth transfer cancel dt-20261105-3dbb92fd
+```
+
+- **路径是存储端的路径，不是本机的。** `STORAGE:PATH` 里的存储名见 `hearth transfer meta`。在某条规则 `from` 前缀下的路径会被转换，计划里会显示；URL（`afs://...`）和其他绝对路径原样提交。相对路径只有在有规则能转换它时才接受，含 `..` 的路径会被拒绝。
+- **先出计划。** `submit` 先按服务报告的方向和限制检查请求，打印计划并询问；没有终端时必须加 `--yes`。**目的目录必须为空**，服务无法替你检查。`--dry-run` 请求服务做试运行，`--transfers`、`--checkers` 在服务的上限内设置并行度。
+- **凭证不会出现在输出里。** AFS UGI 只放进创建任务的请求，不会出现在计划、任务记录或错误信息里。
+- **谁的任务。** 服务不区分用户（所有任务的创建者相同），所以 `list` 只显示本机提交的任务（记录在 Hearth 状态目录的 `transfers.json`，不含任何凭证）；`cancel` 默认拒绝不是本机提交的任务，`--force` 才能取消，这可能中断同事的复制。
+- **不经过 Hearth 的加密和版本管理。** 它用于存储之间的大批量数据。个人状态、skills、小文件和必须端到端加密的内容，走普通同步或 `hearth cp`。
 
 ### 机器之间的 SSH
 

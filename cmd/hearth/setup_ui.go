@@ -18,10 +18,29 @@ type setupOut struct {
 	logPath string
 	verbose bool
 	warns   int
+	// results wait for finish; working is the running "Setting up ..."
+	// line, interrupted when a question came in between.
+	results     [][2]string
+	working     string
+	interrupted bool
+}
+
+// activeSetup is the running setup's output, for questions asked deep
+// inside its steps (askSetup).
+var activeSetup *setupOut
+
+// askSetup asks like setupOut.ask, also outside setup.
+func askSetup(question string, about, choices []string, def string) (string, bool) {
+	o := activeSetup
+	if o == nil {
+		o = &setupOut{real: os.Stdout}
+	}
+	return o.ask(question, about, choices, def)
 }
 
 func newSetupOut() *setupOut {
 	o := &setupOut{real: os.Stdout, verbose: os.Getenv("HEARTH_VERBOSE") == "1"}
+	activeSetup = o
 	if o.verbose {
 		return o
 	}
@@ -52,10 +71,22 @@ func (o *setupOut) quiet(fn func()) {
 	fn()
 }
 
-// line prints "  label  text" (continuation lines indented under text).
+// fact prints "  label       text" at once: what setup found before it
+// asks anything (account, login, network).
+func (o *setupOut) fact(label, text string) {
+	text = strings.ReplaceAll(text, "\n", "\n"+strings.Repeat(" ", labelWidth+4))
+	fmt.Fprintf(o.real, "  %-*s  %s\n", labelWidth, label, text)
+	if o.log != nil {
+		fmt.Fprintf(o.log, "== %s: %s\n", label, text)
+	}
+}
+
+const labelWidth = 10
+
+// line records one result of setup ("label  text"); the results are
+// printed together under "Setting up this machine ... done" (finish).
 func (o *setupOut) line(label, text string) {
-	text = strings.ReplaceAll(text, "\n", "\n"+strings.Repeat(" ", 15))
-	fmt.Fprintf(o.real, "  %-12s %s\n", label, text)
+	o.results = append(o.results, [2]string{label, text})
 	if o.log != nil {
 		fmt.Fprintf(o.log, "== %s: %s\n", label, text)
 	}
@@ -67,9 +98,72 @@ func (o *setupOut) warn(label string, err error) {
 	o.line(label, "⚠ "+err.Error())
 }
 
+// title opens setup: a welcome line and what this machine is.
 func (o *setupOut) title(s string) { fmt.Fprintln(o.real, s) }
 
+// start says setup is working ("Setting up this machine ..."); finish
+// ends the line with "done" and prints the results.
+func (o *setupOut) start(what string) {
+	o.working = what
+	fmt.Fprintf(o.real, "\n%s ...", what)
+}
+
+func (o *setupOut) finish() {
+	switch {
+	case o.working == "":
+	case o.interrupted:
+		fmt.Fprintf(o.real, "\n%s ... done\n", o.working)
+	default:
+		fmt.Fprintln(o.real, " done")
+	}
+	o.working, o.interrupted = "", false
+	o.printResults()
+}
+
+func (o *setupOut) printResults() {
+	if len(o.results) == 0 {
+		return
+	}
+	fmt.Fprintln(o.real)
+	for _, r := range o.results {
+		text := strings.ReplaceAll(r[1], "\n", "\n"+strings.Repeat(" ", labelWidth+4))
+		fmt.Fprintf(o.real, "  %-*s  %s\n", labelWidth, r[0], text)
+	}
+	o.results = nil
+}
+
+// ask asks one question the way installers do: the question, a line or
+// two on what it is for, the choices, then the default in brackets:
+//
+//	[/root/work] >>>
+//
+// It returns the answer ("" = Enter) and false without a terminal answer.
+func (o *setupOut) ask(question string, about []string, choices []string, def string) (string, bool) {
+	if o.working != "" && !o.interrupted {
+		o.interrupted = true
+		fmt.Fprintln(o.real)
+	}
+	var b strings.Builder
+	b.WriteString("\n" + question + "\n")
+	for _, l := range about {
+		b.WriteString(l + "\n")
+	}
+	if len(choices) > 0 {
+		b.WriteString("\n")
+		for _, c := range choices {
+			b.WriteString("  - " + c + "\n")
+		}
+	}
+	fmt.Fprintf(&b, "\n[%s] >>> ", def)
+	a, ok := askLine(b.String())
+	if o.log != nil {
+		fmt.Fprintf(o.log, "?? %s -> %q\n", question, a)
+	}
+	return a, ok
+}
+
 func (o *setupOut) close() {
+	o.printResults() // setup stopped early: what it did so far
 	if o.log != nil {
 		o.log.Close()
 	}

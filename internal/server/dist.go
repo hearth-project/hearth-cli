@@ -215,23 +215,25 @@ if [ -n "$PROXIES" ] && [ -z "${https_proxy:-}${HTTPS_PROXY:-}" ] && ! $CURL --c
     if $CURL --connect-timeout 5 -x "$p" -o /dev/null "$URL/healthz" 2>/dev/null; then
       https_proxy="$p"; http_proxy="$p"; no_proxy="${no_proxy:+$no_proxy,}127.0.0.1,localhost,::1"
       export https_proxy http_proxy no_proxy
-      echo "network: the server is not reachable directly; using proxy $p"
+      echo "The server is not reachable directly; using the proxy $p"
       break
     fi
   done
 fi
 tmp=$(mktemp)
 trap 'rm -f "$tmp"' EXIT
-$CURL -o "$tmp" "$URL/download/$BIN"
+printf 'Downloading hearth for %s-%s ...' "$os" "$arch"
+$CURL -o "$tmp" "$URL/download/$BIN" || { echo; exit 1; }
 if command -v sha256sum >/dev/null 2>&1; then got=$(sha256sum "$tmp" | cut -d' ' -f1); else got=$(shasum -a 256 "$tmp" | cut -d' ' -f1); fi
 if [ "$got" != "$SHA256" ]; then
-  echo "hearth: checksum mismatch for downloaded binary" >&2
+  echo; echo "hearth: checksum mismatch for downloaded binary" >&2
   exit 1
 fi
 chmod 755 "$tmp"
 mv "$tmp" "$BIN_DIR/hearth"
 trap - EXIT
-echo "hearth $("$BIN_DIR/hearth" --version 2>/dev/null | sed 's/^hearth version //') installed to $BIN_DIR/hearth"
+echo " done"
+echo "Installed hearth $("$BIN_DIR/hearth" --version 2>/dev/null | sed 's/^hearth version //') to $BIN_DIR/hearth"
 
 # Make "hearth" available in new terminals: a link in a directory already on
 # PATH when possible (works at once, also for non-interactive shells), and
@@ -267,7 +269,11 @@ fi
 # The hearth skill for every coding agent on this
 # machine, so the user can just ask their agent. HEARTH_NO_SKILLS=1 skips.
 if [ "${HEARTH_NO_SKILLS:-}" != "1" ]; then
-  "$BIN_DIR/hearth" onboard install-skill --quiet || true
+  if [ "${1:-}" = "--install-only" ]; then
+    "$BIN_DIR/hearth" onboard install-skill --quiet || true
+  else
+    "$BIN_DIR/hearth" onboard install-skill --quiet >/dev/null 2>&1 || true  # setup says where it is
+  fi
 fi
 
 # --install-only: just install (an agent running the hearth skill

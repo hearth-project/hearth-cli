@@ -105,6 +105,14 @@ func agentsPullCmd() *cobra.Command {
 				fmt.Println("skill search:", err)
 			}
 			_, _ = client.SyncMemoryHooks(home, client.MemoryHooksOn(home))
+			// Recall works at once, not after the daemon's next index.
+			if client.MemoryOn(home) {
+				if ms, err := e.IndexMemory(); err != nil {
+					fmt.Println("memory:", err)
+				} else {
+					fmt.Printf("memory: %d conversation(s) indexed for recall\n", ms.Conversations)
+				}
+			}
 			if plan, err := e.Plan(); err == nil {
 				for _, p := range plan {
 					if p.Status == "todo" && p.Name == name {

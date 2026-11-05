@@ -10,6 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/hearth-project/hearth-cli/internal/api"
 	"github.com/hearth-project/hearth-cli/internal/client"
 	"github.com/hearth-project/hearth-cli/internal/recipe"
 )
@@ -21,6 +22,7 @@ func setupCmd() *cobra.Command {
 	var installToken string
 	var insecure, noDaemon, force, yes, create, switchLogin, noRegister, noImport, full, newLogin bool
 	var alias string
+	var continued *takenOver
 	setupLast := defaultRestoreLast
 	c := &cobra.Command{
 		Use:   "setup",
@@ -50,7 +52,7 @@ func setupCmd() *cobra.Command {
 				}
 				if id, ok := detect(home); ok && id.Email != "" {
 					email = id.Email
-					out.line("account", id.Email+" (from "+id.Source+")")
+					out.fact("account", id.Email+" (from "+id.Source+")")
 				} else {
 					// Nothing says which of the people known here is asking.
 					picked, perr := pickIdentity(home)
@@ -58,7 +60,7 @@ func setupCmd() *cobra.Command {
 						return perr
 					}
 					email = picked
-					out.line("account", email)
+					out.fact("account", email)
 				}
 			}
 			if def, ok := client.MovableLogin(home); ok && sameServer(def.Server, server) && strings.EqualFold(def.Email, email) {
@@ -70,7 +72,7 @@ func setupCmd() *cobra.Command {
 			}
 			switch {
 			case err == nil && sameServer(cfg.Server, server) && strings.EqualFold(cfg.Email, email):
-				out.line("login", "already logged in as "+cfg.Email)
+				out.fact("login", "already signed in as "+cfg.Email)
 				_ = client.AutoEnableIdentityLogin(home)
 			case err == nil && !switchLogin:
 				return client.CheckSwitch(home, server, email)
@@ -101,7 +103,7 @@ func setupCmd() *cobra.Command {
 					// One-time install command from the web console: no password.
 					if nc, err := client.LoginWithInstallToken(home, server, email, installToken, device); err == nil {
 						cfg, loggedIn = nc, true
-						via = " (one-time install command, no password needed)"
+						via = " with the one-time install command (no password needed)"
 					} else if !errors.Is(err, client.ErrInstallToken) {
 						return err
 					} else {
@@ -113,14 +115,14 @@ func setupCmd() *cobra.Command {
 					if secret, ok := client.PlatformSecret(client.LocalIdentity{Username: user, Email: email}); ok {
 						if nc, err := client.LoginWithIdentity(home, server, email, secret, device); err == nil {
 							cfg, loggedIn = nc, true
-							via = " (platform identity, no password needed)"
+							via = " with this platform's identity (no password needed)"
 						} else if st := client.StatusOf(err); st == 0 || st >= 500 {
 							fmt.Fprintf(os.Stderr, "  platform identity unavailable (%v); asking for the master password\n", err)
 						}
 					}
 				}
 				if !loggedIn {
-					pw, err := readPassword("  Master password: ", create || invite != "")
+					pw, err := readPassword(fmt.Sprintf("  %-*s  ", labelWidth, "password"), create || invite != "")
 					if err != nil {
 						return err
 					}
@@ -131,7 +133,7 @@ func setupCmd() *cobra.Command {
 						case err == nil:
 							printRecoveryKey(email, rk)
 						case client.StatusOf(err) == 409:
-							out.line("account", "exists already; invite not used")
+							out.fact("account", "exists already; invite not used")
 						default:
 							return err
 						}
@@ -150,10 +152,14 @@ func setupCmd() *cobra.Command {
 					}
 					_ = client.AutoEnableIdentityLogin(home)
 				}
-				out.line("login", "ok, this machine is device "+cfg.DeviceName+via)
+				out.fact("login", "signed in"+via)
+				// Its name first: a new machine with an offline machine's
+				// name (or this one before its disk was reset) continues
+				// that machine, workspace included.
+				continued = nameNewMachine(out, home, alias)
 				// Where this person works on this machine: proposed from their
 				// machines of the same kind, confirmed (or changed) by them.
-				home = chooseSetupWorkspace(out, home, cfg)
+				home = chooseSetupWorkspace(out, home, cfg, continued)
 				// A new machine restores credentials, conversations, shell
 				// lines and agent setup only when asked (--full: everything).
 				if err := client.SetOnDemand(home, !full); err != nil {
@@ -167,20 +173,37 @@ func setupCmd() *cobra.Command {
 			// Shared account: this person's Codex config and conversations
 			// in their own dir, not in the ~/.codex everybody falls back to.
 			if dir := client.PreferOwnCodexHome(home); dir != "" {
-				out.line("codex home", dir+" (yours, not the shared ~/.codex)")
+				out.line("codex home", dir+" (yours; the shared ~/.codex is left alone)")
 			}
 			e, err := engine()
 			if err != nil {
 				return err
 			}
-			// A name for this machine, shown as "name (host)" everywhere and
-			// used as its SSH host name.
-			if newLogin || alias != "" {
+			// A new name for a machine that was logged in already.
+			if !newLogin && alias != "" {
 				chooseSetupAlias(out, e, alias)
 			}
 			var libErr, restoreErr error
 			var teams string
+			out.start("Setting up this machine")
+			// An on-demand machine sets up no agent now (skills, skill search,
+			// memory hooks and index): "恢复 <machine> 的 <agent> 环境" does,
+			// through hearth agents pull. The library is pulled all the same:
+			// it holds the machine profiles, backup selection and recipes.
+			agentsNow := !client.OnDemand(home) || client.HasMachineAgents(home)
 			out.quiet(func() {
+				if !agentsNow {
+					// An empty selection, not none: none means every agent.
+					if err := client.SetMachineAgents(home, nil); err != nil {
+						fmt.Println("agents:", err)
+					}
+					if r, err := e.LibPull(false); err != nil {
+						libErr = err
+					} else {
+						fmt.Printf("library %s (version %d); agents set up when their environment is restored\n", r.Op, r.Version)
+					}
+					return
+				}
 				if libErr = pullAndRenderThen(e, false, func() { chooseMachineAgents(e) }); libErr != nil {
 					chooseMachineAgents(e)
 				}
@@ -277,13 +300,16 @@ func setupCmd() *cobra.Command {
 				if plan, err := e.Plan(); err == nil {
 					for _, p := range plan {
 						if p.Status == "todo" && !(p.Type == "check" && p.Why == "optional") {
-							envLeft = append(envLeft, planLabel(p))
+							envLeft = append(envLeft, orDefault(p.Name, p.Type))
 						}
 					}
 				}
 				// After the recipes: registering the MCP server creates the
 				// agent's config file (~/.codex/config.toml), which would stop
 				// a recorded one from being restored.
+				if len(client.MachineAgents(home)) == 0 {
+					return // no agent set up here yet
+				}
 				if done, err := installSkillMCP(true); err != nil {
 					fmt.Println("mcp:", err)
 				} else if len(done) > 0 {
@@ -314,9 +340,9 @@ func setupCmd() *cobra.Command {
 			// What this machine has now, one line per kind.
 			skills, agents := libraryCounts(home)
 			if ma := client.MachineAgents(home); len(ma) > 0 {
-				out.line("library", fmt.Sprintf("%s, %s for %s", plural(skills, "skill", "skills"), plural(agents, "agent", "agents"), strings.Join(ma, ", ")))
+				out.line("library", fmt.Sprintf("%s and %s, linked into %s", plural(skills, "skill", "skills"), plural(agents, "agent", "agents"), strings.Join(ma, ", ")))
 			} else {
-				out.line("library", fmt.Sprintf("%s, %s; set up for an agent once it is installed here", plural(skills, "skill", "skills"), plural(agents, "agent", "agents")))
+				out.line("library", fmt.Sprintf("%s and %s, set up for an agent when you restore its environment", plural(skills, "skill", "skills"), plural(agents, "agent", "agents")))
 			}
 			if secretFiles > 0 {
 				out.line("files", plural(secretFiles, "credential or config file", "credential and config files")+" written")
@@ -324,10 +350,7 @@ func setupCmd() *cobra.Command {
 			if len(rcs) > 0 {
 				out.line("shell", "your lines of "+strings.Join(rcs, ", ")+" (new shells)")
 			}
-			if onDemand && !sessionsAsked {
-				out.line("on demand", "conversations (hearth restore --last 10), credentials (your agent asks hearth when a skill needs one),\n"+
-					"shell lines (hearth shell restore), agent setup (\"恢复这台机器的 Codex 环境\"); everything now: hearth setup --full")
-			} else {
+			if !onDemand || sessionsAsked {
 				conv := plural(conversations, "conversation", "conversations") + " restored"
 				if online > 0 {
 					conv += fmt.Sprintf("; %d more on machines still online: hearth restore --include-online", online)
@@ -351,14 +374,14 @@ func setupCmd() *cobra.Command {
 				out.quiet(func() { autoRecord(e, func(f string, a ...any) { fmt.Printf(f+"\n", a...) }) })
 			}
 			if noDaemon {
-				out.line("sync", "off (--no-daemon): hearth daemon start")
+				out.line("sync", "off (--no-daemon); start it with hearth daemon start")
 			} else {
 				var derr error
 				out.quiet(func() { derr = startDaemon() })
 				if derr != nil {
 					return derr
 				}
-				out.line("sync", "on (background)")
+				out.line("sync", "on, in the background")
 			}
 			// SSH from the user's other devices (Linux machines, on by default).
 			out.quiet(func() {
@@ -392,7 +415,8 @@ func setupCmd() *cobra.Command {
 					fmt.Println("skills:", err)
 				}
 			})
-			printSetupSummary(out, e, envLeft, withSkill, codexTrust)
+			out.finish()
+			printSetupSummary(out, e, envLeft, withSkill, codexTrust, onDemand && !sessionsAsked)
 			return nil
 		},
 	}
@@ -408,7 +432,7 @@ func setupCmd() *cobra.Command {
 	c.Flags().BoolVar(&noDaemon, "no-daemon", false, "do not start background sync")
 	c.Flags().BoolVar(&force, "force", false, "overwrite local session files that differ from the server")
 	c.Flags().IntVar(&setupLast, "sessions", setupLast, "restore this many most recently active conversations (0 = all; a new machine restores none unless given)")
-	c.Flags().StringVar(&alias, "alias", "", "a name for this machine (default: asked in a terminal, proposing e.g. gb-node-e05-13); hearth device rename changes it")
+	c.Flags().StringVar(&alias, "alias", "", "a name for this machine (default: asked in a terminal, proposing e.g. gb-node-e05-13); an offline machine's name continues that machine; hearth device rename changes it")
 	c.Flags().BoolVar(&full, "full", false, "restore everything now (credentials, conversations, shell lines, agent setup) instead of on demand")
 	c.Flags().BoolVarP(&yes, "yes", "y", false, "unused: setup no longer runs recipe commands (the hearth skill goes through hearth recipe plan)")
 	_ = c.Flags().MarkHidden("yes")
@@ -462,10 +486,6 @@ func chooseMachineAgents(e *client.Engine) {
 	}
 	use := client.AgentUse(all)
 	recent, stale := client.RecentAgents(home, use)
-	if client.OnDemand(home) {
-		// Set up an agent here once it is installed (the daemon adopts it).
-		recent = client.InstalledAgents(recent)
-	}
 	if err := client.SetMachineAgents(home, recent); err != nil {
 		fmt.Println("      agents:", err)
 		return
@@ -489,7 +509,8 @@ func setupTeam(e *client.Engine, team string) string {
 		return ""
 	}
 	if team == "" && len(teams) == 0 && isTTY() {
-		a, ok := askLine(fmt.Sprintf("  %-12s paste an invite code to join one, or type a name to create one (Enter = none for now): ", "team"))
+		a, ok := askSetup("Join a team?", []string{"A team shares skills and agents among its members; you are in none yet."},
+			[]string{"Press ENTER to skip for now", "Or paste an invite code to join one", "Or type a name to create one"}, "skip")
 		if !ok {
 			return ""
 		}
@@ -541,7 +562,7 @@ func factsMap() map[string]any {
 // new login there (<dir>/.hearth, or <dir>/.hearth/hosts/<host> when the
 // directory is on a disk another machine logged in to). Returns the home
 // to continue with.
-func chooseSetupWorkspace(out *setupOut, home string, cfg *client.Config) string {
+func chooseSetupWorkspace(out *setupOut, home string, cfg *client.Config, prev *takenOver) string {
 	if client.WorkspaceOf(home) != "" || (os.Getenv("HEARTH_WORKSPACE") != "" && os.Getenv("HEARTH_WORKSPACE_FROM_PROFILE") == "") {
 		return home // chosen already (hearth init, --workspace)
 	}
@@ -553,14 +574,25 @@ func chooseSetupWorkspace(out *setupOut, home string, cfg *client.Config) string
 		}
 	}
 	def := h
-	why := "none of your machines is like this one"
+	about := []string{"Hearth keeps this machine's state and your agents' homes there."}
 	if sug.Path != "" {
 		def = sug.Path
-		why = "as on " + shortHost(sug.Machine) + " (" + sug.Kind + ")"
+		about = append(about, fmt.Sprintf("The directory below is where %s (%s) works.", shortHost(sug.Machine), sug.Kind))
+	} else {
+		about = append(about, "None of your machines is like this one; the directory below is your home.")
 	}
 	if sug.Missing != "" {
 		// The most alike machine works on a disk this one does not have.
-		why += fmt.Sprintf("; %s works in %s, which is not on this machine", shortHost(sug.MissingMachine), sug.Missing)
+		about = append(about, fmt.Sprintf("%s works in %s, which this machine does not have.", shortHost(sug.MissingMachine), sug.Missing))
+	}
+	replacedID := ""
+	if prev != nil {
+		replacedID = prev.old.ID
+		// The machine this one continues worked there: same place again,
+		// without asking.
+		if ws := client.WorkspaceOfDevice(prev.old); ws != "" && client.WorkspaceUsable(ws) {
+			return moveSetupHome(out, home, h, ws, replacedID)
+		}
 	}
 	if !isTTY() {
 		if sug.Path != "" {
@@ -568,7 +600,8 @@ func chooseSetupWorkspace(out *setupOut, home string, cfg *client.Config) string
 		}
 		return home
 	}
-	ans, ok := askLine(fmt.Sprintf("  %-12s %s, %s\n%15sEnter to use it, or type another directory: ", "workspace", def, why, ""))
+	ans, ok := out.ask("Where do you work on this machine?", about,
+		[]string{"Press ENTER to use the directory below", "Or type another directory"}, def)
 	if !ok {
 		return home
 	}
@@ -576,11 +609,17 @@ func chooseSetupWorkspace(out *setupOut, home string, cfg *client.Config) string
 	if ans != "" {
 		choice = client.ExpandUserDir(ans)
 	}
+	return moveSetupHome(out, home, h, choice, replacedID)
+}
+
+// moveSetupHome moves the new login from home (~/.hearth) into workspace
+// choice; a home the continued device (replacedID) left there is kept.
+func moveSetupHome(out *setupOut, home, h, choice, replacedID string) string {
 	if filepath.Clean(choice) == filepath.Clean(h) {
 		out.line("workspace", "your home (state in ~/.hearth)")
 		return home
 	}
-	nh, err := client.MoveHome(home, choice)
+	nh, kept, err := client.MoveHomeOver(home, choice, replacedID)
 	if err != nil {
 		out.warn("workspace", fmt.Errorf("%s: %v; staying in your home (later: hearth init --move-login <dir>)", choice, err))
 		return home
@@ -589,36 +628,107 @@ func chooseSetupWorkspace(out *setupOut, home string, cfg *client.Config) string
 	os.Setenv("HEARTH_WORKSPACE", choice)
 	os.Unsetenv("HEARTH_WORKSPACE_FROM_PROFILE")
 	msg := choice
-	if dev, other := client.OtherHostHome(choice); other {
+	if kept {
+		msg += "\nthe old machine's Hearth home is still there (" + nh + "): kept, with its agent homes and state"
+	} else if dev, other := client.OtherHostHome(choice); other {
 		msg += fmt.Sprintf("\nshared disk (%s logged in there): this machine's state is in %s", shortHost(orDefault(dev, "another machine")), nh)
 	}
 	out.line("workspace", msg)
 	return nh
 }
 
+// takenOver is the offline machine this one continues, and the name this
+// one got from it ("" = the generated one).
+type takenOver struct {
+	old   api.Device
+	alias string
+}
+
+// nameNewMachine names a machine that just logged in, before its
+// workspace is chosen. A name stands for a machine: when an offline
+// machine went by it, this one continues that machine (its conversations,
+// and its workspace and Hearth home there when they survived) and the old
+// entry leaves the list. This machine before its disk was reset (same
+// host name, offline) is continued without asking; otherwise the name is
+// --alias, or asked in a terminal with the generated name as default.
+func nameNewMachine(out *setupOut, home, alias string) *takenOver {
+	e, err := client.NewEngine(home)
+	if err != nil {
+		out.warn("name", err)
+		return nil
+	}
+	if alias == "" {
+		if ds, err := e.API.Devices(); err == nil {
+			if prev, ok := client.PreviousSelf(ds, e.Cfg.DeviceID, e.Cfg.DeviceName); ok {
+				a, err := e.TakeOver(prev)
+				if err == nil {
+					t := &takenOver{old: prev, alias: a}
+					out.line("name", continuedLine(e, t))
+					return t
+				}
+				out.warn("name", err)
+			}
+		}
+	}
+	return chooseSetupAlias(out, e, alias)
+}
+
+// continuedLine: "h800-07 (host), continues the machine last seen ...".
+func continuedLine(e *client.Engine, t *takenOver) string {
+	name := client.LabelOf(orDefault(t.alias, client.MachineAlias(e.Cfg.DeviceName, factsMap())), e.Cfg.DeviceName)
+	what := "the machine of that name"
+	if strings.EqualFold(t.old.Name, e.Cfg.DeviceName) {
+		what = "this machine as it was"
+	}
+	return fmt.Sprintf("%s, continues %s (last seen %s): its conversations and workspace", name, what, agoUnix(t.old.LastSeen))
+}
+
 // chooseSetupAlias names this machine: --alias, else asked in a terminal
 // with the generated SSH name as the default; without a terminal the
-// generated name stays (nothing stored).
-func chooseSetupAlias(out *setupOut, e *client.Engine, alias string) {
+// generated name stays (nothing stored). An offline machine's name
+// continues that machine (returned).
+func chooseSetupAlias(out *setupOut, e *client.Engine, alias string) *takenOver {
 	def := client.MachineAlias(e.Cfg.DeviceName, factsMap())
-	if alias == "" {
-		if !isTTY() {
-			return
-		}
-		a, ok := askLine(fmt.Sprintf("  %-12s %s (machine %s)\n%15sEnter to keep it, or type another: ", "name", def, e.Cfg.DeviceName, ""))
-		if !ok {
-			return
-		}
-		alias = def
-		if a = strings.TrimSpace(a); a != "" {
-			alias = a
-		}
+	asked := alias == ""
+	if asked && !isTTY() {
+		return nil
 	}
-	if err := e.API.SetDeviceAlias("self", alias); err != nil {
-		out.warn("name", fmt.Errorf("%v; later: hearth device rename <name>", err))
-		return
+	about := []string{"The name is shown in your machine list and is its SSH host name.",
+		"Give it the name of an offline machine to continue that one (its conversations and workspace)."}
+	for tries := 0; ; tries++ {
+		if asked {
+			a, ok := out.ask("What should this machine be called?", about,
+				[]string{"Press ENTER to keep the name below", "Or type another"}, def)
+			if !ok {
+				return nil
+			}
+			alias = def
+			if a = strings.TrimSpace(a); a != "" {
+				alias = a
+			}
+		}
+		old, err := e.NameMachine(e.Cfg.DeviceID, alias)
+		if err != nil {
+			// A typo or a name in use: say why and ask again.
+			if st := client.StatusOf(err); asked && tries < 2 && (st == 400 || st == 409) {
+				msg := "Letters, digits, '.', '_' or '-' only, at most 63."
+				if st == 409 {
+					msg = alias + " is the name of a machine that is online."
+				}
+				about = []string{msg + " Try another."}
+				continue
+			}
+			out.warn("name", fmt.Errorf("%v; later: hearth device rename <name>", err))
+			return nil
+		}
+		if old != nil {
+			t := &takenOver{old: *old, alias: alias}
+			out.line("name", continuedLine(e, t))
+			return t
+		}
+		out.line("name", client.LabelOf(alias, e.Cfg.DeviceName))
+		return nil
 	}
-	out.line("name", client.LabelOf(alias, e.Cfg.DeviceName))
 }
 
 // thisAlias is this machine's name: the one the user gave, else generated.

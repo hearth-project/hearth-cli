@@ -101,7 +101,7 @@ func recipeCmd() *cobra.Command {
 	apply.Flags().StringSliceVar(&only, "only", nil, "recipe names")
 	apply.Flags().BoolVarP(&yes, "yes", "y", false, "approve the commands shown as needs-approval")
 	apply.Flags().BoolVar(&dry, "dry-run", false, "only show what would change")
-	c.AddCommand(apply, recipePlanCmd(), recipeRunCmd(), recipeDoneCmd(), proposalsCmd(), ttyCmd(),
+	c.AddCommand(apply, recipePlanCmd(), recipeRunCmd(), recipeDoneCmd(), proposalsCmd(), recipeLoginCmd(),
 		&cobra.Command{Use: "list", Short: "List recipes", RunE: func(*cobra.Command, []string) error {
 			rs, err := client.LoadRecipes(client.Home(), nil)
 			for _, r := range rs {
