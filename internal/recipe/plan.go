@@ -29,8 +29,8 @@ type PlanStep struct {
 	Check       string   `json:"check,omitempty"` // succeeds when the step is done
 	Expect      string   `json:"expect,omitempty"`
 	Interactive bool     `json:"interactive,omitempty"` // the user runs it in their own terminal
-	// RunWith: how an agent runs an interactive step that names its command
-	// (a QR-code login shown in the chat).
+	// RunWith: how an agent gets the user to run an interactive step that
+	// names its command (a QR-code login in the user's own terminal).
 	RunWith     string   `json:"run_with,omitempty"`
 	Env         []string `json:"env,omitempty"` // variables set for it (names; values may be secrets)
 	NeedsSecret string   `json:"stdin_secret,omitempty"`
@@ -94,7 +94,7 @@ func Plan(recipes []*Recipe, opt PlanOptions) []PlanStep {
 				p.Do, p.Check = s.Text, s.DoneWhen
 				if s.Run != "" && s.TTY {
 					p.Commands = []string{s.Run}
-					p.RunWith = "the hearth MCP tool run_interactive_step (or: hearth recipe tty start " + p.Key + " --on <machine>)"
+					p.RunWith = "hearth recipe login " + p.Key + " --on <machine>: prints the command the user runs in their own terminal (the QR code is drawn there)"
 					for k := range s.Set {
 						p.Env = append(p.Env, k)
 					}
