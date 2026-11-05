@@ -247,6 +247,43 @@ hearth cp gpu-a:/data/ckpt gpu-b:/data/   # 从 gpu-a 直接传到 gpu-b
 
 实测（内存到内存，16 个 2 GiB 文件）：两台 bzz2 机器之间（400 Gb/s）9.7 GiB/s，yq01 到 johor（76 ms，64 条连接）1.4 GiB/s；单个大文件写本地盘约等于盘的速度（O_DIRECT，这里 3 GiB/s）。
 
+### 在存储系统之间传大数据
+
+`hearth cp` 在你的机器之间传数据。大目录（模型、数据集）放在共享文件系统上、要送到另一个集群的文件系统时，组织可以运行一个兼容 DataTool 的传输服务：存储系统之间在各自一侧直接复制，数据不经过本机，你退出登录后任务也继续运行。`hearth transfer` 就是这个服务的命令行。
+
+```toml
+# config.toml（hearth config --edit）；这里没有任何密钥
+[transfer]
+url = "http://datatool.example.com"        # 不写则命令不可用
+token_secret = "datatool_token"            # Hearth secret：hearth secret set datatool_token
+afs_ugi_secret = "afs_ugi"                 # 只有 afs 存储需要：hearth secret set afs_ugi
+# token_env = "DATATOOL_TOKEN"             # 或者用环境变量
+# api_prefix = "/v1/datatool/api"  timeout = "30s"  use_proxy = false
+
+# 本机路径在存储端对应的位置；取第一条匹配的前缀替换。
+# {user} 是账号名（邮箱去掉域名）。
+[[transfer.paths."a@one"]]
+from = "/mnt/personal"
+to   = "/data/{user}"
+[[transfer.paths."a@one"]]
+from = "/mnt"
+to   = "/data"
+```
+
+```bash
+hearth transfer meta                                    # 存储、允许的方向、限制
+hearth transfer submit --from a@one:/mnt/personal/ckpt --to b@two:/data/alice/ckpt
+hearth transfer list                                    # 本机提交的任务（--all：服务上的全部任务）
+hearth transfer status dt-20261105-3dbb92fd             # 状态、字节数、速度、剩余时间、错误
+hearth transfer cancel dt-20261105-3dbb92fd
+```
+
+- **路径是存储端的路径，不是本机的。** `STORAGE:PATH` 里的存储名见 `hearth transfer meta`。在 `[transfer.paths]` 某个前缀下的路径会被转换，计划里会显示；URL（`afs://...`）和其他绝对路径原样提交。相对路径只有在有规则能转换它时才接受，含 `..` 的路径会被拒绝。
+- **先出计划。** `submit` 先按服务报告的方向和限制检查请求，打印计划并询问；没有终端时必须加 `--yes`。**目的目录必须为空**，服务无法替你检查。`--dry-run` 请求服务做试运行，`--transfers`、`--checkers` 在服务的上限内设置并行度。
+- **密钥留在保险库里。** token 和 AFS UGI 是 Hearth secret（或环境变量），不会出现在 config.toml、任务记录或输出里。`config.toml` 在服务器上是明文保存的，所以 `url` 不能带密码。
+- **谁的任务。** 服务不区分用户（所有任务的创建者相同），所以 `list` 只显示本机提交的任务（记录在 Hearth 状态目录的 `transfers.json`，不含任何凭证）；`cancel` 默认拒绝不是本机提交的任务，`--force` 才能取消，这可能中断同事的复制。
+- **不经过 Hearth 的加密和版本管理。** 它用于存储之间的大批量数据。个人状态、skills、小文件和必须端到端加密的内容，走普通同步或 `hearth cp`。
+
 ### 机器之间的 SSH
 
 已登录的 Linux 机器只接受你自己设备的 SSH 连接：只认公钥、不开密码登录，只放行你未吊销设备的公钥；host key 从端到端加密发布的连接信息里校验，不需要手动确认"信任这台主机"。`hearth ssh <机器>` 和 Hearth 在 Mac 上写的 `~/.ssh/config` 条目，都用本设备的 Hearth 密钥连接。

@@ -247,6 +247,43 @@ The control channel goes over Hearth's SSH; the data goes directly between the t
 
 Measured (memory to memory, 16 files of 2 GiB): 9.7 GiB/s between two bzz2 machines (400 Gb/s), 1.4 GiB/s from yq01 to johor (76 ms, 64 connections); one large file to a local disk goes at about the disk's speed (O_DIRECT, 3 GiB/s here).
 
+### Copying large data between storages
+
+`hearth cp` moves data between your machines. For a large directory (a model, a dataset) that lives on a shared file system and has to reach another cluster's file system, an organisation may run a DataTool-compatible transfer service: the storages copy to each other on their own side, the data never passes through this machine, and the task keeps running after you log out. `hearth transfer` talks to that service.
+
+```toml
+# config.toml (hearth config --edit); nothing here is a secret
+[transfer]
+url = "http://datatool.example.com"        # without it the command is off
+token_secret = "datatool_token"            # a Hearth secret: hearth secret set datatool_token
+afs_ugi_secret = "afs_ugi"                 # only for afs storages: hearth secret set afs_ugi
+# token_env = "DATATOOL_TOKEN"             # alternative: an environment variable
+# api_prefix = "/v1/datatool/api"  timeout = "30s"  use_proxy = false
+
+# Where this machine's paths live on the storage; the first matching prefix is replaced.
+# {user} is the account name (the email without the domain).
+[[transfer.paths."a@one"]]
+from = "/mnt/personal"
+to   = "/data/{user}"
+[[transfer.paths."a@one"]]
+from = "/mnt"
+to   = "/data"
+```
+
+```bash
+hearth transfer meta                                    # storages, allowed directions, limits
+hearth transfer submit --from a@one:/mnt/personal/ckpt --to b@two:/data/alice/ckpt
+hearth transfer list                                    # tasks submitted from this machine (--all: every task)
+hearth transfer status dt-20261105-3dbb92fd             # state, bytes, speed, ETA, error
+hearth transfer cancel dt-20261105-3dbb92fd
+```
+
+- **The path is the storage's, not this machine's.** `STORAGE:PATH` names a storage from `hearth transfer meta`. A path under a `[transfer.paths]` prefix is translated and the plan shows it; a URL (`afs://...`) and any other absolute path go as given. A relative path is accepted only when a rule translates it, and `..` is refused.
+- **Plan first.** `submit` checks the request against the service's directions and limits, prints the plan, and asks; without a terminal it needs `--yes`. **The destination directory must be empty**; the service cannot check that for you. `--dry-run` asks the service for a dry run, `--transfers` and `--checkers` set the parallelism up to its limits.
+- **Secrets stay in the vault.** The token and the AFS UGI are Hearth secrets (or an environment variable), never in config.toml, the task record or the output. `config.toml` is stored on the server unencrypted, which is why `url` may not carry a password.
+- **Whose tasks.** The service does not tell users apart (everyone is the same creator), so `list` shows the tasks this machine submitted, recorded in `transfers.json` next to the Hearth state without any credential, and `cancel` refuses other ids unless `--force`: it could stop a colleague's copy.
+- **Not encrypted or versioned by Hearth.** Use it for bulk data between storages. Personal state, skills, small files and anything that must stay end-to-end encrypted go through the normal sync or `hearth cp`.
+
 ### SSH between your machines
 
 Logged-in Linux machines accept SSH from your own devices only: public keys only (no passwords), the keys of your active devices, the host keys checked from the end-to-end encrypted endpoints (no "trust this host?"). `hearth ssh <machine>` and the `~/.ssh/config` entries Hearth writes on a Mac connect with this device's Hearth key.

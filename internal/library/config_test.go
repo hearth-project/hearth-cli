@@ -67,3 +67,49 @@ func TestRenderFromExternalSkillsDir(t *testing.T) {
 		t.Fatalf("link %q %v (acts %+v)", link, err, acts)
 	}
 }
+
+func TestTransferConfigRoundTrip(t *testing.T) {
+	lib := Library{Root: t.TempDir()}
+	in := Config{Transfer: &TransferConfig{
+		URL: "http://datatool.example.com", TokenSecret: "datatool_token", AFSUGISecret: "afs_ugi", UseProxy: true,
+		Paths: map[string][]TransferPathRule{"gpfs@cn": {{From: "/mnt/personal", To: "/data/{user}"}, {From: "/mnt", To: "/data"}}},
+	}}
+	if err := lib.SaveConfig(in); err != nil {
+		t.Fatal(err)
+	}
+	out, err := lib.LoadConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := out.Transfer
+	if got == nil || got.URL != in.Transfer.URL || got.TokenSecret != "datatool_token" || !got.UseProxy ||
+		len(got.Paths["gpfs@cn"]) != 2 || got.Paths["gpfs@cn"][0].To != "/data/{user}" {
+		t.Fatalf("round trip lost settings: %+v", got)
+	}
+	// An empty section is not written.
+	if err := lib.SaveConfig(Config{}); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(lib.ConfigPath()); strings.Contains(string(b), "transfer") {
+		t.Fatalf("empty config mentions transfer:\n%s", b)
+	}
+}
+
+// config.toml is scanned for credentials before it is uploaded: the names of
+// secrets under [transfer] must not look like credentials themselves.
+func TestTransferConfigPassesTheSecretScan(t *testing.T) {
+	lib := Library{Root: t.TempDir()}
+	err := lib.SaveConfig(Config{Transfer: &TransferConfig{
+		URL: "http://datatool.example.com", TokenEnv: "DATATOOL_TOKEN", TokenSecret: "datatool_token", AFSUGISecret: "afs_ugi",
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fs, err := ScanSecrets(lib.Root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(fs) != 0 {
+		t.Fatalf("the transfer settings are flagged as credentials: %+v", fs)
+	}
+}

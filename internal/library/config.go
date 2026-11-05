@@ -29,6 +29,42 @@ type Config struct {
 	Shell      *ShellConfig      `toml:"shell,omitempty"`
 	Memory     *MemoryConfig     `toml:"memory,omitempty"`
 	SSH        *SSHConfig        `toml:"ssh,omitempty"`
+	Transfer   *TransferConfig   `toml:"transfer,omitempty"`
+}
+
+// TransferConfig: `hearth transfer`, copies between storage systems done by
+// a DataTool-compatible service (asynchronous server-side tasks) instead of
+// through the Hearth server. Nothing here is a secret: the service token and
+// the AFS UGI live in Hearth secrets, named below.
+type TransferConfig struct {
+	// URL of the service, e.g. http://datatool.example.com. Empty = the
+	// command is not set up.
+	URL string `toml:"url,omitempty"`
+	// APIPrefix before /meta, /tasks (default /v1/datatool/api).
+	APIPrefix string `toml:"api_prefix,omitempty"`
+	// TokenEnv names an environment variable with the service token;
+	// TokenSecret names a Hearth secret (used when the variable is unset).
+	// Both empty = no token header is sent.
+	TokenEnv    string `toml:"token_env,omitempty"`
+	TokenSecret string `toml:"token_secret,omitempty"`
+	// AFSUGISecret names the Hearth secret with the AFS UGI, sent with
+	// tasks that read or write an afs storage.
+	AFSUGISecret string `toml:"afs_ugi_secret,omitempty"`
+	// Timeout of one request (default 30s).
+	Timeout string `toml:"timeout,omitempty"`
+	// UseProxy sends requests through the environment's HTTP proxy. The
+	// service is usually internal, so the default is a direct connection.
+	UseProxy bool `toml:"use_proxy,omitempty"`
+	// Paths turns a local path into the path the service expects, per
+	// storage name; the first rule whose From prefix matches is used.
+	Paths map[string][]TransferPathRule `toml:"paths,omitempty"`
+}
+
+// TransferPathRule rewrites a path prefix: From is replaced by To, in which
+// {user} stands for the account name (the email without the domain).
+type TransferPathRule struct {
+	From string `toml:"from"`
+	To   string `toml:"to"`
 }
 
 // SSHConfig: machines accept SSH from the account's own devices, with
