@@ -45,6 +45,45 @@ func appCmd() *cobra.Command {
 	}}
 	data.Flags().BoolVar(&dataJSON, "json", false, "machine-readable")
 	c.AddCommand(data)
+	var adminJSON bool
+	adminData := &cobra.Command{Use: "admin-data", Short: "Print the administration pages' documents as JSON (admin accounts only; the macOS app reads it)", Args: cobra.NoArgs, RunE: func(*cobra.Command, []string) error {
+		if !adminJSON {
+			return errors.New("use --json")
+		}
+		e, err := engine()
+		if err != nil {
+			return err
+		}
+		docs, errs, err := e.AdminPortal()
+		if err != nil {
+			return err
+		}
+		return printJSON(map[string]any{"docs": docs, "errors": errs})
+	}}
+	adminData.Flags().BoolVar(&adminJSON, "json", false, "machine-readable")
+	adminCall := &cobra.Command{Use: "admin-call METHOD PATH [JSON-BODY]", Short: "Send one request to /v1/admin/... as the signed-in admin and print the JSON reply (the macOS app's admin actions use it)", Args: cobra.RangeArgs(2, 3), RunE: func(_ *cobra.Command, args []string) error {
+		e, err := engine()
+		if err != nil {
+			return err
+		}
+		var body json.RawMessage
+		if len(args) == 3 {
+			if !json.Valid([]byte(args[2])) {
+				return errors.New("the body is not valid JSON")
+			}
+			body = json.RawMessage(args[2])
+		}
+		out, err := e.AdminCall(args[0], args[1], body)
+		if err != nil {
+			return err
+		}
+		if len(out) == 0 {
+			out = json.RawMessage("{}")
+		}
+		fmt.Println(string(out))
+		return nil
+	}}
+	c.AddCommand(adminData, adminCall)
 	install := &cobra.Command{Use: "install", Short: "Install (or update) the menu bar app from your server into ~/Applications and start it", RunE: func(*cobra.Command, []string) error {
 		if runtime.GOOS != "darwin" {
 			return errors.New("the menu bar app runs on macOS")

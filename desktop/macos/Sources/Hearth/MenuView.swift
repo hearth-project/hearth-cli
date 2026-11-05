@@ -119,7 +119,7 @@ struct MenuView: View {
                         section(g.title, g.machines)
                     }
                     if store.hiddenCount > 0 {
-                        Text("另有 \(store.hiddenCount) 台离线超过 12 小时，在「打开 Hearth」的机器页查看")
+                        Text("另有 \(store.hiddenCount) 台离线超过 12 小时，在控制台查看")
                             .font(.system(size: 11))
                             .foregroundStyle(.tertiary)
                             .frame(maxWidth: .infinity)
@@ -182,7 +182,7 @@ struct MenuView: View {
     /// Menu-style rows at the bottom, like a native status menu.
     private var footer: some View {
         VStack(spacing: 0) {
-            MenuRow(icon: "macwindow", title: "打开 Hearth…", action: openConsole)
+            MenuRow(icon: "macwindow", title: "打开控制台…", action: openConsole)
             MenuRow(icon: "plus.rectangle.on.rectangle", title: "新增开发机", action: copyInstallCommand) {
                 if copying { ProgressView().controlSize(.small).scaleEffect(0.7) }
             }

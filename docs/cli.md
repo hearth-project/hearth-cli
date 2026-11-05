@@ -187,6 +187,8 @@ Generated from `hearth --help` by `hearth docs cli > docs/cli.md`; every command
 | [`hearth site status`](#hearth-site-status) | List the site defaults on this machine |
 | [`hearth app`](#hearth-app) | The macOS menu bar app: your machines at a glance, and the console in a window |
 | [`hearth app data`](#hearth-app-data) | Print the account's overview, library and teams as JSON (the macOS app's own pages read it) |
+| [`hearth app admin-data`](#hearth-app-admin-data) | Print the administration pages' documents as JSON (admin accounts only; the macOS app reads it) |
+| [`hearth app admin-call`](#hearth-app-admin-call) | Send one request to /v1/admin/... as the signed-in admin and print the JSON reply (the macOS app's admin actions use it) |
 | [`hearth app install`](#hearth-app-install) | Install (or update) the menu bar app from your server into ~/Applications and start it |
 | [`hearth app open`](#hearth-app-open) | Start the menu bar app |
 | [`hearth app uninstall`](#hearth-app-uninstall) | Quit and remove the menu bar app |
@@ -2142,6 +2144,25 @@ hearth app data [flags]
 
 Flags:
       --json   machine-readable
+```
+
+## hearth app admin-data
+
+Print the administration pages' documents as JSON (admin accounts only; the macOS app reads it)
+
+```text
+hearth app admin-data [flags]
+
+Flags:
+      --json   machine-readable
+```
+
+## hearth app admin-call
+
+Send one request to /v1/admin/... as the signed-in admin and print the JSON reply (the macOS app's admin actions use it)
+
+```text
+hearth app admin-call METHOD PATH [JSON-BODY]
 ```
 
 ## hearth app install
