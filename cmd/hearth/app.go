@@ -28,6 +28,23 @@ func appDir() string {
 
 func appCmd() *cobra.Command {
 	c := &cobra.Command{Use: "app", Short: "The macOS menu bar app: your machines at a glance, and the console in a window"}
+	var dataJSON bool
+	data := &cobra.Command{Use: "data", Short: "Print the account's overview, library and teams as JSON (the macOS app's own pages read it)", Args: cobra.NoArgs, RunE: func(*cobra.Command, []string) error {
+		if !dataJSON {
+			return errors.New("use --json")
+		}
+		e, err := engine()
+		if err != nil {
+			return err
+		}
+		docs, errs, err := e.Portal()
+		if err != nil {
+			return err
+		}
+		return printJSON(map[string]any{"docs": docs, "errors": errs})
+	}}
+	data.Flags().BoolVar(&dataJSON, "json", false, "machine-readable")
+	c.AddCommand(data)
 	install := &cobra.Command{Use: "install", Short: "Install (or update) the menu bar app from your server into ~/Applications and start it", RunE: func(*cobra.Command, []string) error {
 		if runtime.GOOS != "darwin" {
 			return errors.New("the menu bar app runs on macOS")

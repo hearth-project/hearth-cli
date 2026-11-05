@@ -186,6 +186,7 @@ Generated from `hearth --help` by `hearth docs cli > docs/cli.md`; every command
 | [`hearth site pull`](#hearth-site-pull) | Fetch the site defaults now (works before login with --server) |
 | [`hearth site status`](#hearth-site-status) | List the site defaults on this machine |
 | [`hearth app`](#hearth-app) | The macOS menu bar app: your machines at a glance, and the console in a window |
+| [`hearth app data`](#hearth-app-data) | Print the account's overview, library and teams as JSON (the macOS app's own pages read it) |
 | [`hearth app install`](#hearth-app-install) | Install (or update) the menu bar app from your server into ~/Applications and start it |
 | [`hearth app open`](#hearth-app-open) | Start the menu bar app |
 | [`hearth app uninstall`](#hearth-app-uninstall) | Quit and remove the menu bar app |
@@ -2130,6 +2131,17 @@ The macOS menu bar app: your machines at a glance, and the console in a window
 
 ```text
 hearth app
+```
+
+## hearth app data
+
+Print the account's overview, library and teams as JSON (the macOS app's own pages read it)
+
+```text
+hearth app data [flags]
+
+Flags:
+      --json   machine-readable
 ```
 
 ## hearth app install
