@@ -369,6 +369,19 @@ func (a *API) Devices() ([]api.Device, error) {
 	return r, err
 }
 
+// TransferConfig returns the server's settings for `hearth transfer`, or
+// nil when the admin set none.
+func (a *API) TransferConfig() (*api.TransferConfig, error) {
+	var r api.TransferConfig
+	if _, err := a.do("GET", "/v1/transfer/config", nil, nil, nil, &r); err != nil {
+		if StatusOf(err) == 404 {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &r, nil
+}
+
 // Heartbeat tells the server this device is online (the daemon, every scan).
 func (a *API) Heartbeat() error { return a.HeartbeatReport(nil, nil) }
 

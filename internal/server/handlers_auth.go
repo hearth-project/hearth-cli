@@ -91,6 +91,7 @@ func (s *Server) routes() {
 	m.HandleFunc("PUT /v1/secrets/{id}", s.authed(s.handlePutSecret))
 	m.HandleFunc("DELETE /v1/secrets/{id}", s.authed(s.handleDeleteSecret))
 	m.HandleFunc("GET /v1/library", s.authed(s.handleGetLibrary))
+	m.HandleFunc("GET /v1/transfer/config", s.authed(s.handleTransferConfig))
 	if s.cfg.SiteAuth {
 		m.HandleFunc("GET /v1/site", s.authed(s.handleSite))
 	} else {

@@ -227,6 +227,12 @@ Generated from `hearth --help` by `hearth docs cli > docs/cli.md`; every command
 | [`hearth ssh keys`](#hearth-ssh-keys) | Keys your machines accept |
 | [`hearth ssh unauthorize`](#hearth-ssh-unauthorize) | Remove a key added with authorize |
 | [`hearth ssh config`](#hearth-ssh-config) | Write Host entries for your machines into ~/.ssh/config (kept up to date by the daemon) |
+| [`hearth transfer`](#hearth-transfer) | Copy large directories between storage systems with a DataTool-compatible service (asynchronous, server-side) |
+| [`hearth transfer meta`](#hearth-transfer-meta) | What the service can copy: storages, allowed directions, path hints, defaults and limits |
+| [`hearth transfer submit`](#hearth-transfer-submit) | Submit a copy task (shows the plan and asks first) |
+| [`hearth transfer list`](#hearth-transfer-list) | Tasks submitted from this machine (--all: every task on the service) |
+| [`hearth transfer status`](#hearth-transfer-status) | State, progress and error of one task |
+| [`hearth transfer cancel`](#hearth-transfer-cancel) | Cancel a task (only your own, unless --force) |
 
 ## hearth setup
 
@@ -2517,4 +2523,92 @@ Write Host entries for your machines into ~/.ssh/config (kept up to date by the 
 
 ```text
 hearth ssh config
+```
+
+## hearth transfer
+
+Submits copy tasks to a transfer service that moves a directory from one storage system to another
+on its own side (e.g. between two clusters' shared file systems), tracks them, and cancels them.
+The data does not pass through this machine or the Hearth server, and it is not encrypted or versioned
+by Hearth: use `hearth cp` or the normal sync for personal state, small files and anything that must
+stay end-to-end encrypted. The server admin provides the service address, token and path rules
+(transfer.json in the server's data directory); [transfer] in config.toml overrides them
+(see docs/en/usage.md).
+
+  hearth transfer meta                      storages, allowed directions, limits
+  hearth transfer submit --from a@one:/data/ckpt --to b@two:/data/ckpt
+  hearth transfer list | status <id> | cancel <id>
+
+```text
+hearth transfer
+```
+
+## hearth transfer meta
+
+What the service can copy: storages, allowed directions, path hints, defaults and limits
+
+```text
+hearth transfer meta
+```
+
+## hearth transfer submit
+
+Copies the source directory to the destination on the service's side. STORAGE is a name from
+`hearth transfer meta`; PATH is the path on that storage. A path under a prefix listed in
+[transfer.paths."STORAGE"] of config.toml is translated first (so a path as seen on this machine
+works); a URL such as afs://... and any other absolute path are sent as given.
+
+The destination directory must be empty. The plan is printed and you confirm it; without a terminal
+pass --yes. --dry-run asks the service for a dry run. AFS needs a UGI: [transfer] afs_ugi_secret.
+
+```text
+hearth transfer submit --from STORAGE:PATH --to STORAGE:PATH [flags]
+
+Flags:
+      --checkers int    parallel checkers (default: the service's, at most its limit)
+      --dry-run         ask the service for a dry run
+      --from string     source, STORAGE:PATH
+      --name string     task name (default: hearth-<destination directory>-<date>)
+      --to string       destination, STORAGE:PATH (an empty directory)
+      --transfers int   parallel file transfers (default: the service's, at most its limit)
+  -y, --yes             do not ask; you confirm the destination directory is empty
+```
+
+## hearth transfer list
+
+The service does not tell users apart, so by default only the tasks this machine submitted are shown
+(their current state is fetched). --all lists the service's tasks, whoever created them.
+
+```text
+hearth transfer list [flags]
+
+Flags:
+      --all              every task on the service, not only this machine's
+      --json             JSON output
+      --keyword string   only tasks whose name or id contains this
+  -n, --limit int        at most this many tasks (default 20)
+      --status string    only this state (pending, serving, running, cleaning, succeeded, failed, canceling, canceled)
+```
+
+## hearth transfer status
+
+State, progress and error of one task
+
+```text
+hearth transfer status <task-id> [flags]
+
+Flags:
+      --json   JSON output
+```
+
+## hearth transfer cancel
+
+Asks the service to stop the task. The service does not tell users apart, so Hearth only cancels tasks
+this machine submitted; --force cancels any task id, which can stop somebody else's copy.
+
+```text
+hearth transfer cancel <task-id> [flags]
+
+Flags:
+      --force   cancel a task this machine did not submit
 ```

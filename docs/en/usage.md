@@ -247,6 +247,46 @@ The control channel goes over Hearth's SSH; the data goes directly between the t
 
 Measured (memory to memory, 16 files of 2 GiB): 9.7 GiB/s between two bzz2 machines (400 Gb/s), 1.4 GiB/s from yq01 to johor (76 ms, 64 connections); one large file to a local disk goes at about the disk's speed (O_DIRECT, 3 GiB/s here).
 
+### Copying large data between storages
+
+`hearth cp` moves data between your machines. For a large directory (a model, a dataset) that lives on a shared file system and has to reach another cluster's file system, an organisation may run a DataTool-compatible transfer service: the storages copy to each other on their own side, the data never passes through this machine, and the task keeps running after you log out. `hearth transfer` talks to that service.
+
+**The server admin sets it up once**; users configure nothing. Put `transfer.json` in the server's data directory (`<data>/transfer.json`, mode 0600; edits apply at once):
+
+```json
+{
+  "url": "http://datatool.example.com",
+  "token": "shared-service-token",
+  "afs_ugi_secret": "afs_ugi",
+  "paths": {
+    "a@one": [
+      {"from": "/mnt/personal", "to": "/data/{user}"},
+      {"from": "/mnt",          "to": "/data"}
+    ]
+  }
+}
+```
+
+Every logged-in client fetches it (`GET /v1/transfer/config`, login required, never part of the public site bundle), so the address, the token and the path rules are not in the open-source code or on the users' machines. `{user}` is the account name (the email without the domain); the first rule whose `from` is a prefix of the path wins. Optional keys: `api_prefix` (default `/v1/datatool/api`), `timeout`. The token is visible to every user who can log in to this server; it is the service's shared token, not a personal credential.
+
+What stays personal is the AFS UGI, only needed for `afs` storages: `hearth secret set afs_ugi` stores it end-to-end encrypted (the name comes from `afs_ugi_secret`).
+
+A user can override any of it under `[transfer]` in config.toml (`hearth config --edit`; nothing there is a secret, and `url` may not carry a password): `url`, `token_secret` (a Hearth secret) or `token_env` (an environment variable), `afs_ugi_secret`, `api_prefix`, `timeout`, `use_proxy = true` (requests go direct by default, the service is usually internal) and `[[transfer.paths."STORAGE"]]` rules, which replace the server's rules for that storage. The server's token is only ever sent to the server's own address: a user's `url` that differs gets no token unless the user sets one.
+
+```bash
+hearth transfer meta                                    # storages, allowed directions, limits
+hearth transfer submit --from a@one:/mnt/personal/ckpt --to b@two:/data/alice/ckpt
+hearth transfer list                                    # tasks submitted from this machine (--all: every task)
+hearth transfer status dt-20261105-3dbb92fd             # state, bytes, speed, ETA, error
+hearth transfer cancel dt-20261105-3dbb92fd
+```
+
+- **The path is the storage's, not this machine's.** `STORAGE:PATH` names a storage from `hearth transfer meta`. A path under a rule's `from` prefix is translated and the plan shows it; a URL (`afs://...`) and any other absolute path go as given. A relative path is accepted only when a rule translates it, and `..` is refused.
+- **Plan first.** `submit` checks the request against the service's directions and limits, prints the plan, and asks; without a terminal it needs `--yes`. **The destination directory must be empty**; the service cannot check that for you. `--dry-run` asks the service for a dry run, `--transfers` and `--checkers` set the parallelism up to its limits.
+- **Credentials never appear in output.** The AFS UGI goes only into the create request: not in the plan, the task record or errors.
+- **Whose tasks.** The service does not tell users apart (everyone is the same creator), so `list` shows the tasks this machine submitted, recorded in `transfers.json` next to the Hearth state without any credential, and `cancel` refuses other ids unless `--force`: it could stop a colleague's copy.
+- **Not encrypted or versioned by Hearth.** Use it for bulk data between storages. Personal state, skills, small files and anything that must stay end-to-end encrypted go through the normal sync or `hearth cp`.
+
 ### SSH between your machines
 
 Logged-in Linux machines accept SSH from your own devices only: public keys only (no passwords), the keys of your active devices, the host keys checked from the end-to-end encrypted endpoints (no "trust this host?"). `hearth ssh <machine>` and the `~/.ssh/config` entries Hearth writes on a Mac connect with this device's Hearth key.

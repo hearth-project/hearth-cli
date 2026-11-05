@@ -142,6 +142,27 @@ func IdentityLoginMessage(email string, ts int64) string {
 	return "hearth-identity-login:" + strings.ToLower(strings.TrimSpace(email)) + ":" + strconv.FormatInt(ts, 10)
 }
 
+// TransferConfig is what an admin keeps in <data>/transfer.json for
+// `hearth transfer`: the service address, the shared service token and the
+// path rules, so users need no settings of their own. Served to logged-in
+// users only (GET /v1/transfer/config); per-user credentials (the AFS UGI)
+// stay in each user's end-to-end encrypted secrets, only the name of that
+// secret is set here.
+type TransferConfig struct {
+	URL          string                        `json:"url"`
+	APIPrefix    string                        `json:"api_prefix,omitempty"`
+	Token        string                        `json:"token,omitempty"`
+	AFSUGISecret string                        `json:"afs_ugi_secret,omitempty"`
+	Timeout      string                        `json:"timeout,omitempty"`
+	Paths        map[string][]TransferPathRule `json:"paths,omitempty"`
+}
+
+// TransferPathRule rewrites a path prefix; {user} in To is the account name.
+type TransferPathRule struct {
+	From string `json:"from"`
+	To   string `json:"to"`
+}
+
 type Device struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
