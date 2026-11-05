@@ -24,7 +24,9 @@ func transferCmd() *cobra.Command {
 			"on its own side (e.g. between two clusters' shared file systems), tracks them, and cancels them.\n" +
 			"The data does not pass through this machine or the Hearth server, and it is not encrypted or versioned\n" +
 			"by Hearth: use `hearth cp` or the normal sync for personal state, small files and anything that must\n" +
-			"stay end-to-end encrypted. Set up the service in config.toml ([transfer], see docs/en/usage.md).\n\n" +
+			"stay end-to-end encrypted. The server admin provides the service address, token and path rules\n" +
+			"(transfer.json in the server's data directory); [transfer] in config.toml overrides them\n" +
+			"(see docs/en/usage.md).\n\n" +
 			"  hearth transfer meta                      storages, allowed directions, limits\n" +
 			"  hearth transfer submit --from a@one:/data/ckpt --to b@two:/data/ckpt\n" +
 			"  hearth transfer list | status <id> | cancel <id>",

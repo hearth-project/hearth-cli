@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hearth-project/hearth-cli/internal/api"
 	"github.com/hearth-project/hearth-cli/internal/client"
 	"github.com/hearth-project/hearth-cli/internal/datatool"
 	"github.com/hearth-project/hearth-cli/internal/library"
@@ -22,7 +23,8 @@ type transferEnv struct {
 	user  string
 }
 
-const transferSetupHint = "hearth transfer is not set up: add a [transfer] section to config.toml (hearth config --edit):\n" +
+const transferSetupHint = "hearth transfer is not set up. The server admin can provide the settings for everyone (transfer.json in the\n" +
+	"server's data directory), or you set them yourself under [transfer] in config.toml (hearth config --edit):\n" +
 	"  [transfer]\n" +
 	"  url = \"http://datatool.example.com\"\n" +
 	"  token_secret = \"datatool_token\"   # optional: hearth secret set datatool_token\n" +
@@ -34,17 +36,33 @@ func loadTransferEnv() (*transferEnv, error) {
 	if err != nil {
 		return nil, err
 	}
-	if uc.Transfer == nil || strings.TrimSpace(uc.Transfer.URL) == "" {
+	var local library.TransferConfig
+	if uc.Transfer != nil {
+		local = *uc.Transfer
+	}
+	// The server's settings are the default; the user's own win.
+	var srv *api.TransferConfig
+	e, srvErr := engine()
+	if srvErr == nil {
+		srv, srvErr = e.API.TransferConfig()
+	}
+	t, srvToken := mergeTransfer(local, srv)
+	if strings.TrimSpace(t.URL) == "" {
+		if srvErr != nil {
+			return nil, fmt.Errorf("%s\n(the server's transfer settings could not be read: %w)", transferSetupHint, srvErr)
+		}
 		return nil, errors.New(transferSetupHint)
 	}
-	t := *uc.Transfer
+	if srvErr != nil {
+		fmt.Fprintf(os.Stderr, "warning: the server's transfer settings could not be read (%v); using this machine's settings only\n", srvErr)
+	}
 	timeout := 30 * time.Second
 	if t.Timeout != "" {
 		if timeout, err = time.ParseDuration(t.Timeout); err != nil {
 			return nil, fmt.Errorf("[transfer] timeout %q: %w", t.Timeout, err)
 		}
 	}
-	token, err := transferToken(t)
+	token, err := transferToken(t, srvToken)
 	if err != nil {
 		return nil, err
 	}
@@ -59,15 +77,63 @@ func loadTransferEnv() (*transferEnv, error) {
 	return env, nil
 }
 
-// transferToken: the environment variable first, then the secret. Neither
-// named: no token is sent.
-func transferToken(t library.TransferConfig) (string, error) {
+// mergeTransfer lays the user's settings over the server's. Scalars the user
+// set win; the path rules of a storage the user lists replace the server's
+// for that storage. The server's token is returned apart and is used only
+// for the server's own address: pointing url elsewhere must not send it
+// there.
+func mergeTransfer(local library.TransferConfig, srv *api.TransferConfig) (library.TransferConfig, string) {
+	t := local
+	if srv == nil {
+		return t, ""
+	}
+	token := ""
+	if local.URL == "" || sameTransferURL(local.URL, srv.URL) {
+		token = srv.Token
+	}
+	if t.URL == "" {
+		t.URL = srv.URL
+	}
+	if t.APIPrefix == "" {
+		t.APIPrefix = srv.APIPrefix
+	}
+	if t.Timeout == "" {
+		t.Timeout = srv.Timeout
+	}
+	if t.AFSUGISecret == "" {
+		t.AFSUGISecret = srv.AFSUGISecret
+	}
+	if len(srv.Paths) > 0 {
+		paths := map[string][]library.TransferPathRule{}
+		for storage, rules := range srv.Paths {
+			for _, r := range rules {
+				paths[storage] = append(paths[storage], library.TransferPathRule{From: r.From, To: r.To})
+			}
+		}
+		for storage, rules := range local.Paths {
+			paths[storage] = rules
+		}
+		t.Paths = paths
+	}
+	return t, token
+}
+
+func sameTransferURL(a, b string) bool {
+	return strings.TrimRight(strings.TrimSpace(a), "/") == strings.TrimRight(strings.TrimSpace(b), "/")
+}
+
+// transferToken: the user's environment variable, then the user's secret,
+// then the server's token (fromServer). None: no token is sent.
+func transferToken(t library.TransferConfig, fromServer string) (string, error) {
 	if t.TokenEnv != "" {
 		if v := strings.TrimSpace(os.Getenv(t.TokenEnv)); v != "" {
 			return v, nil
 		}
 	}
 	if t.TokenSecret == "" {
+		if fromServer != "" {
+			return fromServer, nil
+		}
 		if t.TokenEnv != "" {
 			return "", fmt.Errorf("[transfer] token_env: $%s is empty (or set token_secret)", t.TokenEnv)
 		}

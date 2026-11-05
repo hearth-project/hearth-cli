@@ -34,17 +34,20 @@ type Config struct {
 
 // TransferConfig: `hearth transfer`, copies between storage systems done by
 // a DataTool-compatible service (asynchronous server-side tasks) instead of
-// through the Hearth server. Nothing here is a secret: the service token and
-// the AFS UGI live in Hearth secrets, named below.
+// through the Hearth server. The server admin normally provides all of it
+// (transfer.json in the server's data directory); whatever is set here wins.
+// Nothing here is a secret: the service token and the AFS UGI live in Hearth
+// secrets, named below.
 type TransferConfig struct {
 	// URL of the service, e.g. http://datatool.example.com. Empty = the
-	// command is not set up.
+	// server's, and without one the command is not set up.
 	URL string `toml:"url,omitempty"`
 	// APIPrefix before /meta, /tasks (default /v1/datatool/api).
 	APIPrefix string `toml:"api_prefix,omitempty"`
 	// TokenEnv names an environment variable with the service token;
 	// TokenSecret names a Hearth secret (used when the variable is unset).
-	// Both empty = no token header is sent.
+	// Both empty = the server's token for the server's own address, else
+	// no token header is sent.
 	TokenEnv    string `toml:"token_env,omitempty"`
 	TokenSecret string `toml:"token_secret,omitempty"`
 	// AFSUGISecret names the Hearth secret with the AFS UGI, sent with

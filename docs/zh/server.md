@@ -78,6 +78,7 @@ docker compose -f deploy/docker-compose.scale.yml up -d --scale hearth=2      # 
 - 站点配方里执行命令的步骤和个人配方一样，需要用户在每台机器上确认（`--yes`）后才会运行。
 - 站点配方面向所有用户，不要假设某个用户的 secret 名字；依赖 secret 的步骤加 `when_secret = "<名字>"`。
 - 站点内容以明文提供给所有能访问服务器的人（`--site-auth` 时为所有已登录用户），**不要放凭证**；凭证由每个用户自己用 `hearth secret` 保存。
+- 带共享凭证的设置放在 `<data>/transfer.json`，只提供给已登录用户：`hearth transfer` 用的 DataTool 兼容传输服务的地址、token 和路径规则（格式见[使用指南](usage.md#在存储系统之间传大数据)）。文件权限保持 0600；token 对所有能登录的用户可见。
 - `learn.json` 的 `token_files` 也是 `hearth login` / `hearth whoami` 查找本地身份的地方：`identity.email_domain` 把 token 里的用户名拼成账号邮箱，`identity.username_claim` 指定读哪个 JWT claim（默认 `username`）；不配域名时用用户 git email 的域名。建议配上：新机器能直接从 Comate 登录或 SSO token 得出账号，不用再问。
 - `net.json` 的 `proxies`：只能通过代理访问服务器的机器。下载页给出的安装命令连不上时会退回第一个代理（`{ curl --connect-timeout 5 … || curl -x <代理> …; } | sh`），`install.sh` 直连不通时逐个尝试，客户端在 shell 没设代理时也会这样做；能用的代理会记下来（`<home>/net.json`）。`HEARTH_NO_AUTO_PROXY=1` 关闭客户端这一步。
 

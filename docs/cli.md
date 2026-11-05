@@ -2531,7 +2531,9 @@ Submits copy tasks to a transfer service that moves a directory from one storage
 on its own side (e.g. between two clusters' shared file systems), tracks them, and cancels them.
 The data does not pass through this machine or the Hearth server, and it is not encrypted or versioned
 by Hearth: use `hearth cp` or the normal sync for personal state, small files and anything that must
-stay end-to-end encrypted. Set up the service in config.toml ([transfer], see docs/en/usage.md).
+stay end-to-end encrypted. The server admin provides the service address, token and path rules
+(transfer.json in the server's data directory); [transfer] in config.toml overrides them
+(see docs/en/usage.md).
 
   hearth transfer meta                      storages, allowed directions, limits
   hearth transfer submit --from a@one:/data/ckpt --to b@two:/data/ckpt

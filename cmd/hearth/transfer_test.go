@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hearth-project/hearth-cli/internal/api"
 	"github.com/hearth-project/hearth-cli/internal/datatool"
 	"github.com/hearth-project/hearth-cli/internal/library"
 )
@@ -68,15 +69,59 @@ func TestParseStoragePathRelativeWithRule(t *testing.T) {
 
 func TestTransferToken(t *testing.T) {
 	t.Setenv("HEARTH_TEST_DT_TOKEN", " abc ")
-	if v, err := transferToken(library.TransferConfig{TokenEnv: "HEARTH_TEST_DT_TOKEN"}); err != nil || v != "abc" {
+	if v, err := transferToken(library.TransferConfig{TokenEnv: "HEARTH_TEST_DT_TOKEN"}, "server-token"); err != nil || v != "abc" {
 		t.Fatalf("env token: %q %v", v, err)
 	}
-	if v, err := transferToken(library.TransferConfig{}); err != nil || v != "" {
+	if v, err := transferToken(library.TransferConfig{}, ""); err != nil || v != "" {
 		t.Fatalf("no token configured: %q %v", v, err)
 	}
+	if v, err := transferToken(library.TransferConfig{}, "server-token"); err != nil || v != "server-token" {
+		t.Fatalf("the server's token is the default: %q %v", v, err)
+	}
 	t.Setenv("HEARTH_TEST_DT_TOKEN", "")
-	if _, err := transferToken(library.TransferConfig{TokenEnv: "HEARTH_TEST_DT_TOKEN"}); err == nil || !strings.Contains(err.Error(), "HEARTH_TEST_DT_TOKEN") {
+	if v, err := transferToken(library.TransferConfig{TokenEnv: "HEARTH_TEST_DT_TOKEN"}, "server-token"); err != nil || v != "server-token" {
+		t.Fatalf("an empty variable falls back to the server's token: %q %v", v, err)
+	}
+	if _, err := transferToken(library.TransferConfig{TokenEnv: "HEARTH_TEST_DT_TOKEN"}, ""); err == nil || !strings.Contains(err.Error(), "HEARTH_TEST_DT_TOKEN") {
 		t.Fatalf("an empty variable must be reported: %v", err)
+	}
+}
+
+func TestMergeTransfer(t *testing.T) {
+	srv := &api.TransferConfig{
+		URL: "http://svc.example.com", Token: "shared", AFSUGISecret: "afs_ugi", Timeout: "10s",
+		Paths: map[string][]api.TransferPathRule{
+			"a@one": {{From: "/mnt", To: "/data"}},
+			"b@two": {{From: "/mnt", To: "/srv"}},
+		},
+	}
+	// Nothing local: the server's settings, including its token.
+	got, token := mergeTransfer(library.TransferConfig{}, srv)
+	if got.URL != srv.URL || token != "shared" || got.AFSUGISecret != "afs_ugi" || got.Timeout != "10s" || len(got.Paths["b@two"]) != 1 {
+		t.Fatalf("defaults: %+v %q", got, token)
+	}
+	// Local settings win, per field and per storage.
+	local := library.TransferConfig{
+		Timeout: "1m", UseProxy: true,
+		Paths: map[string][]library.TransferPathRule{"a@one": {{From: "/x", To: "/y"}}},
+	}
+	got, token = mergeTransfer(local, srv)
+	if got.Timeout != "1m" || !got.UseProxy || got.URL != srv.URL || token != "shared" {
+		t.Fatalf("overlay: %+v %q", got, token)
+	}
+	if r := got.Paths["a@one"]; len(r) != 1 || r[0].From != "/x" || got.Paths["b@two"][0].To != "/srv" {
+		t.Fatalf("path rules: %+v", got.Paths)
+	}
+	// The same address with a trailing slash still gets the token ...
+	if _, token = mergeTransfer(library.TransferConfig{URL: "http://svc.example.com/"}, srv); token != "shared" {
+		t.Fatalf("token for the same address: %q", token)
+	}
+	// ... another address never does.
+	if got, token = mergeTransfer(library.TransferConfig{URL: "http://elsewhere.example.com"}, srv); token != "" || got.URL != "http://elsewhere.example.com" {
+		t.Fatalf("the server's token must not go to another address: %+v %q", got, token)
+	}
+	if got, token = mergeTransfer(library.TransferConfig{URL: "http://x"}, nil); token != "" || got.URL != "http://x" {
+		t.Fatalf("no server settings: %+v %q", got, token)
 	}
 }
 
