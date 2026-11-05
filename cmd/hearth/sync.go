@@ -439,27 +439,10 @@ func daemonCmd() *cobra.Command {
 					// Teams joined or left elsewhere become (or stop being)
 					// skill sources; the library push below carries it.
 					_, _, _ = e.SyncTeamSources()
-					// On-demand machines: an agent the user works with that got
-					// installed since joins this machine's agents.
-					var adopted []string
-					if client.OnDemand(e.Home) {
-						if all, lerr := e.List(); lerr == nil {
-							var used []string
-							for a := range client.HabitAgents(all) {
-								used = append(used, a)
-							}
-							sort.Strings(used)
-							adopted, _ = client.AdoptInstalledAgents(e.Home, used) // rendered by LibAuto below
-						}
-					}
+					// On-demand machines set up an agent only when its
+					// environment is restored (hearth agents pull), not when its
+					// CLI shows up.
 					r, err := e.LibAuto()
-					if len(adopted) > 0 {
-						log.Printf("set up %s here (installed): skills, agents, skill search, memory hooks", strings.Join(adopted, ", "))
-						if _, err := installSkillMCP(true); err != nil {
-							log.Printf("skill search: %v", err)
-						}
-						_, _ = client.SyncMemoryHooks(e.Home, client.MemoryHooksOn(e.Home))
-					}
 					hb.LastLibrary, hb.LibraryOp = time.Now().Unix(), r.Op
 					if err != nil {
 						hb.Fail("library", err)

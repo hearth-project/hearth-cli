@@ -135,7 +135,7 @@ Setting up this machine ... done
 
   name        h800-gpu-node-13 (gpu-node-13)
   workspace   /data/you
-  library     42 skills and 3 agents, linked into codex
+  library     42 skills and 3 agents, set up for an agent when you restore its environment
   sync        on, in the background
   ssh         h800-gpu-node-13 (10.0.0.13:8022)
 
@@ -148,8 +148,9 @@ Next steps:
 
        恢复 h800-gpu-node-13 的 Codex 环境
 
-Conversations, credentials and shell lines come when you ask for them:
-hearth restore --last 10, or hearth setup --full for everything now.
+Your agents' skills, skill search and memory, credentials and shell lines are set up when
+you restore this machine's environment; conversations with hearth restore --last 10;
+everything now: hearth setup --full.
 Anything else: ask Codex "用 hearth", or run hearth status.
 Log: ~/.cache/hearth/setup-….log
 ```

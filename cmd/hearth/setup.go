@@ -186,7 +186,24 @@ func setupCmd() *cobra.Command {
 			var libErr, restoreErr error
 			var teams string
 			out.start("Setting up this machine")
+			// An on-demand machine sets up no agent now (skills, skill search,
+			// memory hooks and index): "恢复 <machine> 的 <agent> 环境" does,
+			// through hearth agents pull. The library is pulled all the same:
+			// it holds the machine profiles, backup selection and recipes.
+			agentsNow := !client.OnDemand(home) || client.HasMachineAgents(home)
 			out.quiet(func() {
+				if !agentsNow {
+					// An empty selection, not none: none means every agent.
+					if err := client.SetMachineAgents(home, nil); err != nil {
+						fmt.Println("agents:", err)
+					}
+					if r, err := e.LibPull(false); err != nil {
+						libErr = err
+					} else {
+						fmt.Printf("library %s (version %d); agents set up when their environment is restored\n", r.Op, r.Version)
+					}
+					return
+				}
 				if libErr = pullAndRenderThen(e, false, func() { chooseMachineAgents(e) }); libErr != nil {
 					chooseMachineAgents(e)
 				}
@@ -290,6 +307,9 @@ func setupCmd() *cobra.Command {
 				// After the recipes: registering the MCP server creates the
 				// agent's config file (~/.codex/config.toml), which would stop
 				// a recorded one from being restored.
+				if len(client.MachineAgents(home)) == 0 {
+					return // no agent set up here yet
+				}
 				if done, err := installSkillMCP(true); err != nil {
 					fmt.Println("mcp:", err)
 				} else if len(done) > 0 {
@@ -322,7 +342,7 @@ func setupCmd() *cobra.Command {
 			if ma := client.MachineAgents(home); len(ma) > 0 {
 				out.line("library", fmt.Sprintf("%s and %s, linked into %s", plural(skills, "skill", "skills"), plural(agents, "agent", "agents"), strings.Join(ma, ", ")))
 			} else {
-				out.line("library", fmt.Sprintf("%s and %s, linked into a coding agent once one is installed here", plural(skills, "skill", "skills"), plural(agents, "agent", "agents")))
+				out.line("library", fmt.Sprintf("%s and %s, set up for an agent when you restore its environment", plural(skills, "skill", "skills"), plural(agents, "agent", "agents")))
 			}
 			if secretFiles > 0 {
 				out.line("files", plural(secretFiles, "credential or config file", "credential and config files")+" written")
@@ -466,10 +486,6 @@ func chooseMachineAgents(e *client.Engine) {
 	}
 	use := client.AgentUse(all)
 	recent, stale := client.RecentAgents(home, use)
-	if client.OnDemand(home) {
-		// Set up an agent here once it is installed (the daemon adopts it).
-		recent = client.InstalledAgents(recent)
-	}
 	if err := client.SetMachineAgents(home, recent); err != nil {
 		fmt.Println("      agents:", err)
 		return

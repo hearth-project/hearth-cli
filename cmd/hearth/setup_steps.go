@@ -68,14 +68,10 @@ func libraryCounts(home string) (skills, agents int) {
 // one that matters most first, with the command to type on its own line;
 // then where the rest is.
 func printSetupSummary(out *setupOut, e *client.Engine, envLeft, withSkill []string, codexTrust, onDemand bool) {
-	home := e.Home
 	type step struct{ text, cmd string }
 	var next []step
 	if len(envLeft) > 0 {
-		agent := "Codex"
-		if ma := client.MachineAgents(home); len(ma) > 0 && ma[0] != "codex" {
-			agent = map[string]string{"claude": "Claude Code", "comate": "Comate"}[ma[0]]
-		}
+		agent := map[string]string{"codex": "Codex", "claude": "Claude Code", "comate": "Comate"}[restoreAgent(e)]
 		next = append(next, step{fmt.Sprintf("Set up the software (%s).\nOn any machine with Hearth, tell its agent:", joinMax(envLeft, 3)),
 			fmt.Sprintf("恢复 %s 的 %s 环境", thisAlias(e), agent)})
 	}
@@ -89,7 +85,11 @@ func printSetupSummary(out *setupOut, e *client.Engine, envLeft, withSkill []str
 		next = append(next, step{"At its next start, Codex asks once to trust Hearth's memory hooks:\nchoose \"Trust all and continue\".", ""})
 	}
 	if n := len(e.LearnPending()); n > 0 {
-		next = append(next, step{fmt.Sprintf("%s here need your choice:", plural(n, "item", "items")), "hearth learn"})
+		verb := "needs"
+		if n > 1 {
+			verb = "need"
+		}
+		next = append(next, step{fmt.Sprintf("%s here %s your choice:", plural(n, "item", "items"), verb), "hearth learn"})
 	}
 	fmt.Printf("\nHearth is ready on %s.\n", thisAlias(e))
 	if len(next) > 0 {
@@ -103,8 +103,9 @@ func printSetupSummary(out *setupOut, e *client.Engine, envLeft, withSkill []str
 	}
 	fmt.Println()
 	if onDemand {
-		fmt.Println("Conversations, credentials and shell lines come when you ask for them:")
-		fmt.Println("hearth restore --last 10, or hearth setup --full for everything now.")
+		fmt.Println("Your agents' skills, skill search and memory, credentials and shell lines are set up when")
+		fmt.Println("you restore this machine's environment; conversations with hearth restore --last 10;")
+		fmt.Println("everything now: hearth setup --full.")
 	}
 	where := "your coding agent"
 	if len(withSkill) > 0 {
@@ -117,6 +118,29 @@ func printSetupSummary(out *setupOut, e *client.Engine, envLeft, withSkill []str
 	if out.logPath != "" {
 		fmt.Println("Log: " + strings.TrimPrefix(out.logHint(), "details: "))
 	}
+}
+
+// restoreAgent is the agent whose environment the next step restores: the
+// one set up here, else the one the user worked with last (installed here
+// first), else codex.
+func restoreAgent(e *client.Engine) string {
+	if ma := client.MachineAgents(e.Home); len(ma) > 0 {
+		return ma[0]
+	}
+	all, err := e.List()
+	if err != nil {
+		return "codex"
+	}
+	recent, _ := client.RecentAgents(e.Home, client.AgentUse(all))
+	for _, a := range recent {
+		if client.AgentInstalledHere(a) {
+			return a
+		}
+	}
+	if len(recent) > 0 {
+		return recent[0]
+	}
+	return "codex"
 }
 
 // inContainer guesses whether this runs in a container (Docker, Kubernetes).
