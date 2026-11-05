@@ -26,7 +26,7 @@ struct HearthApp: App {
 
     var body: some Scene {
         MenuBarExtra {
-            MenuView(store: store, openConsole: { ConsoleController.shared.show() })
+            MenuView(store: store, openConsole: { NativeController.shared.show(machines: store) })
         } label: {
             MenuBarLabel(store: store)
         }

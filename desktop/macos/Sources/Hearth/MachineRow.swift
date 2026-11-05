@@ -12,6 +12,10 @@ struct MachineRow: View {
     var toggle: () -> Void
     var say: (String) -> Void
     var rename: (String) async throws -> Void
+    /// Server-side details, shown in the native window only.
+    var info: Device? = nil
+    /// Remove the machine from the account (native window only).
+    var remove: (() -> Void)? = nil
     @State private var hover = false
     @State private var draft = ""
     @State private var saving = false
@@ -75,6 +79,12 @@ struct MachineRow: View {
                 if !f.isEmpty { Fact(label: "系统", value: f) }
                 Fact(label: "状态", value: m.online ? "在线" : "离线 · " + Words.ago(m.last_seen))
                 if !m.isThis, let s = Words.ssh(m.ssh) { Fact(label: "SSH", value: s) }
+                if let d = info {
+                    if let ip = d.ip, !ip.isEmpty { Fact(label: "IP", value: ip, selectable: true) }
+                    if let v = d.version, !v.isEmpty { Fact(label: "版本", value: v) }
+                    if let s = d.sessions { Fact(label: "会话", value: "\(s) 个" + (d.last_active.map { $0 > 0 ? " · 最近活动 " + Fmt.ago($0) : "" } ?? "")) }
+                    if let c = d.created_at, c > 0 { Fact(label: "加入于", value: Date(timeIntervalSince1970: TimeInterval(c)).formatted(date: .abbreviated, time: .omitted)) }
+                }
             }
             if !m.problems.isEmpty {
                 VStack(alignment: .leading, spacing: 5) {
@@ -102,6 +112,10 @@ struct MachineRow: View {
                 Button { say(Actions.fix(m)) } label: { Text("检查") }
                 if m.sshUsable {
                     Button { say(Actions.ssh(m)) } label: { Text("SSH 连接") }
+                }
+                if let remove {
+                    Spacer()
+                    Button(role: .destructive, action: remove) { Text("移除…") }
                 }
             }
             .controlSize(.small)
