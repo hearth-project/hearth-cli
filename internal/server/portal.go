@@ -145,6 +145,7 @@ func (s *Server) apiRevokeMyDevice(w http.ResponseWriter, r *http.Request, c use
 		return
 	}
 	s.auth.purgeUser(c.uid)
+	s.Audit(c.email, "remove-device", r.PathValue("id"), "console "+clientIP(r))
 	w.WriteHeader(http.StatusNoContent)
 }
 
