@@ -78,7 +78,7 @@ build_source() {
     say "cloning $REPO"
     git clone -q --depth 1 "https://github.com/$REPO" "$src"
   fi
-  v=$(cd "$src" && git describe --tags --always 2>/dev/null || echo 0.1.0-dev)
+  v=$(cd "$src" && git describe --tags --always 2>/dev/null || echo 0.1.1-dev)
   say "building $v from $src (4 platforms)"
   (cd "$src" && scripts/build-dist.sh "$DIST" "$v" >/dev/null)
 }
