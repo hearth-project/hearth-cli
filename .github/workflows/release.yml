@@ -26,3 +26,22 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release create "$GITHUB_REF_NAME" dist/hearth-* dist/SHA256SUMS --notes-file notes.md --generate-notes --title "$GITHUB_REF_NAME"
+  # The macOS menu bar app, built on a Mac and attached to the same release,
+  # so `scripts/deploy-server.sh` puts it next to the binaries and
+  # `hearth setup` / `hearth app install` on a Mac can fetch it from the server.
+  macos-app:
+    needs: release
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - name: build Hearth.app
+        working-directory: desktop/macos
+        run: scripts/build-app.sh "$RUNNER_TEMP/out" "${GITHUB_REF_NAME#v}"
+      - name: attach to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd "$RUNNER_TEMP/out"
+          shasum -a 256 hearth-menubar-darwin.zip > hearth-menubar-darwin.zip.sha256
+          gh release upload "$GITHUB_REF_NAME" hearth-menubar-darwin.zip hearth-menubar-darwin.zip.sha256 --repo "$GITHUB_REPOSITORY"

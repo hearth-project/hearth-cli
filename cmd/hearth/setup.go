@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -20,7 +21,7 @@ import (
 func setupCmd() *cobra.Command {
 	var server, email, device, caCert, invite, team string
 	var installToken string
-	var insecure, noDaemon, force, yes, create, switchLogin, noRegister, noImport, full, newLogin bool
+	var insecure, noDaemon, force, yes, create, switchLogin, noRegister, noImport, noApp, full, newLogin bool
 	var alias string
 	var continued *takenOver
 	setupLast := defaultRestoreLast
@@ -408,6 +409,19 @@ func setupCmd() *cobra.Command {
 			if n, path, err := writeSSHConfig(e, false); err == nil && n > 0 {
 				out.line("ssh config", fmt.Sprintf("%s in %s (Codex Desktop, VS Code, Cursor)", plural(n, "machine", "machines"), path))
 			}
+			// On a Mac the menu bar app comes with the command line: one setup,
+			// both installed. A server that has no app to hand out is not an error.
+			_, statErr := os.Stat(appDir())
+			if wantMenuBarApp(runtime.GOOS, noApp, os.Getenv("HEARTH_NO_APP"), statErr == nil) {
+				switch _, err := installMenuBar(e); {
+				case err == nil:
+					out.line("app", "Hearth.app in ~/Applications, the flame in the menu bar")
+				case errors.Is(err, errAppNotServed):
+					// nothing to install
+				default:
+					out.warn("app", fmt.Errorf("%v (retry: hearth app install)", err))
+				}
+			}
 			var withSkill []string
 			out.quiet(func() {
 				var err error
@@ -436,6 +450,7 @@ func setupCmd() *cobra.Command {
 	c.Flags().BoolVar(&full, "full", false, "restore everything now (credentials, conversations, shell lines, agent setup) instead of on demand")
 	c.Flags().BoolVarP(&yes, "yes", "y", false, "unused: setup no longer runs recipe commands (the hearth skill goes through hearth recipe plan)")
 	_ = c.Flags().MarkHidden("yes")
+	c.Flags().BoolVar(&noApp, "no-app", false, "on a Mac, do not install the menu bar app [$HEARTH_NO_APP=1]")
 	c.Flags().BoolVar(&noImport, "no-import", false, "do not record this machine for new ones (its skills and agents, new setup items, shell lines)")
 	c.Flags().BoolVar(&noRegister, "no-register", false, "never create the account; fail when the login does not exist")
 	c.Flags().StringVar(&team, "team", "", "join a team with this invite code, or create a team of this name (asked in a terminal when you have none)")
