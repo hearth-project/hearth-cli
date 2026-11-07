@@ -5,7 +5,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 OUT=${1:-dist}
-VERSION=${2:-0.1.0}
+VERSION=${2:-0.1.1}
 mkdir -p "$OUT"
 # `--arch a --arch b` needs full Xcode (xcbuild). With only the command line
 # tools, build each architecture on its own and join them with lipo.
