@@ -13,17 +13,10 @@ import (
 // records what it changed in admin_audit.
 
 func (s *Server) adminRoutes(m *http.ServeMux) {
-	// The console: /app for everyone (/admin is the same page).
-	for _, base := range []string{"/app", "/admin"} {
-		m.HandleFunc("GET "+base, s.handlePanel)
-		m.HandleFunc("GET "+base+"/{file}", s.handlePanelAsset)
-		m.HandleFunc("GET "+base+"/login", s.handleAdminLogin)
-	}
-	for _, p := range []string{"/v1/web", "/v1/admin"} {
-		m.HandleFunc("POST "+p+"/logout", s.handleAdminLogout)
-		m.HandleFunc("POST "+p+"/login", s.limited(s.handleAdminPasswordLogin))
-		m.HandleFunc("POST "+p+"/link", s.authed(s.handleAdminLinkAPI))
-	}
+	// The macOS app signs in with a one-time link (POST /v1/web/link, then GET
+	// /v1/web/session) and calls /v1/me and /v1/admin with the session cookie.
+	m.HandleFunc("GET /v1/web/session", s.handleConsoleSession)
+	m.HandleFunc("POST /v1/web/link", s.authed(s.handleAdminLinkAPI))
 	s.portalRoutes(m)
 	a := func(p string, h func(http.ResponseWriter, *http.Request, adminCtx)) { m.HandleFunc(p, s.admin(h)) }
 	a("GET /v1/admin/overview", s.apiOverview)

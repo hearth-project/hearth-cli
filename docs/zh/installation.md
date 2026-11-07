@@ -26,13 +26,13 @@ curl -fsSL https://<server>/install.sh | sh -s -- --install-only
 
 ### 一次性安装命令（新机器上不用输密码）
 
-登录网页控制台，打开 **我的机器 → 添加机器**，点 **生成一次性安装命令**。命令形如
+在 Mac 上的 Hearth 小程序（`hearth app install`）里选 **新增开发机**，或在任意已登录的机器上运行 `hearth machine install-command`。命令形如
 
 ```bash
 curl -fsSL https://<server>/install.sh | sh -s -- --email you@example.com --token <id>.<secret>
 ```
 
-新机器用它登录，不用输主密码。命令只能用一次，30 分钟内有效；每台机器各生成一条。网页用一个随机密钥加密你的 vault key，这个密钥只在命令里，所以服务器看到的仍然只有密文。本次登录期间网页会一直保留 vault key（在浏览器里用和登录会话绑定的密钥加密保存），刷新页面也不用再输密码；退出登录即删除。用 `hearth panel` 打开的网页会请你输一次主密码（只在浏览器里校验）。命令用掉之前请当作密码对待：它会留在新机器的 shell history 里，但用过一次就失效了。不走安装脚本时，`hearth setup --token <id>.<secret>`（或环境变量 `HEARTH_INSTALL_TOKEN`）效果相同。
+新机器用它登录，不用输主密码。命令只能用一次，30 分钟内有效；每台机器各生成一条。你的 vault key 用一个随机密钥加密，这个密钥只在命令里，所以服务器看到的仍然只有密文。命令用掉之前请当作密码对待：它会留在新机器的 shell history 里，但用过一次就失效了。不走安装脚本时，`hearth setup --token <id>.<secret>`（或环境变量 `HEARTH_INSTALL_TOKEN`）效果相同。
 
 ### 自签证书的服务器
 

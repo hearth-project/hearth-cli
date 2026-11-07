@@ -16,7 +16,7 @@ import (
 )
 
 // Library merge: the library changed here and on the server (another
-// machine, the web console). Instead of stopping the sync until the user
+// machine, the Hearth app). Instead of stopping the sync until the user
 // runs `hearth lib pull`, both are merged file by file against the last
 // synced version (the base): a file changed on one side only takes that
 // side (deletions too); a file changed on both keeps this machine's copy

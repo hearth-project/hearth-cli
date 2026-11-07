@@ -14,9 +14,9 @@ import (
 	"github.com/hearth-project/hearth-cli/internal/crypto"
 )
 
-// One-time install commands. A signed-in user asks the web console for an
-// install command; the console (which has the vault key from the password
-// typed into it) wraps the vault key with a key derived from a random
+// One-time install commands. A signed-in user asks the macOS app (or
+// `hearth app call`) for an install command; the client (which has the vault
+// key) wraps the vault key with a key derived from a random
 // secret and sends the server only the ciphertext and the SHA-256 of the
 // redeem proof. The secret travels in the command, so the new machine logs
 // in and unlocks the vault without the master password, and the server
@@ -73,33 +73,6 @@ func (s *Server) apiCreateInstallToken(w http.ResponseWriter, r *http.Request, c
 	writeJSON(w, http.StatusCreated, map[string]any{"id": id, "email": c.email, "expires_at": exp})
 }
 
-// apiUnlockVault hands the console the password-wrapped vault key (a
-// session opened with a link, or one whose browser lost its sealed copy),
-// once it proves the password with the login key, and the session's wrap
-// key. Body: {"auth_key": ...}.
-func (s *Server) apiUnlockVault(w http.ResponseWriter, r *http.Request, c userCtx) {
-	var req struct {
-		AuthKey []byte `json:"auth_key"`
-	}
-	if !readJSON(w, r, &req) {
-		return
-	}
-	u, err := s.st.userByID(c.uid)
-	if err != nil {
-		s.writeStoreErr(w, err)
-		return
-	}
-	if !hmac.Equal(authHash(u.AuthSalt, req.AuthKey), u.AuthHash) {
-		writeErr(w, http.StatusForbidden, "wrong password") // not 401: the console treats that as a lost session
-		return
-	}
-	out := map[string]any{"enc_vault_key": u.EncVaultKey}
-	if ck, err := r.Cookie(adminCookie); err == nil {
-		out["wrap_key"] = s.consoleWrapKey(ck.Value)
-	}
-	writeJSON(w, http.StatusOK, out)
-}
-
 // handleInstallLogin redeems an install command: the token is deleted
 // whether or not the device login succeeds afterwards, so it works once.
 func (s *Server) handleInstallLogin(w http.ResponseWriter, r *http.Request) {
@@ -107,7 +80,7 @@ func (s *Server) handleInstallLogin(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
-	const bad = "this install command was used already or has expired; make a new one in the web console (Machines)"
+	const bad = "this install command was used already or has expired; make a new one in the Hearth app (Machines)"
 	if !installIDRE.MatchString(req.ID) {
 		writeErr(w, http.StatusUnauthorized, bad)
 		return

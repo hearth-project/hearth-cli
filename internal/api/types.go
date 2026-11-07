@@ -120,7 +120,7 @@ type IdentityStatusResponse struct {
 	Disabled bool `json:"disabled"` // the user opted out; automatic enrollment stops
 }
 
-// One-time install commands from the web console. The token in the command
+// One-time install commands (made by the Hearth app or `hearth machine install-command`). The token in the command
 // is "<id>.<secret>" (secret: 32 random bytes, base64url without padding).
 type InstallLoginRequest struct {
 	Email      string `json:"email"`

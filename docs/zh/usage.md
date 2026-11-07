@@ -207,7 +207,7 @@ hearth lib find <关键词>; hearth lib link <skill>
 
 library 在服务器上明文保存（仅本人可见，团队共享的内容团队成员和被授权的团队可见），因此不能包含凭证。setup 时如果你还没有团队，会问一次邀请码或新团队名，回车跳过。默认会把你自己 library 里使用最多的 5 个 skills 和 5 个 agents（所有机器、最近 30 天）共享给你能发布的团队（maintainer / owner），内容变了自动发新版本；会先做凭证扫描，命中的不共享。`config.toml` 里 `[teams] share_top = 0` 关闭，`share_exclude` 排除个别。agent 用量来自按类型启动子 agent 的记录（Codex `spawn_agent`、Claude Code `Task`），内置角色（explorer、worker 等）不计。
 
-团队共享的内容怎么被调用：每个团队里成员用得最多的 20 个 skills 和 20 个 agents 会自动链接到你每台机器的所有 agent 目录，和自己的 skill / agent 一样出现在 agent 的列表里、被自动调用（`[teams] use_top`，`use_exclude` 排除；在控制台或用 `hearth lib unlink` 取消某个后不会再自动加回）。同名时你自己的版本优先。其余团队 skill 通过 `hearth mcp` 的 `search_skills` / `list_skills` 检索、`get_skill` 按需下载，用到的次数也计入团队排行，用得多了就会进入常驻。
+团队共享的内容怎么被调用：每个团队里成员用得最多的 20 个 skills 和 20 个 agents 会自动链接到你每台机器的所有 agent 目录，和自己的 skill / agent 一样出现在 agent 的列表里、被自动调用（`[teams] use_top`，`use_exclude` 排除；在小程序里或用 `hearth lib unlink` 取消某个后不会再自动加回）。同名时你自己的版本优先。其余团队 skill 通过 `hearth mcp` 的 `search_skills` / `list_skills` 检索、`get_skill` 按需下载，用到的次数也计入团队排行，用得多了就会进入常驻。
 
 ## 7. Agent
 
@@ -233,7 +233,7 @@ hearth recovery-key rotate             # 恢复密钥泄露时换新
 
 ### 名字即机器
 
-机器的磁盘被重置（比如容器镜像重启）后，再登录会成为一台新设备。主机名没变时，`hearth setup` 会直接接续那条离线的旧记录，不用确认。新机器用了某台离线机器的名字，也会接续它：可以在 setup 起名时输入，也可以用 `--alias`，或之后执行 `hearth device rename`（控制台和 Mac 菜单栏 App 里改名也一样）。接续之后：新机器用旧机器的名字（也就是它的 SSH 主机名）；旧机器上传过的会话都归到新机器名下，`hearth restore --last 10` 可以恢复回来；旧的工作目录在这台机器上也能访问时（集群共享盘没丢），setup 会再次推荐它，并沿用那里旧的 Hearth 目录（agent 目录、库、状态），只换上新的登录信息；旧记录退出登录，并从列表中移除。在线的机器名字不会被占用。
+机器的磁盘被重置（比如容器镜像重启）后，再登录会成为一台新设备。主机名没变时，`hearth setup` 会直接接续那条离线的旧记录，不用确认。新机器用了某台离线机器的名字，也会接续它：可以在 setup 起名时输入，也可以用 `--alias`，或之后执行 `hearth device rename`（Mac 菜单栏 App 里改名也一样）。接续之后：新机器用旧机器的名字（也就是它的 SSH 主机名）；旧机器上传过的会话都归到新机器名下，`hearth restore --last 10` 可以恢复回来；旧的工作目录在这台机器上也能访问时（集群共享盘没丢），setup 会再次推荐它，并沿用那里旧的 Hearth 目录（agent 目录、库、状态），只换上新的登录信息；旧记录退出登录，并从列表中移除。在线的机器名字不会被占用。
 
 ### 在机器之间传文件
 
@@ -302,8 +302,8 @@ hearth app open         # 启动
 hearth app uninstall    # 退出并删除
 ```
 
-小程序在菜单栏显示一个火焰图标（有机器环境出错时变成实心）。下拉菜单列出你的机器（离线超过 12 小时的不显示，控制台里仍能看到）：是否在线、最近上线时间、GPU 和 SSH 状态、环境是否正常。鼠标移到一台机器上点复制按钮，或者右键它，可以复制机器名。单击展开能看到它的问题和操作按钮：「恢复环境」「检查」会打开 Codex 并填好针对这台机器的提示词（同时复制到剪贴板），「SSH 连接」打开终端连上它；在线的机器可以在这里改名（清空即恢复为主机名，同 `hearth device rename`）。列表下面：「打开控制台…」打开原生窗口，含概览（机器、每日上传、常用 Skills 和 Agents、团队动态，有待机器执行的修改时会提示）、机器（IP、版本、会话数，可以改名或移除机器）、资源库（Skills 和 Agents，点开看内容和文件，设为常驻或按需，分享到你能发布的团队）、团队（邀请码、退出团队，团队包的版本和保留/取消链接）、我的设置（常驻 Skills、自动分享前 N 个、链接，以及排队中的修改，可以撤销），数据来自 `hearth app data --json`，修改通过 `hearth app call` 调用 `/v1/me` 接口，不用输密码；管理员账号的侧边栏还有「管理」分组（管理概览、用户（批准/全部批准、查看设备、配额、管理员）、邀请码、团队管理（添加成员、改角色）、服务器设置、维护、审计日志），数据来自 `hearth app admin-data --json`，操作通过 `hearth app admin-call` 调用（与网页控制台同一套 `/v1/admin` 接口，权限相同）；侧边栏的「管理后台（网页）」仍然可以在窗口里打开网页控制台，已经登录好，也不用输主密码；「新增开发机」把一次性安装命令（`hearth machine install-command`，30 分钟内可用一次）复制到剪贴板，不在界面上显示；还有「刷新」「登录时启动」「退出 Hearth」。这台 Mac 的登录过期后（设备登录有效期 30 天），下拉菜单不再列出机器，只显示「重新登录」，点它会在终端里运行 `hearth login`，主密码在终端输入；控制台窗口的网页会话（12 小时）过期、页面回到登录表单时，会自动用新链接重新登录，「重新加载」也总是使用新链接。原生窗口登录过期时同样显示「重新登录」，登录恢复后页面自动加载。
+小程序在菜单栏显示一个火焰图标（有机器环境出错时变成实心）。下拉菜单列出你的机器（离线超过 12 小时的不显示，窗口里仍能看到）：是否在线、最近上线时间、GPU 和 SSH 状态、环境是否正常。鼠标移到一台机器上点复制按钮，或者右键它，可以复制机器名。单击展开能看到它的问题和操作按钮：「恢复环境」「检查」会打开 Codex 并填好针对这台机器的提示词（同时复制到剪贴板），「SSH 连接」打开终端连上它；在线的机器可以在这里改名（清空即恢复为主机名，同 `hearth device rename`）。列表下面：「打开控制台…」打开原生窗口，含概览（机器、每日上传、常用 Skills 和 Agents、团队动态，有待机器执行的修改时会提示）、机器（IP、版本、会话数，可以改名或移除机器）、资源库（Skills 和 Agents，点开看内容和文件，设为常驻或按需，分享到你能发布的团队）、团队（邀请码、退出团队，团队包的版本和保留/取消链接）、我的设置（常驻 Skills、自动分享前 N 个、链接，以及排队中的修改，可以撤销），数据来自 `hearth app data --json`，修改通过 `hearth app call` 调用 `/v1/me` 接口，不用输密码；管理员账号的侧边栏还有「管理」分组（管理概览、用户（批准/全部批准、查看设备、配额、管理员）、邀请码、团队管理（添加成员、改角色）、服务器设置、维护、审计日志），数据来自 `hearth app admin-data --json`，操作通过 `hearth app admin-call` 调用（`/v1/admin` 接口，只有管理员账号能用）；「新增开发机」把一次性安装命令（`hearth machine install-command`，30 分钟内可用一次）复制到剪贴板，不在界面上显示；还有「刷新」「登录时启动」「退出 Hearth」。这台 Mac 的登录过期后（设备登录有效期 30 天），下拉菜单不再列出机器，只显示「重新登录」，点它会在终端里运行 `hearth login`，主密码在终端输入；窗口里登录过期时同样显示「重新登录」，登录恢复后页面自动加载。
 
-移除机器：在控制台的「机器」页，右键一台机器选「移除这台机器…」，或展开后点「移除…」（这台 Mac 本身不能在这里移除）。确认后服务器让这台机器退出登录，它的 Hearth 再访问服务器时会收到“机器已移除”（HTTP 410，与登录过期的 401 不同）。机器在线时，后台进程会在约 30 秒内自行清理并退出：停止同步，关掉 Hearth 自己启动的 sshd，撤下 Hearth 写入的记忆钩子、shell 配置块、身份脚本、`~/.ssh/config` 里的 Hearth 段和 `authorized_keys` 里 Hearth 管理的公钥，按记录删掉渲染到 agent 目录的 skills、agents 和 MCP 条目（被改动过的文件保留并记录），删除 Hearth 目录里的登录信息、密钥、记忆、库缓存和状态文件。只清理 Hearth 自己写下、内容仍与记录一致的东西，其他工具的文件不动；Hearth 目录里的 `backup/`（接管前用户原来的文件）也保留。离线的机器在下次上线时完成同样的清理。要再次使用，需要在它上面重新运行 `hearth setup`。
+移除机器：在窗口的「机器」页，右键一台机器选「移除这台机器…」，或展开后点「移除…」（这台 Mac 本身不能在这里移除）。确认后服务器让这台机器退出登录，它的 Hearth 再访问服务器时会收到“机器已移除”（HTTP 410，与登录过期的 401 不同）。机器在线时，后台进程会在约 30 秒内自行清理并退出：停止同步，关掉 Hearth 自己启动的 sshd，撤下 Hearth 写入的记忆钩子、shell 配置块、身份脚本、`~/.ssh/config` 里的 Hearth 段和 `authorized_keys` 里 Hearth 管理的公钥，按记录删掉渲染到 agent 目录的 skills、agents 和 MCP 条目（被改动过的文件保留并记录），删除 Hearth 目录里的登录信息、密钥、记忆、库缓存和状态文件。只清理 Hearth 自己写下、内容仍与记录一致的东西，其他工具的文件不动；Hearth 目录里的 `backup/`（接管前用户原来的文件）也保留。离线的机器在下次上线时完成同样的清理。要再次使用，需要在它上面重新运行 `hearth setup`。
 
-小程序的所有操作都通过 `hearth` 命令完成（`hearth machine list --json`、`hearth panel --json`、`hearth machine install-command --json`、`hearth app data --json`、`hearth app admin-data --json`、`hearth app call`、`hearth app admin-call`、`hearth device rename`），所以这台 Mac 要先登录 Hearth；提示命令版本太旧时执行 `hearth self-update`。只有管理员在服务器上发布了小程序才能安装（见[服务器指南](server.md#发布新版本客户端)）。
+小程序的所有操作都通过 `hearth` 命令完成（`hearth machine list --json`、`hearth machine install-command --json`、`hearth app data --json`、`hearth app admin-data --json`、`hearth app call`、`hearth app admin-call`、`hearth device rename`），所以这台 Mac 要先登录 Hearth；提示命令版本太旧时执行 `hearth self-update`。只有管理员在服务器上发布了小程序才能安装（见[服务器指南](server.md#发布新版本客户端)）。

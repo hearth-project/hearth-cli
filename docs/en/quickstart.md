@@ -128,7 +128,7 @@ On any other machine with Hearth, tell its agent:
       "恢复 b-node-gpu-0126 的 Codex 环境"      (restore the Codex environment of b-node-gpu-0126)
 ```
 
-That agent finds the new machine (`hearth machine list`: environment check and SSH host name), picks the restore flow for its kind, and installs and checks Node, Codex CLI, codex-mixin, … there over `hearth ssh`; steps that need you (a QR-code login) it hands to you with `hearth ssh -t <machine> -- <command>`. The new machine's environment check turns green in `hearth machine list` and the web console. No other machine at hand: ask the agent on the new machine "use hearth to restore this machine's environment".
+That agent finds the new machine (`hearth machine list`: environment check and SSH host name), picks the restore flow for its kind, and installs and checks Node, Codex CLI, codex-mixin, … there over `hearth ssh`; steps that need you (a QR-code login) it hands to you with `hearth ssh -t <machine> -- <command>`. The new machine's environment check turns green in `hearth machine list` and the Hearth app. No other machine at hand: ask the agent on the new machine "use hearth to restore this machine's environment".
 
 From then on, just ask your agent:
 

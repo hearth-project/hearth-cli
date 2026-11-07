@@ -8,14 +8,15 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/hearth-project/hearth-cli/internal/crypto"
 )
 
-// One-time install commands: the console (simulated here as the browser
-// does it) wraps the vault key for a random secret; a new machine logs in
+// One-time install commands: a client (simulated here as the app does it)
+// wraps the vault key for a random secret; a new machine logs in
 // with the token once, without the password, and gets the same vault key.
 func TestInstallToken(t *testing.T) {
 	en := newEnv(t)
@@ -42,74 +43,19 @@ func TestInstallToken(t *testing.T) {
 		return r.StatusCode, out, r
 	}
 
-	// Sign in to the console with the derived login key; the answer carries
-	// the password-wrapped vault key, which the browser unwraps.
-	pre, err := NewAPI(en.url, "", hc).Prelogin("dev@example.com")
+	// The session the app opens: a one-time link from this device's login,
+	// redeemed for the cookie.
+	path, err := a.API.AdminLink()
 	if err != nil {
 		t.Fatal(err)
 	}
-	uk, err := crypto.DeriveUserKeys([]byte(pw), pre.Salt, pre.KDF)
+	ck, err := a.consoleSession(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	code, body, resp := post("/v1/web/login", map[string]any{"email": "dev@example.com", "auth_key": uk.AuthKey}, nil)
-	if code != 200 {
-		t.Fatalf("web login %d %s", code, body)
-	}
-	var cookie *http.Cookie
-	for _, c := range resp.Cookies() {
-		if c.Name == "hearth_session" {
-			cookie = c
-		}
-	}
-	var lr struct {
-		EncVaultKey []byte `json:"enc_vault_key"`
-		WrapKey     []byte `json:"wrap_key"`
-	}
-	if err := json.Unmarshal(body, &lr); err != nil || cookie == nil {
-		t.Fatalf("web login answer %s (%v)", body, err)
-	}
-	vk, err := crypto.UnwrapWithKEK(lr.EncVaultKey, uk.KEK)
-	if err != nil || !bytes.Equal(vk, want.Key()) {
-		t.Fatalf("console vault key: %v", err)
-	}
-	// The console keeps the vault key sealed with the session's wrap key: the
-	// same key comes back for this session, another session gets another.
-	get := func(path string, cookie *http.Cookie) (int, []byte) {
-		req, _ := http.NewRequest("GET", en.url+path, nil)
-		req.AddCookie(cookie)
-		r, err := hc.Do(req)
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer r.Body.Close()
-		b, _ := io.ReadAll(r.Body)
-		return r.StatusCode, b
-	}
-	var wk struct {
-		WrapKey []byte `json:"wrap_key"`
-	}
-	if code, b := get("/v1/me/vault-wrap", cookie); code != 200 || json.Unmarshal(b, &wk) != nil || len(lr.WrapKey) != 32 || !bytes.Equal(wk.WrapKey, lr.WrapKey) {
-		t.Fatalf("wrap key: %d %s", code, b)
-	}
-	_, _, resp2 := post("/v1/web/login", map[string]any{"email": "dev@example.com", "auth_key": uk.AuthKey}, nil)
-	for _, c := range resp2.Cookies() {
-		if c.Name == "hearth_session" {
-			if _, b := get("/v1/me/vault-wrap", c); json.Unmarshal(b, &wk) != nil || bytes.Equal(wk.WrapKey, lr.WrapKey) {
-				t.Fatalf("another session got the same wrap key: %s", b)
-			}
-		}
-	}
-	if code, _ := get("/v1/me/vault-wrap", &http.Cookie{Name: "hearth_session", Value: "forged"}); code != 401 {
-		t.Fatalf("wrap key without a session: %d", code)
-	}
-	// A session without the sealed copy (opened with a link) asks for the password.
-	if code, _, _ := post("/v1/me/vault-key", map[string]any{"auth_key": bytes.Repeat([]byte{1}, 32)}, cookie); code != 403 {
-		t.Fatalf("vault key with a wrong password: %d", code)
-	}
-	if code, b, _ := post("/v1/me/vault-key", map[string]any{"auth_key": uk.AuthKey}, cookie); code != 200 || !bytes.Contains(b, []byte(base64.StdEncoding.EncodeToString(lr.EncVaultKey))) {
-		t.Fatalf("vault key: %d %s", code, b)
-	}
+	name, value, _ := strings.Cut(ck, "=")
+	cookie := &http.Cookie{Name: name, Value: value}
+	vk := a.Vault.Key()
 
 	makeToken := func() string {
 		secret := crypto.RandomBytes(32)

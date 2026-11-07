@@ -52,7 +52,7 @@ func main() {
 		whoamiCmd(), identityCmd(),
 		pushCmd(), daemonCmd(), appCmd(), cpCmd(), xferCmd(), transferCmd(), restoreCmd(), sessionCmd(), deviceCmd(), setupCmd(), libCmd(), mcpCmd(), secretCmd(), passwdCmd(), recoverCmd(), toolsCmd(),
 		recipeCmd(), doctorCmd(), saveCmd(), envCmd(), upCmd(), mcpConfigCmd(), agentsCmd(),
-		teamCmd(), sourceCmd(), findCmd(), linkCmd(), unlinkCmd(), linksCmd(), updateCmd(), publishCmd(), learnCmd(), codexThreadsCmd(), codexImportCmd(), agentCmd(), backupSelCmd(), siteCmd(), docsCmd(), selfUpdateCmd(), configCmd(), machineCmd(), onboardCmd(), recoveryKeyCmd(), panelCmd(), shellCmd(), recallCmd(), memoryCmd(), sshCmd())
+		teamCmd(), sourceCmd(), findCmd(), linkCmd(), unlinkCmd(), linksCmd(), updateCmd(), publishCmd(), learnCmd(), codexThreadsCmd(), codexImportCmd(), agentCmd(), backupSelCmd(), siteCmd(), docsCmd(), selfUpdateCmd(), configCmd(), machineCmd(), onboardCmd(), recoveryKeyCmd(), shellCmd(), recallCmd(), memoryCmd(), sshCmd())
 	groupCommands(root)
 	if err := root.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
@@ -494,7 +494,7 @@ func groupCommands(root *cobra.Command) {
 		{"library", "Skills and agents:", []string{"lib", "team", "mcp-config"}},
 		{"machine", "This machine's setup:", []string{"learn", "recipe", "doctor", "tools", "machine", "secret", "up", "init", "daemon", "self-update"}},
 		{"account", "Account:", []string{"login", "logout", "whoami", "device", "passwd", "recover", "recovery-key"}},
-		{"server", "Server (admins):", []string{"panel", "server", "site"}},
+		{"server", "Server (admins):", []string{"server", "site"}},
 	}
 	byName := map[string]*cobra.Command{}
 	for _, c := range root.Commands() {

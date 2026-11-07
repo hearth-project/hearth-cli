@@ -9,10 +9,9 @@ import (
 	"testing"
 
 	"github.com/hearth-project/hearth-cli/internal/api"
-	"github.com/hearth-project/hearth-cli/internal/crypto"
 )
 
-// The admin panel: sign-in link -> cookie session, CSRF header, approval
+// The admin API: sign-in link -> cookie session, CSRF header, approval
 // registration mode, audit log.
 func TestAdminPanel(t *testing.T) {
 	en := newEnv(t)
@@ -41,10 +40,10 @@ func TestAdminPanel(t *testing.T) {
 			cookie = c
 		}
 	}
-	if resp.StatusCode != http.StatusSeeOther || cookie == nil || !cookie.HttpOnly || cookie.SameSite != http.SameSiteStrictMode {
+	if resp.StatusCode != http.StatusNoContent || cookie == nil || !cookie.HttpOnly || cookie.SameSite != http.SameSiteStrictMode {
 		t.Fatalf("login: %d %+v", resp.StatusCode, cookie)
 	}
-	if r, _ := hc.Get(en.url + "/admin/login?t=" + strings.Repeat("x", 20)); r.StatusCode != 401 {
+	if r, _ := hc.Get(en.url + "/v1/web/session?t=" + strings.Repeat("x", 20)); r.StatusCode != 401 {
 		t.Fatalf("forged link: %d", r.StatusCode)
 	}
 	call := func(method, p string, body any, csrf bool) (int, []byte) {
@@ -135,43 +134,6 @@ func TestAdminPanel(t *testing.T) {
 	}
 	if code, b := call("GET", "/users", nil, false); code != 200 || !bytes.Contains(b, []byte(`"online":[{"name":"bob"`)) {
 		t.Fatalf("online clients %d %s", code, b)
-	}
-	// Account sign-in: the login key derived from the master password.
-	pwLogin := func(email, password string) int {
-		pre, err := alice.API.Prelogin(email)
-		if err != nil {
-			t.Fatal(err)
-		}
-		uk, err := crypto.DeriveUserKeys([]byte(password), pre.Salt, pre.KDF)
-		if err != nil {
-			t.Fatal(err)
-		}
-		b, _ := json.Marshal(map[string]any{"email": email, "auth_key": uk.AuthKey})
-		r, err := hc.Post(en.url+"/v1/admin/login", "application/json", bytes.NewReader(b))
-		if err != nil {
-			t.Fatal(err)
-		}
-		r.Body.Close()
-		if r.StatusCode == 200 {
-			found := false
-			for _, c := range r.Cookies() {
-				found = found || (c.Name == "hearth_session" && c.HttpOnly)
-			}
-			if !found {
-				t.Fatal("no session cookie")
-			}
-		}
-		return r.StatusCode
-	}
-	if code := pwLogin("dev@example.com", pw); code != 200 {
-		t.Fatalf("admin password login: %d", code)
-	}
-	if code := pwLogin("dev@example.com", "wrong password"); code != 401 {
-		t.Fatalf("wrong password: %d", code)
-	}
-	// Every user signs in to the console; admin pages stay closed to them.
-	if code := pwLogin("bob@example.com", pw); code != 200 {
-		t.Fatalf("user login: %d", code)
 	}
 	libWrite(t, bob, "skills/bench/SKILL.md", "---\nname: bench\ndescription: run benchmarks\n---\nsteps\n")
 	libWrite(t, bob, "agents/rev.md", "---\nname: rev\ndescription: reviews code\n---\nReview.\n")
@@ -287,18 +249,6 @@ func TestAdminPanel(t *testing.T) {
 		}
 		r.Body.Close()
 	}
-	// The static page is served with a strict CSP.
-	r, err := hc.Get(en.url + "/admin")
-	if err != nil || r.StatusCode != 200 || !strings.Contains(r.Header.Get("Content-Security-Policy"), "script-src 'self'") {
-		t.Fatalf("panel page: %v %v", r, err)
-	}
-	if r, _ := hc.Get(en.url + "/admin/panel.js"); r.StatusCode != 200 {
-		t.Fatalf("panel.js %d", r.StatusCode)
-	}
-	if r, _ := hc.Get(en.url + "/admin/../schema.sql"); r.StatusCode == 200 {
-		t.Fatal("served a file outside the panel")
-	}
-
 	// A removed machine leaves the list: machines are only online or offline.
 	listDevices := func() []map[string]any {
 		req, _ := http.NewRequest("GET", en.url+"/v1/me/devices", nil)

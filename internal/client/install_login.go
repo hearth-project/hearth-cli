@@ -12,7 +12,7 @@ import (
 
 // ErrInstallToken: the one-time install command was used already, has
 // expired, or belongs to another account.
-var ErrInstallToken = errors.New("this install command was used already or has expired (30 minutes); make a new one in the web console (Machines)")
+var ErrInstallToken = errors.New("this install command was used already or has expired (30 minutes); make a new one in the Hearth app (Machines) or with `hearth machine install-command`")
 
 // ParseInstallToken splits "<id>.<secret>" from a console install command.
 func ParseInstallToken(tok string) (id string, secret []byte, err error) {
@@ -21,13 +21,13 @@ func ParseInstallToken(tok string) (id string, secret []byte, err error) {
 		secret, err = base64.RawURLEncoding.DecodeString(s)
 	}
 	if !ok || err != nil || len(id) != 16 || len(secret) != crypto.KeySize {
-		return "", nil, errors.New("not a valid install token (expected <id>.<secret> from the web console)")
+		return "", nil, errors.New("not a valid install token (expected <id>.<secret> from the Hearth app or `hearth machine install-command`)")
 	}
 	return id, secret, nil
 }
 
 // LoginWithInstallToken logs this machine in with a one-time install
-// command from the web console: no password, the vault key comes wrapped
+// command made by the Hearth app: no password, the vault key comes wrapped
 // with a key only the command holds.
 func LoginWithInstallToken(home, server, email, token, device string) (*Config, error) {
 	id, secret, err := ParseInstallToken(token)

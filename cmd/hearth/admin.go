@@ -178,13 +178,13 @@ func adminCmd() *cobra.Command {
 				return report(err, fmt.Sprintf("revoked %d device(s) of %s; the user logs in again with the master password", n, a[0]))
 			})},
 		deleteUserCmd(with),
-		&cobra.Command{Use: "grant <email>", Short: "Make an account an admin of this server (it can use the admin panel: hearth panel)", Args: cobra.ExactArgs(1),
+		&cobra.Command{Use: "grant <email>", Short: "Make an account an admin of this server (it gets the administration pages in the Hearth app and can use hearth app admin-call)", Args: cobra.ExactArgs(1),
 			RunE: with(func(_ *cobra.Command, srv *server.Server, a []string) error {
 				err := srv.SetAdmin(a[0], true)
 				if err == nil {
 					srv.Audit("cli", "add-admin", a[0], "")
 				}
-				return report(err, a[0]+" is an admin; on a machine logged in as "+a[0]+": hearth panel")
+				return report(err, a[0]+" is an admin; in the Hearth app on a machine logged in as "+a[0]+" the administration pages appear")
 			})},
 		&cobra.Command{Use: "ungrant <email>", Short: "Remove an admin (not the last one)", Args: cobra.ExactArgs(1),
 			RunE: with(func(_ *cobra.Command, srv *server.Server, a []string) error {
@@ -207,7 +207,6 @@ func adminCmd() *cobra.Command {
 			}
 			return nil
 		})},
-		panelLinkCmd(with),
 		invitesCmd(with, printJSON, &asJSON),
 		gcCmd(with),
 	)
@@ -300,27 +299,5 @@ func gcCmd(with withFn) *cobra.Command {
 		})}
 	c.Flags().BoolVar(&dry, "dry-run", false, "only report")
 	c.Flags().DurationVar(&minAge, "min-age", time.Hour, "keep orphans younger than this (uploads in flight)")
-	return c
-}
-
-// panelLinkCmd prints a sign-in link to the admin panel (server side).
-func panelLinkCmd(with withFn) *cobra.Command {
-	var url string
-	c := &cobra.Command{Use: "link <email>", Short: "Print a sign-in link to the admin panel for an admin (valid 10 minutes)", Args: cobra.ExactArgs(1),
-		RunE: with(func(_ *cobra.Command, srv *server.Server, a []string) error {
-			if url == "" {
-				url = os.Getenv("HEARTH_PUBLIC_URL")
-			}
-			if url == "" {
-				return fmt.Errorf("pass --url <the server's public URL> (as given to hearth server --public-url)")
-			}
-			l, err := srv.AdminLink(url, a[0])
-			if err != nil {
-				return err
-			}
-			fmt.Println(l)
-			return nil
-		})}
-	c.Flags().StringVar(&url, "url", "", "the server's public URL [$HEARTH_PUBLIC_URL]")
 	return c
 }

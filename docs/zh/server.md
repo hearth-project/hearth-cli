@@ -116,20 +116,20 @@ hearth server admin gc                                 # 立即执行过期清�
 
 默认配额由 `hearth server --quota 10GiB` 设置（默认不限）。超出配额的客户端暂停上传并在 `hearth status` 中提示。
 
-## 网页控制台与管理后台
+## 管理
 
-服务器自带网页控制台 `/app`（`/admin` 同一页面）。所有已注册用户都能用邮箱 + 主密码登录，查看自己的机器（在线状态、机器名、IP、客户端版本，可让某台机器下线）、个人库里的 skills 和 agents（按使用频率排序，常驻 / 按需，可一键共享到自己是 maintainer / owner 的团队，共享前做凭证扫描）、最常用的 skills / agents、所在团队的成员和共享内容（maintainer 可生成邀请码）；会话和凭证端到端加密，网页端看不到内容。管理员额外看到管理页面：概览数据面板（账号、活跃用户、每日上传、注册趋势、热门 skills、客户端版本分布）、用户管理（每人当前在线的客户端：机器名、IP、版本；禁用 / 启用、配额、管理员、下线设备、删除，点邮箱看全部设备）、注册审批、邀请码、团队（创建团队并指定 owner、添加 / 移除成员、改角色、共享内容、团队间共享、删除）、运行时设置（注册方式、默认配额、客户端自动更新，无需重启、所有实例 10 秒内生效）、维护（过期清理、孤儿对象回收）和审计日志。界面支持中英文。
+服务器没有网页控制台（`/` 页面只显示安装命令和下载）。大家都用 macOS 菜单栏小程序（`hearth app install`，见[使用指南](usage.md#9-mac-菜单栏小程序)）：普通用户看自己的机器、资源库、团队和设置；管理员另有管理页面：概览数据面板（账号、活跃用户、每日上传、注册趋势、热门 skills、客户端版本分布）、用户管理（每人当前在线的客户端：机器名、IP、版本；禁用 / 启用、配额、管理员、下线设备、删除）、注册审批、邀请码、团队（创建团队并指定 owner、添加 / 移除成员、改角色、共享内容、团队间共享、删除）、运行时设置（注册方式、默认配额、客户端自动更新，无需重启、所有实例 10 秒内生效）、维护（过期清理、孤儿对象回收）和审计日志。会话和凭证端到端加密，这里看不到内容。
 
 ```bash
 hearth server admin grant <邮箱> --data $D     # 在服务器上把账号设为管理员（ungrant 取消，admins 列出）
-# 浏览器打开 https://<server>/admin，用账号（邮箱 + 主密码）登录
-hearth panel                                  # 或：在以管理员账号登录的机器上打印 10 分钟有效的登录链接并打开浏览器
-hearth server admin link <邮箱> --url <公网地址> --data $D   # 或直接在服务器上生成登录链接
+hearth server admin users|user|stats|quota|disable|enable|revoke-devices|delete-user|invites|gc ...   # 命令行里的同类操作
+hearth app admin-data --json                   # 在以管理员账号登录的机器上：管理页面的数据
+hearth app admin-call GET /v1/admin/audit      # 向管理接口发一个请求（任何系统都能用）
 ```
 
-账号登录时，浏览器在本地用和客户端相同的方式（Argon2id + HKDF）从主密码派生登录密钥，只把派生密钥发给服务器，主密码不离开浏览器（默认参数下约需几秒）。登录后（或打开登录链接后）得到 12 小时的签名会话 Cookie（HttpOnly、SameSite=Strict），修改操作还要求 `X-Hearth-Admin` 请求头（防 CSRF），页面有严格的 CSP。管理员被取消或账号被禁用后会话立即失效。每个修改都写入审计日志（命令行操作记为 `cli`）。
+小程序和 `hearth app call` / `admin-call` 用本机已有的登录：客户端先用 bearer token 要一个一次性链接（`POST /v1/web/link`），再兑换（`GET /v1/web/session`）成 12 小时的签名会话 Cookie（HttpOnly、SameSite=Strict）；修改操作还要求 `X-Hearth-Admin` 请求头（防 CSRF）。管理员被取消或账号被禁用后会话立即失效。每个修改都写入审计日志（命令行操作记为 `cli`）。
 
-**注册审批**：把注册方式设为“需审批”（后台设置，或 `hearth server --registration approval`），任何人都能注册，账号在管理员于“审批”页通过（或 `hearth server admin approve <邮箱>`）之前不能登录；客户端会提示等待审批。
+**注册审批**：把注册方式设为“需审批”（小程序里的服务器设置，或 `hearth server --registration approval`），任何人都能注册，账号在管理员在小程序里通过（或 `hearth server admin approve <邮箱>`）之前不能登录；客户端会提示等待审批。
 
 ## 会话过期
 

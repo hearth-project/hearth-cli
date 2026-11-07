@@ -19,7 +19,7 @@ import (
 )
 
 // HealthReport is the small, non-secret status a machine publishes with its
-// heartbeat, so another logged-in machine (and the web console) can see
+// heartbeat, so another logged-in machine (and the Hearth app) can see
 // what this one still lacks before restoring it. It holds versions and
 // check results only, never credentials, conversations or file contents.
 type HealthReport struct {

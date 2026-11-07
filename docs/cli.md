@@ -149,7 +149,6 @@ Generated from `hearth --help` by `hearth docs cli > docs/cli.md`; every command
 | [`hearth recover`](#hearth-recover) | Forgot the password: set a new one with the recovery key (signs out all devices) |
 | [`hearth recovery-key`](#hearth-recovery-key) | Manage the account recovery key |
 | [`hearth recovery-key rotate`](#hearth-recovery-key-rotate) | Issue a new recovery key and invalidate the old one (e.g. it was shown to someone) |
-| [`hearth panel`](#hearth-panel) | Open the web console: your machines, skills, agents and teams (admins also manage the server) |
 | [`hearth server`](#hearth-server) | Run the sync server (SQLite + local directory by default; PostgreSQL and S3 optional) |
 | [`hearth server invite`](#hearth-server-invite) | Create single-use registration invite codes (run on the server host) |
 | [`hearth server gencert`](#hearth-server-gencert) | Create a self-signed TLS certificate in the data directory |
@@ -164,10 +163,9 @@ Generated from `hearth --help` by `hearth docs cli > docs/cli.md`; every command
 | [`hearth server admin quota`](#hearth-server-admin-quota) | Set an account's storage quota (e.g. 20GiB) |
 | [`hearth server admin revoke-devices`](#hearth-server-admin-revoke-devices) | Log out every device of an account (e.g. after a leaked password) |
 | [`hearth server admin delete-user`](#hearth-server-admin-delete-user) | Delete an account and all its sessions, library and secrets |
-| [`hearth server admin grant`](#hearth-server-admin-grant) | Make an account an admin of this server (it can use the admin panel: hearth panel) |
+| [`hearth server admin grant`](#hearth-server-admin-grant) | Make an account an admin of this server (it gets the administration pages in the Hearth app and can use hearth app admin-call) |
 | [`hearth server admin ungrant`](#hearth-server-admin-ungrant) | Remove an admin (not the last one) |
 | [`hearth server admin admins`](#hearth-server-admin-admins) | List admins |
-| [`hearth server admin link`](#hearth-server-admin-link) | Print a sign-in link to the admin panel for an admin (valid 10 minutes) |
 | [`hearth server admin invites`](#hearth-server-admin-invites) | List invites (create with `hearth server invite`) |
 | [`hearth server admin invites revoke`](#hearth-server-admin-invites-revoke) | Revoke an unused invite |
 | [`hearth server admin gc`](#hearth-server-admin-gc) | Run session expiry now and delete orphaned blobs |
@@ -262,7 +260,7 @@ Flags:
       --sessions int     restore this many most recently active conversations (0 = all; a new machine restores none unless given) (default 10)
       --switch           replace an existing login to another account or server
       --team string      join a team with this invite code, or create a team of this name (asked in a terminal when you have none)
-      --token string     one-time install token from the web console's install command: log in without the password (works once, 30 minutes) [$HEARTH_INSTALL_TOKEN]
+      --token string     one-time install token from an install command (the Hearth app, hearth machine install-command): log in without the password (works once, 30 minutes) [$HEARTH_INSTALL_TOKEN]
 ```
 
 ## hearth status
@@ -1728,20 +1726,6 @@ Issue a new recovery key and invalidate the old one (e.g. it was shown to someon
 hearth recovery-key rotate
 ```
 
-## hearth panel
-
-Asks the server for a sign-in link (valid 10 minutes) for the account logged in here, prints it and
-opens it in a browser when there is one. You can also open <server>/app and sign in with email and master
-password. Admins (hearth server admin grant <email>) also see the administration pages.
-
-```text
-hearth panel [flags]
-
-Flags:
-      --json      print the link and this device's vault key as JSON and open nothing (for the menu bar app; keep the output private)
-      --no-open   only print the link
-```
-
 ## hearth server
 
 Run the sync server (SQLite + local directory by default; PostgreSQL and S3 optional)
@@ -1766,7 +1750,7 @@ Flags:
       --pin-install                  self-signed certificate: put --pinnedpubkey in the install one-liner, so even the first download is verified (default: plain -k; the installer then pins the certificate) [$HEARTH_PIN_INSTALL=1]
       --public-url string            URL clients use to reach this server; enables /install.sh [$HEARTH_PUBLIC_URL]
       --quota string                 default storage quota per user, e.g. 10GiB (per-user: hearth server admin quota) [$HEARTH_QUOTA] (default "unlimited")
-      --registration string          who may register: invite, open, approval (admin approves each account) or closed; the admin panel can change it [$HEARTH_REGISTRATION] (default "invite")
+      --registration string          who may register: invite, open, approval (admin approves each account) or closed; an admin can change it in the Hearth app [$HEARTH_REGISTRATION] (default "invite")
       --site string                  organisation defaults for every user: recipes/, files/, learn.json (default <data>/site) [$HEARTH_SITE]
       --site-auth                    serve the site defaults only to logged-in users (default: anyone who can reach the server, so the installer gets them before login) [$HEARTH_SITE_AUTH=1]
       --tls-cert string              TLS certificate file
@@ -1918,7 +1902,7 @@ Flags:
 
 ## hearth server admin grant
 
-Make an account an admin of this server (it can use the admin panel: hearth panel)
+Make an account an admin of this server (it gets the administration pages in the Hearth app and can use hearth app admin-call)
 
 ```text
 hearth server admin grant <email>
@@ -1938,17 +1922,6 @@ List admins
 
 ```text
 hearth server admin admins
-```
-
-## hearth server admin link
-
-Print a sign-in link to the admin panel for an admin (valid 10 minutes)
-
-```text
-hearth server admin link <email> [flags]
-
-Flags:
-      --url string   the server's public URL [$HEARTH_PUBLIC_URL]
 ```
 
 ## hearth server admin invites

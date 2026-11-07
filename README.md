@@ -83,10 +83,10 @@ docker compose -f deploy/docker-compose.yml exec hearth hearth server invite
 hearth server install-service --data /var/lib/hearth …                  # prints a systemd unit
 ```
 
-Several instances on PostgreSQL + S3: `deploy/docker-compose.scale.yml`. Everything about running the server (backups, migrations, quotas, the admin panel): [Server guide](docs/en/server.md).
+Several instances on PostgreSQL + S3: `deploy/docker-compose.scale.yml`. Everything about running the server (backups, migrations, quotas, administration): [Server guide](docs/en/server.md).
 </details>
 
-Invite users with `hearth server invite --data <dir>` (not needed with `--registration open`). After signing up, make yourself an admin of the web console: `hearth server admin grant <you@example.com> --data <dir>`, then `hearth panel`.
+Invite users with `hearth server invite --data <dir>` (not needed with `--registration open`). After signing up, make yourself an admin: `hearth server admin grant <you@example.com> --data <dir>`. The administration pages are in the macOS menu bar app (`hearth app install`); on other systems use `hearth server admin ...`.
 
 ### 2. Install the client (one command per machine)
 
@@ -159,7 +159,7 @@ The working directory proposed is the one your machines of the same kind use (sa
 
 ### 3. Restore the software from another machine
 
-The new machine has your files; its software (Node, Codex CLI, gateways, …) is set up by your agent. On **any other machine with Hearth**, tell its agent the sentence setup printed, e.g. *"restore the Codex environment of h800-gpu-node-13"*. It looks at the new machine (`hearth machine list`), picks the restore flow for that kind of machine, and installs and checks each step there over `hearth ssh`; steps that need you (a QR-code login) it hands to you with `hearth ssh -t`. No other machine at hand: say *"use hearth to restore this machine's environment"* on the new machine itself. The web console's Machines page shows each machine's environment check.
+The new machine has your files; its software (Node, Codex CLI, gateways, …) is set up by your agent. On **any other machine with Hearth**, tell its agent the sentence setup printed, e.g. *"restore the Codex environment of h800-gpu-node-13"*. It looks at the new machine (`hearth machine list`), picks the restore flow for that kind of machine, and installs and checks each step there over `hearth ssh`; steps that need you (a QR-code login) it hands to you with `hearth ssh -t`. No other machine at hand: say *"use hearth to restore this machine's environment"* on the new machine itself. The Hearth app's Machines page (and `hearth machine list`) shows each machine's environment check.
 
 A new account prints a **recovery key** once. Keep it offline; it is the only way back if you forget the password. Never paste the password or the key into a chat.
 
@@ -208,7 +208,7 @@ Hearth carries the workspace, and now a memory too: every agent can recall what 
 | **Remote machine readiness** | Every online Hearth client reports only non-secret readiness data: OS, architecture, GPU/profile, workspace, Hearth version, installed agent versions, MCP readiness and pending restore steps. From another logged-in machine, `hearth machine list` shows which target is ready; the `hearth` skill selects the matching profile and runs the target's recipe flow over SSH when you say “restore Codex environment”. |
 | **SSH between your machines** | Logged-in Linux machines accept SSH from your own devices: their keys go into a marked block of `~/.ssh/authorized_keys` and the system sshd runs public-key only on the machine's own addresses (bond0, its host name's, its routes'; port 8022; an existing sshd there is reused). `hearth ssh <machine>`, plain `ssh -p 8022` with your usual key, or `hearth ssh config` for VS Code / Cursor Remote-SSH. Revoking a device removes its keys everywhere. |
 | **Teams** | Invite codes, roles, sharing between teams. Each member's most used skills and agents are shared automatically; each team's most used ones are kept in every member's agents. |
-| **Server** | SQLite + a directory by default, PostgreSQL + S3 for several instances. Supervisor, log rotation, quotas, backups, migrations. Web console for users (machines, skills, teams, settings) and admins (dashboard, users, approvals, invites, audit log). |
+| **Server** | SQLite + a directory by default, PostgreSQL + S3 for several instances. Supervisor, log rotation, quotas, backups, migrations. A macOS menu bar app for users (machines, library, teams, settings) and admins (dashboard, users, approvals, invites, audit log). |
 
 ---
 
