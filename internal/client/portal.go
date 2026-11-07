@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// PortalDocs are the per-user documents the web console shows, fetched for
+// PortalDocs are the per-user documents the Hearth app shows, fetched for
 // the macOS app's own pages: key -> path under /v1/me.
 var PortalDocs = map[string]string{
 	"me":       "/v1/me",

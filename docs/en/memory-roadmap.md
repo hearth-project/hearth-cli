@@ -69,7 +69,7 @@ All three use the same local index. ① keeps habits always in force, ② gives 
 ### 4. Recording habits: only after confirmation
 
 - When the agent notices something worth keeping (the user corrected it, a practice keeps recurring), it calls `remember` with a scope (this repository / all projects / a kind of machine).
-- The user confirms in the conversation, or reviews, edits and deletes in `hearth memory review` or the web console.
+- The user confirms in the conversation, or reviews, edits and deletes in `hearth memory review` or the Hearth app.
 - The same flow as `propose_setup_step` today: the agent proposes, the user decides; the server neither calls a model nor sees the content.
 
 ### 5. Team memory (third stage)

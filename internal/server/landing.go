@@ -23,7 +23,6 @@ table{border-collapse:collapse;width:100%}td,th{border:1px solid #d0d7de;padding
 <div class="lang">{{if eq .Lang "zh"}}<b>简体中文</b> | <a href="/?lang=en">English</a>{{else}}<a href="/?lang=zh">简体中文</a> | <b>English</b>{{end}}</div>
 <h1>Hearth</h1>
 <p class="muted">{{.T.Tagline}}</p>
-<p><a class="btn" href="/app">{{.T.Console}}</a></p>
 
 <h2>{{.T.Install}}</h2>
 <p>{{.T.InstallHint}}</p>
@@ -59,7 +58,7 @@ type landingText struct {
 	Tagline, Install, InstallHint, NewUser, InstallOnly, Registration, Pin string
 	Then, ThenHint, ThenSay                                                string
 	Downloads, Platform, File, Manual, More, Script, Manifest, Skill, Info string
-	CA, Console                                                            string
+	CA                                                                     string
 }
 
 var landingTexts = map[string]landingText{
@@ -84,7 +83,6 @@ var landingTexts = map[string]landingText{
 		Skill:        "hearth agent skill（未安装 hearth 的机器也可直接让 agent 读取）",
 		Info:         "服务器信息（注册方式）",
 		CA:           "服务器自签证书（手动安装时保存为 ~/.hearth/ca.pem）",
-		Console:      "登录控制台：查看我的机器、skills、agents 和团队",
 	},
 	"en": {
 		Tagline:      "Back up and restore coding-agent sessions, skills, credentials and setup across machines (end-to-end encrypted).",
@@ -107,7 +105,6 @@ var landingTexts = map[string]landingText{
 		Skill:        "the hearth agent skill (an agent can read it on a machine without hearth)",
 		Info:         "server info (registration mode)",
 		CA:           "the server's self-signed certificate (save as ~/.hearth/ca.pem for a manual install)",
-		Console:      "Sign in to the console: your machines, skills, agents and teams",
 	},
 }
 

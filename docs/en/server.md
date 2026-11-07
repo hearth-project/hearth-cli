@@ -116,20 +116,20 @@ hearth server admin gc                                 # run expiry now and dele
 
 The default quota comes from `hearth server --quota 10GiB` (unlimited by default). A client over its quota pauses uploads and says so in `hearth status`.
 
-## Web console and admin panel
+## Administration
 
-The server ships a web console at `/app` (`/admin` is the same page). Every registered user signs in with email and master password and sees their machines (online, name, IP, client version; log one out), the skills and agents of their library (most used first, resident / on demand, shared with one click to teams where they are maintainer or owner, after a secret scan), their most used skills and agents, and their teams with members and shared items (maintainers make invite codes); conversations and credentials are end-to-end encrypted and not readable there. Admins also get the administration pages: a dashboard (accounts, active users, uploads per day, sign-ups, top skills, client versions in use), users (each one's clients online now: machine, IP, version; disable / enable, quota, admin, log out devices, delete; click an email for all devices), sign-up approvals, invite codes, teams (create with an owner, add / remove members, change roles, shared items, team-to-team sharing, delete), runtime settings (registration mode, default quota, client auto-update; no restart, every instance within 10 s), maintenance (expiry, orphaned blobs) and an audit log. English and Chinese.
+The server has no web console (the page at `/` only shows the install command and the downloads). Everyone uses the macOS menu bar app (`hearth app install`, see [usage](usage.md#9-mac-menu-bar-app)); it shows a user's machines, library, teams and settings, and gives admins the administration pages: a dashboard (accounts, active users, uploads per day, sign-ups, top skills, client versions in use), users (each one's clients online now: machine, IP, version; disable / enable, quota, admin, log out devices, delete), sign-up approvals, invite codes, teams (create with an owner, add / remove members, change roles, shared items, team-to-team sharing, delete), runtime settings (registration mode, default quota, client auto-update; no restart, every instance within 10 s), maintenance (expiry, orphaned blobs) and an audit log. Conversations and credentials are end-to-end encrypted and not readable there.
 
 ```bash
 hearth server admin grant <email> --data $D    # on the server: make an account an admin (ungrant, admins)
-# open https://<server>/admin and sign in with the account (email + master password)
-hearth panel                                  # or, on a machine logged in as an admin: a 10-minute sign-in link, opened in the browser
-hearth server admin link <email> --url <public-url> --data $D   # or a link straight from the server
+hearth server admin users|user|stats|quota|disable|enable|revoke-devices|delete-user|invites|gc ...   # the same from the command line
+hearth app admin-data --json                   # on a machine logged in as an admin: the administration documents
+hearth app admin-call GET /v1/admin/audit      # one request to the admin API (any system)
 ```
 
-With the account sign-in the browser derives the login key from the master password the way the client does (Argon2id + HKDF) and sends only that key; the password never leaves the browser (a few seconds with the default parameters). Signing in (or opening a link) gives a signed 12-hour session cookie (HttpOnly, SameSite=Strict); changes also need the `X-Hearth-Admin` header (CSRF), and the page has a strict CSP. Removing an admin or disabling the account ends the session at once. Every change is written to the audit log (command-line changes as `cli`).
+The app and `hearth app call` / `admin-call` sign in with the machine's own login: the client asks for a one-time link (`POST /v1/web/link`, bearer token) and redeems it (`GET /v1/web/session`) for a signed 12-hour session cookie (HttpOnly, SameSite=Strict); changes also need the `X-Hearth-Admin` header (CSRF). Removing an admin or disabling the account ends the session at once. Every change is written to the audit log (command-line changes as `cli`).
 
-**Sign-up approval**: with registration `approval` (panel settings, or `hearth server --registration approval`) anyone may sign up, but the account cannot log in until an admin approves it on the Approvals page (or `hearth server admin approve <email>`); the client says it is waiting.
+**Sign-up approval**: with registration `approval` (the app's server settings, or `hearth server --registration approval`) anyone may sign up, but the account cannot log in until an admin approves it in the app (or `hearth server admin approve <email>`); the client says it is waiting.
 
 ## Session expiry
 

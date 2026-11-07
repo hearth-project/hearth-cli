@@ -100,7 +100,7 @@ func setupCmd() *cobra.Command {
 					installToken = os.Getenv("HEARTH_INSTALL_TOKEN")
 				}
 				if installToken != "" && !create && invite == "" {
-					// One-time install command from the web console: no password.
+					// One-time install command (the Hearth app): no password.
 					if nc, err := client.LoginWithInstallToken(home, server, email, installToken, device); err == nil {
 						cfg, loggedIn = nc, true
 						via = " with the one-time install command (no password needed)"
@@ -427,7 +427,7 @@ func setupCmd() *cobra.Command {
 	c.Flags().BoolVar(&create, "new", false, "create the account first (first machine only; servers in invite mode also need --invite)")
 	c.Flags().BoolVar(&switchLogin, "switch", false, "replace an existing login to another account or server")
 	c.Flags().StringVar(&invite, "invite", "", "invite code: create the account first (first machine only)")
-	c.Flags().StringVar(&installToken, "token", "", "one-time install token from the web console's install command: log in without the password (works once, 30 minutes) [$HEARTH_INSTALL_TOKEN]")
+	c.Flags().StringVar(&installToken, "token", "", "one-time install token from an install command (the Hearth app, hearth machine install-command): log in without the password (works once, 30 minutes) [$HEARTH_INSTALL_TOKEN]")
 	c.Flags().BoolVar(&insecure, "insecure", false, "allow plain HTTP to a non-loopback server")
 	c.Flags().BoolVar(&noDaemon, "no-daemon", false, "do not start background sync")
 	c.Flags().BoolVar(&force, "force", false, "overwrite local session files that differ from the server")

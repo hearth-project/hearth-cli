@@ -163,7 +163,7 @@ func serverCmd() *cobra.Command {
 	}
 	c.Flags().StringVar(&addr, "addr", envOr("HEARTH_ADDR", "127.0.0.1:8787"), "listen address [$HEARTH_ADDR]")
 	sto.flags(c)
-	c.Flags().StringVar(&registration, "registration", envOr("HEARTH_REGISTRATION", server.RegistrationInvite), "who may register: invite, open, approval (admin approves each account) or closed; the admin panel can change it [$HEARTH_REGISTRATION]")
+	c.Flags().StringVar(&registration, "registration", envOr("HEARTH_REGISTRATION", server.RegistrationInvite), "who may register: invite, open, approval (admin approves each account) or closed; an admin can change it in the Hearth app [$HEARTH_REGISTRATION]")
 	c.Flags().StringVar(&tlsCert, "tls-cert", "", "TLS certificate file")
 	c.Flags().StringVar(&tlsKey, "tls-key", "", "TLS key file")
 	c.Flags().StringVar(&siteDir, "site", os.Getenv("HEARTH_SITE"), "organisation defaults for every user: recipes/, files/, learn.json (default <data>/site) [$HEARTH_SITE]")

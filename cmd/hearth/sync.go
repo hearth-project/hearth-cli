@@ -405,7 +405,7 @@ func daemonCmd() *cobra.Command {
 				// Online for the other machines: their default restore leaves
 				// out the conversations this machine is working on.
 				if n, err := e.API.HeartbeatIntents(); err == nil && n > 0 {
-					// Changes asked for in the web console.
+					// Changes asked for in the Hearth app.
 					if lines, err := e.ApplyIntents(); err != nil {
 						log.Printf("console changes: %v", err)
 					} else {

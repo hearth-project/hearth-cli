@@ -136,19 +136,6 @@ struct NativeRoot: View {
                     }
                 }
                 .listStyle(.sidebar)
-                Divider().opacity(0.5)
-                Button { ConsoleController.shared.show() } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: "globe").foregroundStyle(Theme.slate)
-                        Text("管理后台（网页）").font(.system(size: 12))
-                        Spacer()
-                        Image(systemName: "arrow.up.right").font(.system(size: 10)).foregroundStyle(.tertiary)
-                    }
-                    .padding(.horizontal, 14).padding(.vertical, 10)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .help("用户、团队管理、审批、设置、审计等管理页面")
             }
             .navigationSplitViewColumnWidth(min: 170, ideal: 190, max: 240)
         } detail: {

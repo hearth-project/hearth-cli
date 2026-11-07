@@ -1,7 +1,8 @@
 // swift-tools-version:5.9
 // The Hearth menu bar app for macOS: the user's machines at a glance, and the
-// web console in a window. It reads everything through the `hearth` CLI
-// logged in on this Mac (hearth machine list --json, hearth panel --json).
+// account's pages (machines, library, teams, settings; administration for
+// admins) in a window of its own. It reads everything through the `hearth` CLI
+// logged in on this Mac (hearth machine list --json, hearth app ...).
 import PackageDescription
 
 let package = Package(

@@ -26,13 +26,13 @@ curl -fsSL https://<server>/install.sh | sh -s -- --install-only
 
 ### One-time install command (no password on the new machine)
 
-Signed in to the web console, open **Machines → Add a machine** and click **Make a one-time install command**. The command looks like
+In the Hearth app on a Mac (`hearth app install`) choose **Add machine**, or run `hearth machine install-command` on any logged-in machine. The command looks like
 
 ```bash
 curl -fsSL https://<server>/install.sh | sh -s -- --email you@example.com --token <id>.<secret>
 ```
 
-and logs the new machine in without the master password. It works once and for 30 minutes; make a new one for each machine. The page wraps your vault key with a key derived from a random secret that only the command holds, so the server still sees ciphertext only. The console keeps the vault key for the rest of the session (sealed in the browser with a key tied to the session cookie), so reloading the page does not ask again; signing out removes it. A session opened with `hearth panel` asks for the master password once (checked in the browser). Treat the command like a password until it has been used: it stays in the new machine's shell history, but it no longer works after its first use. `hearth setup --token <id>.<secret>` (or `HEARTH_INSTALL_TOKEN`) does the same without the installer.
+and logs the new machine in without the master password. It works once and for 30 minutes; make a new one for each machine. Your vault key is wrapped with a key derived from a random secret that only the command holds, so the server still sees ciphertext only. Treat the command like a password until it has been used: it stays in the new machine's shell history, but it no longer works after its first use. `hearth setup --token <id>.<secret>` (or `HEARTH_INSTALL_TOKEN`) does the same without the installer.
 
 ### Self-signed servers
 

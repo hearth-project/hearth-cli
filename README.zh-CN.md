@@ -86,7 +86,7 @@ hearth server install-service --data /var/lib/hearth …                  # 打�
 多实例 + PostgreSQL + S3 见 `deploy/docker-compose.scale.yml`。备份、迁移、配额、管理后台等全部服务端内容见 [服务器指南](docs/zh/server.md)。
 </details>
 
-邀请用户：`hearth server invite --data <目录>`（`--registration open` 时不需要）。注册账号后，把自己设为 Web 控制台的管理员：`hearth server admin grant <you@example.com> --data <目录>`，然后运行 `hearth panel`。
+邀请用户：`hearth server invite --data <目录>`（`--registration open` 时不需要）。注册账号后，把自己设为管理员：`hearth server admin grant <you@example.com> --data <目录>`。管理页面在 macOS 菜单栏小程序里（`hearth app install`）；其他系统用 `hearth server admin ...`。
 
 ### 2. 安装客户端（每台机器一条命令）
 
@@ -159,7 +159,7 @@ Log: ~/.cache/hearth/setup-….log
 
 ### 3. 在另一台机器上恢复软件环境
 
-新机器上已经有你的文件；软件环境（Node、Codex CLI、网关……）由 agent 来装。在**任意一台已登录 Hearth 的机器**上，把 setup 最后打印的那句话告诉它的 agent，例如「恢复 h800-gpu-node-13 的 Codex 环境」。它会查看新机器（`hearth machine list`），按这类机器的恢复流程，通过 `hearth ssh` 在新机器上逐步安装并检查；需要你本人操作的步骤（扫码登录）用 `hearth ssh -t` 交给你。手边没有别的机器时，也可以在新机器上直接说「用 hearth 恢复这台机器的环境」。Web 控制台的「我的机器」页能看到每台机器的环境检查结果。
+新机器上已经有你的文件；软件环境（Node、Codex CLI、网关……）由 agent 来装。在**任意一台已登录 Hearth 的机器**上，把 setup 最后打印的那句话告诉它的 agent，例如「恢复 h800-gpu-node-13 的 Codex 环境」。它会查看新机器（`hearth machine list`），按这类机器的恢复流程，通过 `hearth ssh` 在新机器上逐步安装并检查；需要你本人操作的步骤（扫码登录）用 `hearth ssh -t` 交给你。手边没有别的机器时，也可以在新机器上直接说「用 hearth 恢复这台机器的环境」。Hearth 小程序的「机器」页（和 `hearth machine list`）能看到每台机器的环境检查结果。
 
 新账号会打印一次**恢复密钥**，请离线保存（例如密码管理器），忘记主密码时只能靠它找回。不要把主密码或恢复密钥贴到任何对话里。
 
@@ -208,7 +208,7 @@ Hearth 搬运工作现场，现在也开始带上记忆：任何 agent 都能想
 | **远程机器就绪检查** | 每台在线 Hearth 客户端只上报非敏感状态：系统、架构、GPU/机器 profile、工作目录、Hearth 版本、agent 版本、MCP 状态和待完成的恢复步骤。在另一台已登录机器上运行 `hearth machine list` 就能看到目标是否正常；用户说“恢复 Codex 环境”后，`hearth` skill 会按目标架构选择 profile，通过 SSH 在目标机执行对应恢复流程。 |
 | **机器之间 SSH** | 登录过的 Linux 机器默认接受你自己设备的 SSH：设备公钥写进 `~/.ssh/authorized_keys` 里的一个标记块，系统 sshd 只开公钥认证、只监听本机自己的地址（bond0、主机名解析到的、路由用的；端口 8022；已有 sshd 在这个端口就直接用）。`hearth ssh <机器>`、用你平时的 key `ssh -p 8022`，或 `hearth ssh config` 给 VS Code / Cursor Remote-SSH 用。吊销设备后它的 key 在所有机器上失效。 |
 | **团队** | 邀请码、角色、团队之间共享。每个成员最常用的 skills 和 agents 自动共享，每个团队最常用的自动常驻到成员的 agent 里。 |
-| **服务端** | 默认 SQLite + 本地目录，多实例可用 PostgreSQL + S3。自带守护进程、日志轮转、配额、备份、迁移。Web 控制台：普通用户看自己的机器、skills、团队、设置；管理员有数据面板、用户、注册审批、邀请码、审计日志。 |
+| **服务端** | 默认 SQLite + 本地目录，多实例可用 PostgreSQL + S3。自带守护进程、日志轮转、配额、备份、迁移。macOS 菜单栏小程序：普通用户看自己的机器、资源库、团队、设置；管理员有数据面板、用户、注册审批、邀请码、审计日志。 |
 
 ---
 

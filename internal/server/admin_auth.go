@@ -14,13 +14,13 @@ import (
 	"github.com/hearth-project/hearth-cli/internal/crypto"
 )
 
-// Admin panel authentication. An admin is a user listed in the admins
-// table (`hearth server admin grant <email>` on the server). Admins sign in
-// with their account: the page derives the login key from the master
-// password in the browser (Argon2id, like the client), or they open a
-// short-lived link from `hearth panel` / `hearth server admin link`. Both
-// set a signed, HttpOnly, SameSite=Strict session cookie. Mutating requests also need the X-Hearth-Admin header,
-// which other sites cannot send.
+// Console authentication. An admin is a user listed in the admins table
+// (`hearth server admin grant <email>` on the server). The macOS app and
+// `hearth app call` open a short session: a logged-in device (bearer token)
+// asks for a one-time link (POST /v1/web/link), redeems it
+// (GET /v1/web/session) for a signed, HttpOnly, SameSite=Strict session
+// cookie, and calls /v1/me and /v1/admin with it. Mutating requests also need
+// the X-Hearth-Admin header, which other sites cannot send.
 
 const (
 	adminCookie     = "hearth_session"
@@ -33,7 +33,7 @@ type adminClaims struct {
 	UID     int64  `json:"u"`
 	Exp     int64  `json:"e"`
 	Purpose string `json:"p"`           // link | session
-	Nonce   string `json:"n,omitempty"` // sessions: makes each one (and its console wrap key) unique
+	Nonce   string `json:"n,omitempty"` // sessions: makes each one unique
 }
 
 func (s *Server) signAdmin(c adminClaims) string {
@@ -75,16 +75,6 @@ func (s *Server) isAdmin(uid int64) bool {
 	var n int
 	err := s.st.rdb.QueryRow(`SELECT COUNT(*) FROM admins a JOIN users u ON u.id=a.user_id WHERE a.user_id=? AND u.status='active'`, uid).Scan(&n)
 	return err == nil && n > 0
-}
-
-// AdminLink returns a panel login link (valid adminLinkTTL) for an admin.
-func (s *Server) AdminLink(baseURL, email string) (string, error) {
-	uid, err := s.uidOf(email)
-	if err != nil {
-		return "", err
-	}
-	t := s.signAdmin(adminClaims{UID: uid, Exp: s.now() + int64(adminLinkTTL.Seconds()), Purpose: "link"})
-	return strings.TrimRight(baseURL, "/") + "/app/login?t=" + t, nil
 }
 
 // SetAdmin adds or removes an admin; the last admin cannot be removed.
@@ -144,12 +134,12 @@ func (s *Server) admin(h func(http.ResponseWriter, *http.Request, adminCtx)) htt
 	return func(w http.ResponseWriter, r *http.Request) {
 		c, err := r.Cookie(adminCookie)
 		if err != nil {
-			writeErr(w, http.StatusUnauthorized, "not signed in to the admin panel (run: hearth panel)")
+			writeErr(w, http.StatusUnauthorized, "not signed in as an admin (open the Hearth app again)")
 			return
 		}
 		uid, err := s.verifyAdmin(c.Value, "session")
 		if err != nil || !s.isAdmin(uid) {
-			writeErr(w, http.StatusUnauthorized, "admin session expired or revoked (run: hearth panel)")
+			writeErr(w, http.StatusUnauthorized, "admin session expired or revoked (open the Hearth app again)")
 			return
 		}
 		if r.Method != http.MethodGet && r.Header.Get(adminHeader) != "1" {
@@ -162,84 +152,23 @@ func (s *Server) admin(h func(http.ResponseWriter, *http.Request, adminCtx)) htt
 	}
 }
 
-// handleAdminLogin exchanges a link token for a session cookie.
-func (s *Server) handleAdminLogin(w http.ResponseWriter, r *http.Request) {
+// handleConsoleSession exchanges a link token for a session cookie.
+func (s *Server) handleConsoleSession(w http.ResponseWriter, r *http.Request) {
 	uid, err := s.verifyAdmin(r.URL.Query().Get("t"), "link")
 	if err != nil || !s.activeUser(uid) {
-		http.Error(w, "This sign-in link is invalid or expired. Get a new one with: hearth panel", http.StatusUnauthorized)
+		http.Error(w, "This sign-in link is invalid or expired.", http.StatusUnauthorized)
 		return
 	}
 	s.setAdminCookie(w, r, uid)
 	if email, err := s.st.emailOf(uid); err == nil && s.isAdmin(uid) {
 		s.Audit(email, "panel-login", "", "link "+clientIP(r))
 	}
-	http.Redirect(w, r, "/app", http.StatusSeeOther)
-}
-
-// handleAdminPasswordLogin signs an admin in with email and the login key
-// the panel derived in the browser from the master password (the same key
-// the client sends to /v1/auth/login; the password itself never arrives).
-// The answer carries the password-wrapped vault key, as for the client: the
-// console unwraps it in the browser to make one-time install commands, and
-// the session's wrap key to keep it for the session.
-func (s *Server) handleAdminPasswordLogin(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Email    string `json:"email"`
-		AuthKey  []byte `json:"auth_key"`
-		Remember bool   `json:"remember"` // 7 days instead of 12 hours
-	}
-	if !readJSON(w, r, &req) {
-		return
-	}
-	email := normEmail(req.Email)
-	u, err := s.st.userByEmail(email)
-	if err != nil || !hmac.Equal(authHash(u.AuthSalt, req.AuthKey), u.AuthHash) {
-		writeErr(w, http.StatusUnauthorized, "invalid email or password")
-		return
-	}
-	if u.Status != "active" {
-		writeErr(w, http.StatusForbidden, statusMessage(u.Status))
-		return
-	}
-	ttl := adminSessionTTL
-	if req.Remember {
-		ttl = rememberTTL
-	}
-	tok := s.setSessionCookie(w, r, u.ID, ttl)
-	if s.isAdmin(u.ID) {
-		s.Audit(email, "panel-login", "", "password "+clientIP(r))
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"enc_vault_key": u.EncVaultKey, "wrap_key": s.consoleWrapKey(tok)})
-}
-
-// consoleWrapKey is the key the console seals the vault key with in the
-// browser's storage, so it need not ask for the password again during the
-// session. It is derived from the session cookie (HttpOnly), so it differs
-// per session and ends with it; the server never sees what it seals, and
-// the sealed copy in the browser opens only with the cookie's session.
-func (s *Server) consoleWrapKey(sessionTok string) []byte {
-	m := hmac.New(sha256.New, s.adminKey)
-	m.Write([]byte("hearth-console-vault:" + sessionTok))
-	return m.Sum(nil)
-}
-
-// apiConsoleWrapKey hands the console its session's wrap key (see
-// consoleWrapKey).
-func (s *Server) apiConsoleWrapKey(w http.ResponseWriter, r *http.Request, _ userCtx) {
-	c, err := r.Cookie(adminCookie)
-	if err != nil {
-		writeErr(w, http.StatusUnauthorized, "not signed in")
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"wrap_key": s.consoleWrapKey(c.Value)})
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) setAdminCookie(w http.ResponseWriter, r *http.Request, uid int64) {
 	s.setSessionCookie(w, r, uid, adminSessionTTL)
 }
-
-// rememberTTL: "remember this computer" on the sign-in page.
-const rememberTTL = 7 * 24 * time.Hour
 
 func (s *Server) setSessionCookie(w http.ResponseWriter, r *http.Request, uid int64, ttl time.Duration) string {
 	tok := s.signAdmin(adminClaims{UID: uid, Exp: s.now() + int64(ttl.Seconds()), Purpose: "session", Nonce: base64.RawURLEncoding.EncodeToString(crypto.RandomBytes(12))})
@@ -248,15 +177,10 @@ func (s *Server) setSessionCookie(w http.ResponseWriter, r *http.Request, uid in
 	return tok
 }
 
-func (s *Server) handleAdminLogout(w http.ResponseWriter, r *http.Request) {
-	http.SetCookie(w, &http.Cookie{Name: adminCookie, Value: "", Path: "/", MaxAge: -1, HttpOnly: true, Secure: r.TLS != nil, SameSite: http.SameSiteStrictMode})
-	w.WriteHeader(http.StatusNoContent)
-}
-
 // handleAdminLinkAPI: a logged-in client (bearer token) of an admin asks
-// for a panel link (`hearth panel`).
+// for a one-time sign-in link (the macOS app, `hearth app call`).
 func (s *Server) handleAdminLinkAPI(w http.ResponseWriter, r *http.Request) {
 	uid := userOf(r)
 	t := s.signAdmin(adminClaims{UID: uid, Exp: s.now() + int64(adminLinkTTL.Seconds()), Purpose: "link"})
-	writeJSON(w, http.StatusOK, map[string]string{"path": "/app/login?t=" + t})
+	writeJSON(w, http.StatusOK, map[string]string{"path": "/v1/web/session?t=" + t})
 }

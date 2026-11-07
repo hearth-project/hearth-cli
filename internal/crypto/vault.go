@@ -91,7 +91,7 @@ func UnwrapWithIdentity(wrapped, key []byte) ([]byte, error) {
 	return Open(key, wrapped, []byte(aadVaultIdentity))
 }
 
-// One-time install commands. The web console picks a random secret, wraps
+// One-time install commands. The client picks a random secret, wraps
 // the vault key with InstallKey(secret) and gives the server only that
 // ciphertext and sha256(InstallAuth(secret)); the secret itself travels in
 // the command. The console builds these values in JavaScript (panel/seal.js)

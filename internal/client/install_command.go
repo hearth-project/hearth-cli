@@ -20,7 +20,7 @@ type InstallCommand struct {
 	ExpiresAt int64  `json:"expires_at,omitempty"` // unix seconds, one-time commands only
 }
 
-// MakeInstallCommand makes the "add a machine" command the web console
+// MakeInstallCommand makes the "add a machine" command the Hearth app
 // makes: a one-time install command (works once, 30 minutes) whose token
 // logs the new machine in without the master password. The vault key is
 // wrapped here for a random secret, as the console does in the browser;

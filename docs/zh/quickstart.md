@@ -128,7 +128,7 @@ On any other machine with Hearth, tell its agent:
       "恢复 b-node-gpu-0126 的 Codex 环境"
 ```
 
-那台机器的 agent 会找到新机器（`hearth machine list`：环境检查、SSH 主机名），按这类机器的恢复流程，通过 `hearth ssh` 在新机器上逐步安装并检查 Node、Codex CLI、codex-mixin 等；需要你本人操作的步骤（扫码登录）用 `hearth ssh -t <机器> -- <命令>` 交给你。完成后新机器的环境检查在 `hearth machine list` 和 Web 控制台里变绿。手边没有别的机器时，在新机器的 agent 里说「用 hearth 恢复这台机器的环境」。
+那台机器的 agent 会找到新机器（`hearth machine list`：环境检查、SSH 主机名），按这类机器的恢复流程，通过 `hearth ssh` 在新机器上逐步安装并检查 Node、Codex CLI、codex-mixin 等；需要你本人操作的步骤（扫码登录）用 `hearth ssh -t <机器> -- <命令>` 交给你。完成后新机器的环境检查在 `hearth machine list` 和 Hearth 小程序里变绿。手边没有别的机器时，在新机器的 agent 里说「用 hearth 恢复这台机器的环境」。
 
 之后在 agent 里可以直接说：
 
