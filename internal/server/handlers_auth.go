@@ -138,6 +138,12 @@ func (s *Server) authed(h http.HandlerFunc) http.HandlerFunc {
 		}
 		uid, did, err := s.auth.check(s, tokenHash(tok))
 		if errors.Is(err, errNotFound) {
+			if s.st.tokenRemoved(tokenHash(tok), s.now()) {
+				// The owner removed this machine: tell it, so the client
+				// stops and cleans up instead of asking to log in again.
+				writeErr(w, http.StatusGone, api.DeviceRemoved)
+				return
+			}
 			writeErr(w, http.StatusUnauthorized, "invalid or expired token")
 			return
 		} else if err != nil {

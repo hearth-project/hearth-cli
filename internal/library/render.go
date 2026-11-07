@@ -94,6 +94,40 @@ type want struct {
 
 func hashOf(b []byte) string { h := sha256.Sum256(b); return hex.EncodeToString(h[:]) }
 
+// Unrender removes every path recorded in the manifest that still holds
+// exactly what hearth wrote there, then the manifest itself. Paths edited
+// or replaced since are left alone and reported in kept.
+func Unrender(manifestPath string) (removed, kept []string, err error) {
+	m, err := loadManifest(manifestPath)
+	if err != nil {
+		return nil, nil, err
+	}
+	paths := make([]string, 0, len(m.Entries))
+	for p := range m.Entries {
+		paths = append(paths, p)
+	}
+	sort.Strings(paths)
+	for _, p := range paths {
+		exists, matches := current(p, m.Entries[p])
+		if !exists {
+			continue
+		}
+		if !matches {
+			kept = append(kept, p)
+			continue
+		}
+		if err := os.Remove(p); err != nil {
+			kept = append(kept, p)
+			continue
+		}
+		removed = append(removed, p)
+	}
+	if err := os.Remove(manifestPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return removed, kept, err
+	}
+	return removed, kept, nil
+}
+
 // current reports whether path currently matches entry e.
 func current(path string, e Entry) (exists, matches bool) {
 	fi, err := os.Lstat(path)

@@ -57,6 +57,10 @@ struct MachineRow: View {
             .contextMenu {
                 Button("复制机器名", action: copyName)
                 Button(open ? "收起" : "展开", action: toggle)
+                if let remove {
+                    Divider()
+                    Button("移除这台机器…", role: .destructive, action: remove)
+                }
             }
             .help("\(m.host)\n单击展开，右键或悬停时点复制按钮复制机器名")
             if open { detail }
