@@ -7,9 +7,12 @@ struct MachinesPage: View {
     @State private var note: String?
     @State private var copying = false
     @State private var removing: Machine?
+    @State private var removingID: String?
+    @State private var gone: Set<String> = []
+    @State private var result: String?
 
     private var all: [Machine] {
-        (store.list?.machines ?? []).sorted { a, b in
+        (store.list?.machines ?? []).filter { !gone.contains($0.id) }.sorted { a, b in
             if a.online != b.online { return a.online }
             if a.isThis != b.isThis { return a.isThis }
             return a.title.localizedStandardCompare(b.title) == .orderedAscending
@@ -41,12 +44,34 @@ struct MachinesPage: View {
         .confirmationDialog("移除这台机器？", isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } }), presenting: removing) { m in
             Button("移除 \(m.title)", role: .destructive) {
                 Task {
-                    await portal.call("DELETE", "/v1/me/devices/" + adminPath(m.id), done: "已移除 \(m.title)。")
+                    removingID = m.id
+                    let ok = await portal.call("DELETE", "/v1/me/devices/" + adminPath(m.id), reload: false) != nil
+                    removingID = nil
+                    if ok {
+                        gone.insert(m.id)
+                        if expanded == m.id { expanded = nil }
+                        result = "已移除 \(m.title)。" + (m.online ? "它会在约 30 秒内停止同步并清理 Hearth 自己的数据。" : "它下次上线时会完成清理。")
+                    } else {
+                        result = "没有移除 \(m.title)：" + (portal.notice ?? "未知错误") + "\n请稍后重试。"
+                    }
                     await store.refresh()
+                    await portal.refresh()
+                    if let list = store.list, !list.machines.contains(where: { $0.id == m.id }) { gone.remove(m.id) }
                 }
             }
         } message: { _ in
-            Text("这台机器会退出登录，不再同步。要再次使用，需要在它上面重新运行 hearth setup。")
+            Text("这台机器会被退出登录。它在线时，上面的 Hearth 会在约 30 秒内停止同步，关掉自己启动的 sshd，撤下自己写入的钩子、shell 配置、SSH 配置和授权公钥，并删除本地保存的私人数据（登录信息、密钥、记忆、库缓存）。其他工具的文件不会动，备份目录会保留。离线的机器会在下次上线时完成清理。要再次使用，需要在它上面重新运行 hearth setup。")
+        }
+        .alert(result ?? "", isPresented: Binding(get: { result != nil }, set: { if !$0 { result = nil } })) {
+            Button("好") { result = nil }
+        }
+        .overlay(alignment: .top) {
+            if removingID != nil {
+                HStack(spacing: 8) { ProgressView().controlSize(.small); Text("正在移除…").font(.system(size: 12)) }
+                    .padding(.horizontal, 12).padding(.vertical, 6)
+                    .background(.regularMaterial, in: Capsule())
+                    .padding(.top, 8)
+            }
         }
     }
 

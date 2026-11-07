@@ -331,6 +331,9 @@ func daemonCmd() *cobra.Command {
 					log.Printf("removed %d credential file(s) written on demand", len(removed))
 				}
 				st, err := e.PushOnce()
+				if client.IsDeviceRemoved(err) {
+					return daemonDecommission(e, lock)
+				}
 				// sshd for the user's devices: running, current keys, endpoint published.
 				{
 					ss, serr := e.EnsureSSHD()
@@ -391,6 +394,9 @@ func daemonCmd() *cobra.Command {
 				}
 				h := health
 				if err := e.API.HeartbeatReport(map[string]any{"facts": h.Machine, "profiles": h.Profiles, "workspace": h.Workspace}, map[string]any{"status": h.Status, "client": h.Client, "agents": h.Agents, "tools": h.Tools, "recipe_todo": h.RecipeTodo, "recipe_manual": h.RecipeManual, "todo_steps": h.TodoSteps, "issues": h.Issues, "ssh": h.SSH, "checked_at": h.CheckedAt}); err != nil {
+					if client.IsDeviceRemoved(err) {
+						return daemonDecommission(e, lock)
+					}
 					log.Printf("health heartbeat: %v", err)
 				} else if !proxySaved {
 					proxySaved = true
@@ -1300,4 +1306,21 @@ func logTeamTop(e *client.Engine, seen map[string]string) {
 	if _, err := e.LibPush(false); err != nil {
 		log.Printf("library push: %v", err)
 	}
+}
+
+// daemonDecommission runs when the server says this machine was removed
+// from the account: hearth undoes what it set up here, deletes its private
+// data, and the daemon exits for good.
+func daemonDecommission(e *client.Engine, lock *os.File) error {
+	log.Printf("this machine was removed from the Hearth account; cleaning up hearth's files and stopping")
+	e.ReleaseLeases()
+	lock.Close()
+	done, err := client.Decommission(e.Home)
+	for _, d := range done {
+		log.Printf("removed: %s", d)
+	}
+	if err != nil {
+		log.Printf("cleanup finished with errors: %v", err)
+	}
+	return nil
 }

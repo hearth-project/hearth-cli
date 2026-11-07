@@ -103,6 +103,16 @@ func (s *store) lookupToken(hash []byte, now int64) (int64, string, error) {
 	return uid, did, err
 }
 
+// tokenRemoved reports whether hash is an unexpired token of a device its
+// owner removed. Such tokens are kept (they grant nothing, see lookupToken)
+// so the removed machine can learn why it was shut out and clean up.
+func (s *store) tokenRemoved(hash []byte, now int64) bool {
+	var n int
+	err := s.rdb.QueryRow(`SELECT COUNT(*) FROM tokens t JOIN devices d ON d.id = t.device_id
+		WHERE t.token_hash = ? AND t.expires_at > ? AND d.status = 'revoked'`, hash, now).Scan(&n)
+	return err == nil && n > 0
+}
+
 // touchToken slides the token expiry to now+ttl and records device
 // activity. Called at most every few minutes per token (see authCache).
 func (s *store) touchToken(hash []byte, did string, now, ttl int64) error {
@@ -247,8 +257,9 @@ func (s *store) revokeDevice(userID int64, id string) error {
 	if n, _ := res.RowsAffected(); n == 0 {
 		return errNotFound
 	}
-	_, err = s.db.Exec(`DELETE FROM tokens WHERE device_id = ?`, id)
-	return err
+	// The device's tokens stay so that it gets "device removed" (410) and
+	// cleans itself up; they no longer authenticate anything.
+	return nil
 }
 
 // errDeviceOnline: a machine that is still online cannot be continued.

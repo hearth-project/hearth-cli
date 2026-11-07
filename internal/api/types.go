@@ -236,6 +236,10 @@ type Error struct {
 	LeaseOwner string `json:"lease_owner,omitempty"`
 }
 
+// DeviceRemoved is the error text of the 410 a machine gets once its owner
+// removed it; the client then stops and deletes Hearth's own data there.
+const DeviceRemoved = "device removed"
+
 type CreateTeamRequest struct {
 	Name string `json:"name"`
 }

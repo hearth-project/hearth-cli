@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 )
 
 // PortalDocs are the per-user documents the web console shows, fetched for
@@ -74,6 +75,23 @@ func (e *Engine) ConsoleCall(method, path string, body json.RawMessage) (json.Ra
 // consoleAPI opens a console session with this device's login and returns
 // a client that sends its cookie.
 func (e *Engine) consoleAPI() (*API, map[string]string, error) {
+	var err error
+	for try := 0; try < 3; try++ {
+		if try > 0 {
+			time.Sleep(time.Duration(try) * 700 * time.Millisecond)
+		}
+		var web *API
+		var hdr map[string]string
+		web, hdr, err = e.openConsole()
+		if err == nil || !transientNetErr(err) {
+			return web, hdr, err
+		}
+	}
+	return nil, nil, err
+}
+
+// openConsole is one attempt of consoleAPI.
+func (e *Engine) openConsole() (*API, map[string]string, error) {
 	path, err := e.API.AdminLink()
 	if err != nil {
 		return nil, nil, err
@@ -83,6 +101,21 @@ func (e *Engine) consoleAPI() (*API, map[string]string, error) {
 		return nil, nil, err
 	}
 	return NewAPI(e.API.Base, "", e.API.HC), map[string]string{"Cookie": cookie, "X-Hearth-Admin": "1"}, nil
+}
+
+// transientNetErr reports a dropped connection worth one more try (the
+// server or a proxy closed it before answering). HTTP errors are final.
+func transientNetErr(err error) bool {
+	if StatusOf(err) != 0 {
+		return false
+	}
+	msg := err.Error()
+	for _, s := range []string{"EOF", "connection reset", "broken pipe", "server closed idle connection"} {
+		if strings.Contains(msg, s) {
+			return true
+		}
+	}
+	return false
 }
 
 func (e *Engine) fetchDocs(paths map[string]string) (docs map[string]json.RawMessage, errs map[string]string, err error) {
