@@ -67,6 +67,19 @@ fetch_release() {
   fi
   echo "${v#v}" > "$tmp/VERSION"
   cp "$tmp"/hearth-* "$tmp/SHA256SUMS" "$tmp/VERSION" "$DIST/"
+  # The macOS menu bar app, attached to the release by a Mac build that can
+  # finish a few minutes after the binaries: optional (re-run to pick it up).
+  if curl -fsSL --retry 2 -o "$tmp/hearth-menubar-darwin.zip" "$base/hearth-menubar-darwin.zip" 2>/dev/null &&
+     curl -fsSL --retry 2 -o "$tmp/hearth-menubar-darwin.zip.sha256" "$base/hearth-menubar-darwin.zip.sha256" 2>/dev/null; then
+    if (cd "$tmp" && sha -c hearth-menubar-darwin.zip.sha256) >/dev/null 2>&1; then
+      cp "$tmp/hearth-menubar-darwin.zip" "$DIST/"
+      say "menu bar app included (Macs get it from hearth setup / hearth app install)"
+    else
+      echo "checksum mismatch for the menu bar app; not installed" >&2
+    fi
+  else
+    say "no menu bar app in this release (yet); re-run later to add it"
+  fi
   rm -r "$tmp"
 }
 

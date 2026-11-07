@@ -162,7 +162,7 @@ desktop/macos/scripts/build-app.sh /tmp/hearth-app <version>    # needs Swift 5.
 cp /tmp/hearth-app/hearth-menubar-darwin.zip $D/dist/
 ```
 
-The `macos-app` GitHub workflow builds the same zip (artifact `hearth-menubar`). The app is signed ad hoc; `hearth app install` removes the download quarantine, so Gatekeeper does not block it.
+A release already carries the zip (`hearth-menubar-darwin.zip` with a `.sha256`, built on a Mac by the release workflow a few minutes after the binaries), and `scripts/deploy-server.sh` copies it into `dist/` with them; re-run the script to pick it up if it was not there yet. The `macos-app` GitHub workflow builds the same zip for every change (artifact `hearth-menubar`). The app is signed ad hoc; `hearth app install` removes the download quarantine, so Gatekeeper does not block it.
 
 ## Performance
 

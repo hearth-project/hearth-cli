@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- One install on a Mac: `hearth setup` (so the install one-liner) now also installs the menu bar app when the server has one to hand out (`--no-app` or `HEARTH_NO_APP=1` skips; an installed app is updated with `hearth app install`). The release workflow builds the app on a Mac and attaches `hearth-menubar-darwin.zip` (+ `.sha256`) to the GitHub release, and `scripts/deploy-server.sh` puts it into the server's `dist/` with the binaries.
+
 ## 0.1.1 — 2026-11-07
 
 - The web console is gone. The server no longer serves `/app` and `/admin` (the pages, about 2000 lines of JavaScript including the in-browser Argon2id), the password sign-in and vault-key endpoints that only the pages used (`POST /v1/web|admin/login`, `/logout`, `GET /v1/me/vault-wrap`, `POST /v1/me/vault-key`), `hearth panel`, `hearth server admin link`, the console button of the download page, and the macOS app's embedded web view. Users and admins use the macOS menu bar app (`hearth app install`); on other systems `hearth machine list`, `hearth team ...`, `hearth server admin ...` and, for the administration documents, `hearth app admin-data --json` / `hearth app admin-call` do the same. What the app uses stays: a logged-in device asks for a one-time link (`POST /v1/web/link`) and redeems it at `GET /v1/web/session` (it replaces `/app/login`) for the session cookie behind `/v1/me` and `/v1/admin`. Older macOS apps that open the embedded web view stop working: update the app (`hearth app install`).

@@ -162,7 +162,7 @@ desktop/macos/scripts/build-app.sh /tmp/hearth-app <版本号>    # 需要 Swift
 cp /tmp/hearth-app/hearth-menubar-darwin.zip $D/dist/
 ```
 
-GitHub 上的 `macos-app` workflow 也会构建同一个 zip（artifact 名为 `hearth-menubar`）。小程序是 ad hoc 签名；`hearth app install` 会去掉下载隔离标记，Gatekeeper 不会拦。
+发布的 Release 里已经带这个 zip（`hearth-menubar-darwin.zip` 和 `.sha256`，由发布流程在 Mac 上构建，比二进制晚几分钟），`scripts/deploy-server.sh` 会把它和二进制一起放进 `dist/`；还没有时稍后重新运行脚本即可。GitHub 上的 `macos-app` workflow 对每次改动也会构建同一个 zip（artifact 名为 `hearth-menubar`）。小程序是 ad hoc 签名；`hearth app install` 会去掉下载隔离标记，Gatekeeper 不会拦。
 
 ## 性能
 

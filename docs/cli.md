@@ -253,6 +253,7 @@ Flags:
       --insecure         allow plain HTTP to a non-loopback server
       --invite string    invite code: create the account first (first machine only)
       --new              create the account first (first machine only; servers in invite mode also need --invite)
+      --no-app           on a Mac, do not install the menu bar app [$HEARTH_NO_APP=1]
       --no-daemon        do not start background sync
       --no-import        do not record this machine for new ones (its skills and agents, new setup items, shell lines)
       --no-register      never create the account; fail when the login does not exist
