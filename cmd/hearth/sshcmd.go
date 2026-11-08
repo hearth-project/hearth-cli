@@ -86,8 +86,12 @@ func sshCmd() *cobra.Command {
 			if tty {
 				argv = append(argv, "-t") // a terminal for the command: QR-code logins, prompts
 			}
-			addr, ok := ep.ReachableAddress(3 * time.Second)
-			if !ok {
+			addr, opts, ok, relayed := sshRoute(e, ep, 3*time.Second)
+			switch {
+			case relayed:
+				fmt.Fprintf(os.Stderr, "hearth: %s does not answer directly; connecting through the Hearth server\n", ep.Name)
+				argv = append(argv, opts...)
+			case !ok:
 				// Still try: the user's ~/.ssh/config may route it (ProxyJump).
 				fmt.Fprintln(os.Stderr, unreachableHint(e, ep))
 			}
@@ -255,7 +259,8 @@ func unreachableHint(e *client.Engine, ep client.SSHEndpoint) string {
 	case dev != nil && dev.LastIP != "" && !slices.Contains(ep.Addrs(), dev.LastIP) && status != "ok":
 		msg += fmt.Sprintf("\n  Its requests reach the Hearth server from %s, an address its sshd does not listen on: it is probably"+
 			"\n  behind NAT (a container's private network) or a proxy, and your machines cannot connect in. On that machine,"+
-			"\n  set [ssh] address to an address of it your devices reach, or map a port to %s.", dev.LastIP, where[0])
+			"\n  set [ssh] address to an address of it your devices reach, or map a port to %s. With a newer Hearth on both sides"+
+			"\n  its daemon accepts connections through the Hearth server (the relay): hearth self-update there, and check [ssh] relay is not false.", dev.LastIP, where[0])
 	case status == "ok":
 		msg += "\n  The Hearth server reaches it, so this machine's network does not (a firewall?): try from another machine."
 	default:
@@ -372,6 +377,10 @@ func writeSSHConfig(e *client.Engine, create bool) (int, string, error) {
 			aliases[k], host, ep.Port, ep.User, client.SSHKeyPath(e.Home), client.SSHKnownHosts(e.Home))
 		if client.SSHForwardAgent(e.Home) {
 			b.WriteString("  ForwardAgent yes\n") // git there uses this device's keys; none stored there
+		}
+		// Direct when the address answers, else through the Hearth server.
+		if pc := relayProxyCommand(e.Home, ep.DeviceID, false); pc != "" {
+			fmt.Fprintf(&b, "  ProxyCommand %s\n", pc)
 		}
 	}
 	if n == 0 && (i < 0 || j < i) {

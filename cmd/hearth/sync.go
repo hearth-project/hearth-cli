@@ -311,6 +311,11 @@ func daemonCmd() *cobra.Command {
 			ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 			defer stop()
 			log.Printf("hearth daemon: syncing every %s to %s", interval, e.Cfg.Server)
+			// Other machines of the user reach this one's sshd through the
+			// server when they cannot connect to it directly ([ssh] relay).
+			if client.RelayOn(e.Home) {
+				go e.RunRelayAgent(ctx, nil, log.Printf)
+			}
 			if err := client.AutoEnableIdentityLogin(e.Home); err != nil {
 				log.Printf("identity login: %v", err)
 			}

@@ -92,6 +92,10 @@ func (s *Server) routes() {
 	m.HandleFunc("DELETE /v1/secrets/{id}", s.authed(s.handleDeleteSecret))
 	m.HandleFunc("GET /v1/library", s.authed(s.handleGetLibrary))
 	m.HandleFunc("GET /v1/transfer/config", s.authed(s.handleTransferConfig))
+	m.HandleFunc("GET /v1/relay/status", s.authed(s.handleRelayStatus))
+	m.HandleFunc("GET /v1/relay/agent", s.authed(s.handleRelayAgent))
+	m.HandleFunc("GET /v1/relay/connect", s.authed(s.handleRelayConnect))
+	m.HandleFunc("GET /v1/relay/accept", s.authed(s.handleRelayAccept))
 	if s.cfg.SiteAuth {
 		m.HandleFunc("GET /v1/site", s.authed(s.handleSite))
 	} else {

@@ -86,6 +86,11 @@ type SSHConfig struct {
 	// revoked while that daemon was down stops working anyway. Default 7,
 	// 0 = never.
 	KeyDays *int `toml:"key_days,omitempty"`
+	// Relay lets the user's other machines reach this one through the
+	// Hearth server when they cannot connect to its sshd directly (a
+	// container on a private network): the daemon keeps one outbound
+	// connection to the server for it. Default true; it needs [ssh] enabled.
+	Relay *bool `toml:"relay,omitempty"`
 	// ForwardAgent: SSH sessions to your machines (hearth ssh, the Host
 	// entries) forward this device's ssh-agent, so git on the machine uses
 	// the keys here and no private key is stored there. Default true.
