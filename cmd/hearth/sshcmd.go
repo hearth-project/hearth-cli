@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -361,6 +362,7 @@ func writeSSHConfig(e *client.Engine, create bool) (int, string, error) {
 		return 0, path, err
 	}
 	aliases := sshAliases(e, all)
+	routes := sshConfigRoutes(e.Home, e.Cfg.DeviceID, all, e.RelayDevices)
 	var b strings.Builder
 	b.WriteString(sshBlockBegin + "\n")
 	n := 0
@@ -369,18 +371,14 @@ func writeSSHConfig(e *client.Engine, create bool) (int, string, error) {
 			continue // this machine
 		}
 		n++
-		host := ep.Address
-		if len(ep.Addrs()) > 1 {
-			host, _ = ep.ReachableAddress(1500 * time.Millisecond)
-		}
+		host := routes[k].host
 		fmt.Fprintf(&b, "Host %s\n  HostName %s\n  Port %d\n  User %s\n  IdentityFile %s\n  IdentitiesOnly yes\n  UserKnownHostsFile %s\n  StrictHostKeyChecking yes\n",
 			aliases[k], host, ep.Port, ep.User, client.SSHKeyPath(e.Home), client.SSHKnownHosts(e.Home))
 		if client.SSHForwardAgent(e.Home) {
 			b.WriteString("  ForwardAgent yes\n") // git there uses this device's keys; none stored there
 		}
-		// Direct when the address answers, else through the Hearth server.
-		if pc := relayProxyCommand(e.Home, ep.DeviceID, false); pc != "" {
-			fmt.Fprintf(&b, "  ProxyCommand %s\n", pc)
+		if routes[k].proxy != "" {
+			fmt.Fprintf(&b, "  ProxyCommand %s\n", routes[k].proxy)
 		}
 	}
 	if n == 0 && (i < 0 || j < i) {
@@ -402,4 +400,58 @@ func writeSSHConfig(e *client.Engine, create bool) (int, string, error) {
 		return 0, path, err
 	}
 	return n, path, os.WriteFile(path, []byte(text), 0o600)
+}
+
+// sshHostRoute is what a machine's Host entry gets: the address, and a
+// ProxyCommand only when the relay is the way to it.
+type sshHostRoute struct {
+	host  string
+	proxy string
+}
+
+// sshConfigRoutes decides the entries of the managed block. A machine whose
+// sshd answers from here gets its plain entry, as before the relay existed.
+// Only a machine that does not answer but holds a relay connection gets a
+// ProxyCommand (direct first, relay when the direct address still does not
+// answer), so existing connections and configuration stay as they are. The
+// block is rewritten on every sync, so the entry follows reachability.
+func sshConfigRoutes(home, self string, eps []client.SSHEndpoint, relayDevices func() ([]string, error)) []sshHostRoute {
+	routes := make([]sshHostRoute, len(eps))
+	reachable := make([]bool, len(eps))
+	var wg sync.WaitGroup
+	for k, ep := range eps {
+		routes[k].host = ep.Address
+		if ep.DeviceID == self {
+			reachable[k] = true // not written
+			continue
+		}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			addr, ok := ep.ReachableAddress(1500 * time.Millisecond)
+			reachable[k] = ok
+			if len(ep.Addrs()) > 1 {
+				routes[k].host = addr
+			}
+		}()
+	}
+	wg.Wait()
+	if client.RelayDisabled(home) {
+		return routes
+	}
+	var relayed []string
+	var asked bool
+	for k, ep := range eps {
+		if reachable[k] {
+			continue
+		}
+		if !asked {
+			asked = true
+			relayed, _ = relayDevices() // unknown: no machine is changed
+		}
+		if slices.Contains(relayed, ep.DeviceID) {
+			routes[k].proxy = relayProxyCommand(home, ep.DeviceID, false)
+		}
+	}
+	return routes
 }
