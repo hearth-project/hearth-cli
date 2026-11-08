@@ -52,7 +52,7 @@ func main() {
 		whoamiCmd(), identityCmd(),
 		pushCmd(), daemonCmd(), appCmd(), cpCmd(), xferCmd(), transferCmd(), restoreCmd(), sessionCmd(), deviceCmd(), setupCmd(), libCmd(), mcpCmd(), secretCmd(), passwdCmd(), recoverCmd(), toolsCmd(),
 		recipeCmd(), doctorCmd(), saveCmd(), envCmd(), upCmd(), mcpConfigCmd(), agentsCmd(),
-		teamCmd(), sourceCmd(), findCmd(), linkCmd(), unlinkCmd(), linksCmd(), updateCmd(), publishCmd(), learnCmd(), codexThreadsCmd(), codexImportCmd(), agentCmd(), backupSelCmd(), siteCmd(), docsCmd(), selfUpdateCmd(), configCmd(), machineCmd(), onboardCmd(), recoveryKeyCmd(), shellCmd(), recallCmd(), memoryCmd(), sshCmd())
+		teamCmd(), sourceCmd(), findCmd(), linkCmd(), unlinkCmd(), linksCmd(), updateCmd(), publishCmd(), learnCmd(), codexThreadsCmd(), codexImportCmd(), agentCmd(), backupSelCmd(), siteCmd(), docsCmd(), selfUpdateCmd(), configCmd(), machineCmd(), onboardCmd(), recoveryKeyCmd(), sshProxyCmd(), relayAgentCmd(), shellCmd(), recallCmd(), memoryCmd(), sshCmd())
 	groupCommands(root)
 	if err := root.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)

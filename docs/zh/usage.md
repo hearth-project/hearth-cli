@@ -311,6 +311,10 @@ hearth transfer cancel dt-20261105-3dbb92fd
 
 - **公钥定期过期、自动续期。** 每台机器对一把设备公钥只放行 7 天（`[ssh] key_days`，`0` 表示不过期；需要 OpenSSH 8.2 及以上），daemon 每天续期。设备被吊销后，在下一轮同步时失效；daemon 没在运行的机器上，最晚 7 天后失效。
 - **ssh-agent 转发**（`[ssh] forward_agent`，默认开启）：连接时转发本设备的 ssh-agent，机器上 `git push` 用的是本机已加载的 key（`ssh-add`，Mac 上 `ssh-add --apple-use-keychain`），私钥不用放到那台机器上。连接期间，那台机器上的 root 能借用转发过去的 agent（拿不走私钥）；不信任的机器请关掉。
+- **没人连得上的机器（中转）。** 在私网容器里、或在防火墙后面的机器，也能接受你其他机器的 SSH：它的 daemon 保持一条到 Hearth server 的出站连接（TLS，和它做的其他事一样），别的机器要连它时，由 server 把两边接起来。不需要开放或映射任何端口。传输的就是 SSH 连接本身，所以 server 转发的是它读不懂的密文，ssh 仍然会按机器发布的主机密钥校验。`hearth ssh`、`~/.ssh/config` 里的条目（给 ssh、scp、rsync、VS Code / Cursor 的 Remote-SSH、Codex Desktop 用）和 `hearth cp` 都先试直连地址，只有直连不通才走中转。`~/.ssh/config` 里只有「从本机连不通、但已连上中转」的机器才会多一行 `ProxyCommand`，其余条目和以前一样；每次同步都会按当前的连通情况重写这个块。端口转发（`-L`、`-R`、`-D`）和 agent 转发也能走中转。在某台机器上设 `[ssh] relay = false` 即关闭（它既不加入也不使用中转）。
+  - 中转用的是 server 的带宽：能互相直连的机器之间的大量数据应该走直连（`hearth cp` 会这样做），跨集群用 `hearth transfer`。每个账号同时最多 64 条中转连接。
+  - 中转状态放在一个 server 进程的内存里：多个 server 实例放在负载均衡后面时，机器和客户端必须连到同一个实例。
+  - 需要目标机器自己的 sshd（Hearth 会启动它，可以监听任意地址，用 `[ssh] address` 设成 `127.0.0.1` 也行），并且两边都是较新的 Hearth。
 
 ## 9. Mac 菜单栏小程序
 

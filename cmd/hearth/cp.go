@@ -184,7 +184,7 @@ func remoteCopy(ctx context.Context, e *client.Engine, eps []client.SSHEndpoint,
 	// so a copy between two machines can try from the other side.
 	if ep, err := findSSHTarget(e, eps, machine); err != nil {
 		return nil, &unreachableError{err}
-	} else if _, ok := ep.ReachableAddress(5 * time.Second); !ok {
+	} else if _, _, ok, _ := sshRoute(e, ep, 5*time.Second); !ok {
 		return nil, &unreachableError{fmt.Errorf("%s does not answer at %s (SSH, port %d) from here", machine, strings.Join(ep.Addrs(), ", "), ep.Port)}
 	}
 	bin := "hearth"
@@ -227,7 +227,7 @@ func remoteCopy(ctx context.Context, e *client.Engine, eps []client.SSHEndpoint,
 		if err != nil {
 			return nil, err
 		}
-		addr, _ := ep.ReachableAddress(3 * time.Second)
+		addr, route, _, _ := sshRoute(e, ep, 3*time.Second)
 		var locals []string
 		for i := 0; i < n; i++ {
 			l, err := net.Listen("tcp", "127.0.0.1:0")
@@ -236,7 +236,7 @@ func remoteCopy(ctx context.Context, e *client.Engine, eps []client.SSHEndpoint,
 			}
 			lp := l.Addr().(*net.TCPAddr).Port
 			l.Close()
-			argv := append(sshArgs(e.Home, ep), "-N", "-o", "ExitOnForwardFailure=yes",
+			argv := append(append(sshArgs(e.Home, ep), route...), "-N", "-o", "ExitOnForwardFailure=yes",
 				"-L", fmt.Sprintf("127.0.0.1:%d:127.0.0.1:%d", lp, port), ep.User+"@"+addr)
 			t := exec.Command("ssh", argv...)
 			if err := t.Start(); err != nil {

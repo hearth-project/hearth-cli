@@ -79,6 +79,7 @@ type Config struct {
 type Server struct {
 	cfg     Config
 	site    siteCache
+	relay   *relayHub // machines that accept connections through the server (relay.go)
 	st      *store
 	mux     *http.ServeMux
 	secret  []byte // for deterministic fake prelogin salts
@@ -159,7 +160,7 @@ func New(cfg Config) (*Server, error) {
 		return nil, err
 	}
 	s := &Server{cfg: cfg, st: st, secret: secret, limiter: newLimiter(cfg.AuthPerMin, time.Minute), dist: dist, auth: newAuthCache(), search: newSearchCache(), quota: newQuotaCache(),
-		activity: newActivity(), versions: newToolVersions(), started: time.Now()}
+		activity: newActivity(), versions: newToolVersions(), relay: newRelayHub(), started: time.Now()}
 	if s.adminKey, err = st.setting("admin_session_key", func() []byte { return crypto.RandomBytes(32) }); err != nil {
 		st.close()
 		return nil, err
