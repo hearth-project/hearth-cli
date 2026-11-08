@@ -166,7 +166,13 @@ func (e *Engine) Accept(f Finding, learned *recipe.Recipe) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		if err := e.SetSecret(Secret{Name: sf.name, Value: v}); err != nil {
+		sec := Secret{Name: sf.name, Value: v}
+		if skillOfSecret(sf.name) != "" {
+			// A skill's credential knows its path: hearth secret use <skill>
+			// (prepare_credentials) writes it there on any machine.
+			sec.RestoreTo = paths.Contract(sf.path)
+		}
+		if err := e.SetSecret(sec); err != nil {
 			return "", err
 		}
 		did = append(did, "secret "+sf.name)

@@ -249,3 +249,39 @@ func SkillDescription(data []byte) string {
 	}
 	return ""
 }
+
+// SkillCredentials lists the credential files a skill keeps outside its
+// directory, as its SKILL.md front matter declares them:
+//
+//	metadata:
+//	  hearth:
+//	    credentials:
+//	      - ${WORKSPACE}/.config/ku/ku-doc-manage.yaml
+//	      - ~/.config/uuap/.eac_ugate_token_${HEARTH_USER}
+//
+// Paths start with ~/, ${HOME}/, ${WORKSPACE}/ or /, may use
+// ${HEARTH_USER} (the account's user name) and globs. Hearth backs the
+// files up encrypted and writes them back when the skill needs them.
+func SkillCredentials(data []byte) []string {
+	fm, _, err := splitFrontMatter(data)
+	if err != nil {
+		return nil
+	}
+	var v struct {
+		Metadata struct {
+			Hearth struct {
+				Credentials []string `yaml:"credentials"`
+			} `yaml:"hearth"`
+		} `yaml:"metadata"`
+	}
+	if yaml.Unmarshal(fm, &v) != nil {
+		return nil
+	}
+	var out []string
+	for _, p := range v.Metadata.Hearth.Credentials {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}

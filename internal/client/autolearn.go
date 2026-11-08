@@ -32,12 +32,13 @@ func AutoLearnOn(home string) bool {
 	return *c.Learn.Auto
 }
 
-// AutoCredentials reports [learn] auto_credentials and whether the user
-// decided it.
+// AutoCredentials reports [learn] auto_credentials (default on: new
+// credentials are recorded, end-to-end encrypted, without asking) and
+// whether the user set it.
 func AutoCredentials(home string) (on, decided bool) {
 	c, err := UserConfig(home)
 	if err != nil || c.Learn == nil || c.Learn.AutoCredentials == nil {
-		return false, false
+		return true, false
 	}
 	return *c.Learn.AutoCredentials, true
 }

@@ -175,8 +175,9 @@ type LearnConfig struct {
 	// the backup selection (@credentials).
 	Auto *bool `toml:"auto,omitempty"`
 	// AutoCredentials: automatic learning also uploads credentials (SSH
-	// keys, agent and git logins, token files; end-to-end encrypted). nil =
-	// not decided yet (setup asks once); only with @credentials on.
+	// keys, agent and git logins, token files, files skills declare;
+	// end-to-end encrypted). nil = on (the default); only with
+	// @credentials on.
 	AutoCredentials *bool `toml:"auto_credentials,omitempty"`
 }
 
@@ -341,7 +342,8 @@ const Template = `# Hearth settings — the only file you need to edit. It syncs
 # The background sync records new findings by itself (credentials only
 # while @credentials is on in [backup]); false = only with "hearth learn".
 # auto = true
-# Also SSH keys, agent / git logins and token files (encrypted); setup asks.
+# Also SSH keys, agent / git logins, token files and the files skills
+# declare (encrypted); on by default, false = only with "hearth learn".
 # auto_credentials = true
 
 [memory]

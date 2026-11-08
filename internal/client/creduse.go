@@ -94,8 +94,8 @@ func (e *Engine) UseCredentials(targets []string, ttl time.Duration) ([]CredUse,
 			path = libBundlePath(root, bp)
 		} else {
 			for _, t := range targets {
-				if t == s.Name {
-					target = t
+				if t == s.Name || t == skillOfSecret(s.Name) {
+					target = t // a file secret, or one a skill declared
 				}
 			}
 			if target != "" && s.RestoreTo == "" {
@@ -144,6 +144,15 @@ func (e *Engine) UseCredentials(targets []string, ttl time.Duration) ([]CredUse,
 		if !matched[t] {
 			missing = append(missing, t)
 		}
+	}
+	var why []string
+	for _, t := range missing {
+		if w := e.missingSkillCredentials(t); w != "" {
+			why = append(why, w)
+		}
+	}
+	if len(why) == len(missing) && len(why) > 0 {
+		return out, fmt.Errorf("%s", strings.Join(why, "; "))
 	}
 	if len(missing) > 0 {
 		return out, fmt.Errorf("no credentials stored for %s (hearth secret list; record one with hearth secret set, or keep it inside the skill on a machine that has it)", strings.Join(missing, ", "))

@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"log"
-	"strings"
 
 	"github.com/hearth-project/hearth-cli/internal/client"
 )
@@ -70,36 +69,4 @@ func daemonRecord(e *client.Engine, seen map[string]string) {
 		seen["rec/"+msg] = "1"
 		log.Print(msg)
 	})
-}
-
-// askAutoCredentials asks once (in a terminal) whether new credentials on
-// this account's machines are uploaded automatically.
-func askAutoCredentials(e *client.Engine) {
-	if _, decided := client.AutoCredentials(e.Home); decided || !isTTY() {
-		return
-	}
-	n := 0
-	for _, f := range e.LearnPending() {
-		if f.Kind == "credential" || f.Kind == "identity" {
-			n++
-		}
-	}
-	if n == 0 {
-		return
-	}
-	a, ok := askSetup("Keep new credentials of your machines automatically?",
-		[]string{plural(n, "credential", "credentials") + " here are not recorded yet (SSH keys, agent and git logins, token files).",
-			"They are uploaded end-to-end encrypted; your other machines restore them when asked."},
-		[]string{"Press ENTER or type yes to keep them automatically", "Or type no to choose each time (hearth learn)"}, "yes")
-	if !ok {
-		return
-	}
-	on := !strings.EqualFold(a, "n") && !strings.EqualFold(a, "no")
-	if err := client.SetAutoCredentials(e.Home, on); err != nil {
-		fmt.Println("config:", err)
-		return
-	}
-	if !on {
-		fmt.Println("Only when you choose: hearth learn")
-	}
 }
