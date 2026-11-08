@@ -120,13 +120,25 @@ hearth secret exec -- <command>                        # UPPER_CASE secrets as e
 
 When a skill or script needs a token, do not put the value in the skill: keep it in a local auth file (e.g. `${WORKSPACE}/.config/<tool>/…`), back that file up with `secret set --file`, and have the skill read the file. On a machine that restores on demand (every new one), credentials come when they are needed: your agent calls the `hearth` MCP tool `prepare_credentials` for the skill it is about to run, or you run `hearth secret use <skill|name>` (files written 0600, removed after `--ttl`, default 12 hours, or now with `hearth secret clean`; never uploaded from that machine), and `hearth secret exec [--for <skill>] -- <command>` puts env secrets (and, with `--for`, files) in place for one command only. The values never pass through the agent. A credential file a skill ships with (a cloud CLI's `credentials`, a key, a file only you may read) is kept out of the plaintext library: it syncs end-to-end encrypted and comes back into the skill on your other machines. Likely secrets elsewhere in the library (config, recipes, agents) still block the upload; mark documented examples with a `hearth:allow-secret` comment.
 
+A skill that keeps a credential outside its directory (an auth file under `~/.config`, a token cache) declares it in its `SKILL.md` front matter, and Hearth backs it up with the skill:
+
+```yaml
+metadata:
+  hearth:
+    credentials:
+      - ${WORKSPACE}/.config/ku/ku-doc-manage.yaml
+      - ~/.config/uuap/.eac_ugate_token_${HEARTH_USER}
+```
+
+Paths start with `~/`, `${HOME}/`, `${WORKSPACE}/` or `/`; `${HEARTH_USER}` is the user name of your Hearth account (before the `@`) and globs work. The background sync records every declared file it finds as an encrypted secret of the skill (`skill.<skill>.<file>`, restored to the same path), and `prepare_credentials` / `hearth secret use <skill>` write them back where the skill reads them. When none was recorded yet, the answer names the files and says to run `hearth learn` on a machine where the skill works.
+
 ## 5. Recording this machine's setup (learn)
 
 Most of it happens by itself: the background sync (every 20 minutes, and `hearth setup` at its end) records new findings with the proposal `hearth learn` would make (items that look machine-specific only for machines like this one):
 
 - skills / agents added to the agents go into the library (not the ones that look like they hold a credential);
 - settings: environment variables, CLI versions, MCP servers, personal files of the workspace;
-- credentials (SSH keys, agent / git logins, token files): setup asks once whether to keep them automatically (end-to-end encrypted); change it with `hearth learn --auto-credentials=true|false`;
+- credentials (SSH keys, agent / git logins, token files, the files skills declare): recorded automatically too, end-to-end encrypted; `hearth learn --auto-credentials=false` leaves them to `hearth learn` instead;
 - shell: your own part of `~/.bashrc` / `~/.zshrc` (without the distribution's default, blocks managed by tools such as conda, and Hearth's own blocks) and the whole `~/.bash_aliases`, encrypted. A new machine gets them under `<hearth home>/shell/`, sourced from a managed block in its rc file; its own rc is not replaced, paragraphs it already has are not repeated, and lines sourcing files it does not have are skipped. Changes from several machines are merged; a paragraph deleted on one machine is deleted from the stored copy. `hearth shell show` prints what is kept, `hearth shell save` / `restore` run it now.
 
 Two kinds of items need you: recorded items whose copy here differs from the stored one (the other machine's may be right), and credentials while automatic recording of them is off. `hearth status` counts them; `hearth learn` handles them. Off: `[learn] auto = false`; shell off: `[shell] sync = false` in config.toml.

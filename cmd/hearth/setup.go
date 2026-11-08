@@ -371,7 +371,6 @@ func setupCmd() *cobra.Command {
 			// Record this machine for the next one: its skills and agents,
 			// new findings, shell lines.
 			if !noImport {
-				askAutoCredentials(e)
 				out.quiet(func() { autoRecord(e, func(f string, a ...any) { fmt.Printf(f+"\n", a...) }) })
 			}
 			if noDaemon {

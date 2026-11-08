@@ -120,13 +120,25 @@ hearth secret exec -- <命令>                           # 以环境变量形式
 
 skill 或脚本需要 token 时，不要把真实值写进 skill：放在本地认证文件里（如 `${WORKSPACE}/.config/<工具>/…`），用上面的 `secret set --file` 加密备份，skill 从该文件读取。按需恢复的机器（所有新机器）上，凭证在用到时才取：agent 运行某个 skill 前调用 `hearth` MCP 工具 `prepare_credentials`，或者你执行 `hearth secret use <skill|名字>`（文件权限 0600，`--ttl` 后删除，默认 12 小时，也可以 `hearth secret clean` 立刻删；这台机器不会再上传它们）；`hearth secret exec [--for <skill>] -- <命令>` 只为这一条命令注入环境变量（加 `--for` 时连文件一起，命令结束即删）。凭证值不经过 agent。skill 自带的凭证文件（云 CLI 的 `credentials`、密钥、只有本人可读的文件）不会进明文 library：它们端到端加密同步，在你的其他机器上写回 skill 里。library 其他位置（配置、recipes、agents）发现疑似凭证仍会拒绝上传；确认是文档示例时，在该行加注释 `hearth:allow-secret`。
 
+skill 把凭证放在自己目录之外时（`~/.config` 下的认证文件、token 缓存），在它的 `SKILL.md` front matter 里声明，Hearth 就会和这个 skill 一起备份：
+
+```yaml
+metadata:
+  hearth:
+    credentials:
+      - ${WORKSPACE}/.config/ku/ku-doc-manage.yaml
+      - ~/.config/uuap/.eac_ugate_token_${HEARTH_USER}
+```
+
+路径以 `~/`、`${HOME}/`、`${WORKSPACE}/` 或 `/` 开头；`${HEARTH_USER}` 是你 Hearth 账号的用户名（`@` 前面的部分），也可以用通配符。后台同步找到声明的文件，就把它记录成这个 skill 的加密 secret（`skill.<skill>.<文件>`，写回同一路径）；`prepare_credentials` / `hearth secret use <skill>` 会把它们写回 skill 读取的位置。还没有任何机器记录过时，返回信息会列出缺哪些文件，并提示在 skill 能用的机器上执行 `hearth learn`。
+
 ## 5. 记录这台机器的环境（learn）
 
 大部分不用手动做：后台同步每 20 分钟（以及 `hearth setup` 结束时）自动记录新发现的项目，用的是 `hearth learn` 会给的建议（看起来和机器有关的只记给同类机器）：
 
 - skills / agents：本机 agent 里新加的复制进个人库（疑似含凭证的不复制）；
 - 设置：环境变量、CLI 版本、MCP 配置、工作目录里的个人文件等；
-- 凭证（SSH key、agent / git 登录、token 文件）：setup 时问一次"是否自动备份"，同意后同样自动记录（端到端加密）；之后可用 `hearth learn --auto-credentials=true|false` 修改；
+- 凭证（SSH key、agent / git 登录、token 文件、skill 声明的凭证文件）：同样自动记录（端到端加密），不再询问；`hearth learn --auto-credentials=false` 可改为只在执行 `hearth learn` 时由你选择；
 - shell：`~/.bashrc` / `~/.zshrc` 里你自己加的部分（去掉发行版默认内容、conda 等工具管理的块和 Hearth 自己的块）以及整个 `~/.bash_aliases`，加密保存。新机器上写到 `<hearth home>/shell/`，在 rc 文件里加一个受管块去 source，不覆盖新机器原有的 rc；新机器 rc 里已有的段落不重复，source 不存在的文件会被跳过。多台机器的修改会合并，在某台机器上删掉的段落会从备份里删掉。`hearth shell show` 查看会保存什么，`hearth shell save` / `restore` 立即执行。
 
 只有两类需要你决定：已经记录过、但本机的副本和备份不同的（可能另一台机器的才是对的），以及没开自动备份时的凭证。`hearth status` 会提示数量，`hearth learn` 处理。关闭自动记录：`config.toml` 里 `[learn] auto = false`；关闭 shell：`[shell] sync = false`。

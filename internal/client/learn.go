@@ -416,6 +416,11 @@ func (e *Engine) Discover() []Finding {
 		}
 	}
 
+	// Credential files skills declare (outside their directory).
+	for _, f := range e.skillCredentialFindings() {
+		add(f)
+	}
+
 	disambiguateSecrets(out)
 	return e.filterBySelection(out)
 }
