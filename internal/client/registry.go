@@ -22,6 +22,10 @@ type Link struct {
 	Version int64  `json:"version,omitempty"` // team packages
 	Commit  string `json:"commit,omitempty"`  // git sources
 	SHA256  string `json:"sha256"`
+	// Pinned: stays at Version until the user moves it (hearth lib link
+	// --pin / --version N, hearth lib update --yes); without it a link to a
+	// trusted team's package follows the newest version (FollowUpdates).
+	Pinned bool `json:"pinned,omitempty"`
 	// Auto: linked because it is one of the team's most used items
 	// ([teams] use_top); updated and removed by SyncTeamTop.
 	Auto bool `json:"auto,omitempty"`

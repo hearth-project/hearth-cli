@@ -12,13 +12,17 @@ import (
 	"github.com/hearth-project/hearth-cli/internal/library"
 )
 
-// AddLink records a fetched candidate in library/links.json.
-func (e *Engine) AddLink(c Candidate, sum string) (Link, error) {
+// AddLink records a fetched candidate in library/links.json; a link to a
+// trusted team's package then follows the team's newest version.
+func (e *Engine) AddLink(c Candidate, sum string) (Link, error) { return e.AddLinkWith(c, sum, false) }
+
+// AddLinkWith is AddLink with the choice to pin the link to this version.
+func (e *Engine) AddLinkWith(c Candidate, sum string, pinned bool) (Link, error) {
 	ls, err := LoadLinks(e.Home)
 	if err != nil {
 		return Link{}, err
 	}
-	l := Link{Type: c.Type, Name: c.Name, Source: c.Source.Name, Version: c.Version, Commit: c.Commit, SHA256: sum}
+	l := Link{Type: c.Type, Name: c.Name, Source: c.Source.Name, Version: c.Version, Commit: c.Commit, SHA256: sum, Pinned: pinned}
 	out := ls[:0]
 	for _, x := range ls {
 		if x.Type != l.Type || x.Name != l.Name {

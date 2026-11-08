@@ -209,6 +209,24 @@ The library is stored in plaintext on the server (visible to you only; team publ
 
 How team items get invoked: each team's 20 most used skills and 20 most used agents (by its members, last 30 days) are linked into every agent on all your machines, so the agents list and invoke them like your own (`[teams] use_top`, `use_exclude`; unlinking one keeps it out). Your own item of the same name wins. The other team skills are found through `hearth mcp` (`search_skills`, `list_skills`) and loaded by `get_skill`; that use counts toward the team ranking, so a skill that gets used becomes resident.
 
+### Versions and updates of shared skills
+
+A team package has versions: every `hearth lib publish` (or an automatic share of your most used items) that changes the content makes a new immutable version, v1, v2, …; publishing identical content makes none. The server keeps them all. Your own library has no per-skill history (it syncs as a whole between your machines).
+
+```bash
+hearth lib link bench                 # follows the team's newest version from now on
+hearth lib link bench --pin           # keep this version
+hearth lib link bench --version 2     # link version 2 and keep it (also how to go back to an older one)
+hearth lib links [--check]            # version, mode (follows / pinned / automatic) and, with --check, the newest
+hearth lib update [name] [--yes]      # newer versions with a file diff; --yes applies (also moves a pinned link)
+hearth status                         # "updated in the last 7 days: bench v1 → v3 (2h ago)"
+```
+
+- **Following.** A link to a trusted team's package moves to the newest version by itself: the daemon checks every 20 minutes, switches the link, renders the new content into the agents, and records what changed (`~ SKILL.md`, `+ run.sh`) in its log and in `hearth status`. The team's most used items (see below) follow the same way. `[teams] follow_updates = false` turns it off; run `hearth lib link <name>` again to follow again after a pin.
+- **Pinned.** `--pin` and `--version N` keep a link where it is until you move it with `hearth lib update --yes` or link again.
+- **Git sources** are always pinned to a commit; a newer commit shows up in `hearth lib update`, and `--yes` applies it. Untrusted sources never move without a review.
+- **Publishing.** A maintainer publishes a new version with `hearth lib publish skill <name> --team <team>`; your five most used skills and agents are republished automatically when they change (`share_top`). Others are published by hand.
+
 ## 7. Agents
 
 ```bash

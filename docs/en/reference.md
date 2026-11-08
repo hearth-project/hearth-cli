@@ -190,7 +190,7 @@ hearth team share-usage sglang-team [--auto]   # opt-in: daily counts of the tea
 hearth team stats sglang-team                  # most used skills in the team, last 30 days
 ```
 
-- A link pins an exact version (team) or commit (git) plus a content hash. Links and sources are stored in `library/links.json` and `library/sources.json`, so they sync with the library; a new machine downloads the pinned content on its first render.
+- A link records an exact version (team) or commit (git) plus a content hash; a link to a trusted team's package follows the team's newest version (the daemon moves it, `follow_updates`), unless it is pinned (`--pin`, `--version N`; git links always are). Moves are recorded in `<hearth home>/link-updates.json` (this machine only, last 50). Links and sources are stored in `library/links.json` and `library/sources.json`, so they sync with the library; a new machine downloads the pinned content on its first render.
 - Name resolution: an item in your own library always wins; `source:name` picks a source explicitly. Remote copies never shadow local ones.
 - Roles: members read and link, maintainers also publish, owners manage members (a team always keeps at least one owner). Non-members get 404 for a team. Any registered user can create a team.
 - Packages are stored in plaintext on the server, readable by members only.

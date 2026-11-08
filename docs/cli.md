@@ -61,9 +61,9 @@ Generated from `hearth --help` by `hearth docs cli > docs/cli.md`; every command
 | [`hearth lib resident`](#hearth-lib-resident) | Make the most used skills resident (server ranking across your machines) |
 | [`hearth lib mcp-install`](#hearth-lib-mcp-install) | Register the skill-search MCP server with Codex and Claude Code |
 | [`hearth lib find`](#hearth-lib-find) | Search every source for shared skills and agents |
-| [`hearth lib link`](#hearth-lib-link) | Use a shared skill (or --agent) in every agent, pinned to its current version |
+| [`hearth lib link`](#hearth-lib-link) | Use a shared skill (or --agent) in every agent; from a team it follows the newest version (--pin / --version N freeze it) |
 | [`hearth lib unlink`](#hearth-lib-unlink) | Stop using a shared skill (or --agent) |
-| [`hearth lib links`](#hearth-lib-links) | List linked shared skills and agents |
+| [`hearth lib links`](#hearth-lib-links) | List linked shared skills and agents: version, whether it follows newer ones (--check: and the newest) |
 | [`hearth lib update`](#hearth-lib-update) | Show (and with --yes apply) newer versions of linked items |
 | [`hearth lib publish`](#hearth-lib-publish) | Publish a library skill or agent as a new immutable version (maintainers) |
 | [`hearth lib source`](#hearth-lib-source) | Where shared skills/agents come from (searched after the local library, in order) |
@@ -841,14 +841,21 @@ Flags:
 
 ## hearth lib link
 
-Use a shared skill (or --agent) in every agent, pinned to its current version
+Links a shared skill or agent into every agent on all your machines. A package of a trusted team source
+follows the team's newest version: the daemon moves the link when a new version is published (every 20
+minutes, [teams] follow_updates = false turns that off) and `hearth status` shows what changed.
+--pin keeps the current version, --version N links version N and keeps it (also how to go back to an
+older one); run the command again without them to follow the newest version again. A git source is
+always pinned to a commit: `hearth lib update` shows the newer ones, --yes applies.
 
 ```text
 hearth lib link <name|source:name> [flags]
 
 Flags:
-      --agent   link an agent instead of a skill
-  -y, --yes     confirm linking from an untrusted source
+      --agent         link an agent instead of a skill
+      --pin           keep this version: do not follow the team's newer ones
+      --version int   link this version of a team's package and keep it
+  -y, --yes           confirm linking from an untrusted source
 ```
 
 ## hearth lib unlink
@@ -864,10 +871,13 @@ Flags:
 
 ## hearth lib links
 
-List linked shared skills and agents
+List linked shared skills and agents: version, whether it follows newer ones (--check: and the newest)
 
 ```text
-hearth lib links
+hearth lib links [flags]
+
+Flags:
+      --check   ask the sources for the newest version of each link
 ```
 
 ## hearth lib update

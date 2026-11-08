@@ -175,9 +175,47 @@ func printStatus() error {
 		}
 		t.add("library", line)
 	}
+	if line := recentUpdatesLine(home); line != "" {
+		t.add("updates", line)
+	}
 	t.print()
 	printNext(st.Next)
 	return nil
+}
+
+// recentUpdatesLine lists the linked skills and agents that moved to a newer
+// version in the last 7 days (newest first, three at most).
+func recentUpdatesLine(home string) string {
+	ups := client.RecentLinkUpdates(home, time.Now().Add(-7*24*time.Hour))
+	type span struct {
+		name     string
+		from, to int64
+		at       int64
+	}
+	var order []string
+	byItem := map[string]*span{}
+	for _, u := range ups { // newest first
+		k := u.Type + "/" + u.Name
+		if sp := byItem[k]; sp != nil {
+			sp.from = u.From // an older step of the same item
+			continue
+		}
+		byItem[k] = &span{name: u.Name, from: u.From, to: u.To, at: u.Time}
+		order = append(order, k)
+	}
+	var parts []string
+	for i, k := range order {
+		if i == 3 {
+			parts = append(parts, fmt.Sprintf("+%d more (hearth lib links)", len(order)-3))
+			break
+		}
+		sp := byItem[k]
+		parts = append(parts, fmt.Sprintf("%s v%d → v%d (%s)", sp.name, sp.from, sp.to, agoUnix(sp.at)))
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return "updated in the last 7 days: " + strings.Join(parts, ", ")
 }
 
 // syncLine describes the background daemon from its heartbeat.
@@ -466,6 +504,7 @@ func daemonCmd() *cobra.Command {
 					// agent here, so they get invoked like the user's own.
 					if err == nil {
 						logTeamTop(e, shareSeen)
+						logFollow(e, shareSeen)
 						// What a new machine needs, recorded without hearth learn.
 						daemonRecord(e, shareSeen)
 					}
@@ -1299,6 +1338,32 @@ func logTeamTop(e *client.Engine, seen map[string]string) {
 	}
 	if !changed {
 		return
+	}
+	if _, err := e.Render(false); err != nil {
+		log.Printf("render: %v", err)
+	}
+	if _, err := e.LibPush(false); err != nil {
+		log.Printf("library push: %v", err)
+	}
+}
+
+// logFollow moves the links that follow a team's newest version, logs what
+// changed, and renders and pushes when something did.
+func logFollow(e *client.Engine, seen map[string]string) {
+	ups, err := e.FollowUpdates()
+	if err != nil {
+		if msg := "skill updates: " + err.Error(); seen["follow"] != msg {
+			log.Print(msg)
+			seen["follow"] = msg
+		}
+	} else {
+		delete(seen, "follow")
+	}
+	if len(ups) == 0 {
+		return
+	}
+	for _, u := range ups {
+		log.Printf("updated %s %s from %s: v%d -> v%d %s", u.Type, u.Name, u.Source, u.From, u.To, strings.Join(u.Changes, " "))
 	}
 	if _, err := e.Render(false); err != nil {
 		log.Printf("render: %v", err)
