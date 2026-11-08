@@ -539,8 +539,15 @@ func findCmd() *cobra.Command {
 }
 
 func linkCmd() *cobra.Command {
-	var agent, yes bool
-	c := &cobra.Command{Use: "link <name|source:name>", Short: "Use a shared skill (or --agent) in every agent, pinned to its current version", Args: cobra.ExactArgs(1),
+	var agent, yes, pinIt bool
+	var version int64
+	c := &cobra.Command{Use: "link <name|source:name>", Short: "Use a shared skill (or --agent) in every agent; from a team it follows the newest version (--pin / --version N freeze it)", Args: cobra.ExactArgs(1),
+		Long: "Links a shared skill or agent into every agent on all your machines. A package of a trusted team source\n" +
+			"follows the team's newest version: the daemon moves the link when a new version is published (every 20\n" +
+			"minutes, [teams] follow_updates = false turns that off) and `hearth status` shows what changed.\n" +
+			"--pin keeps the current version, --version N links version N and keeps it (also how to go back to an\n" +
+			"older one); run the command again without them to follow the newest version again. A git source is\n" +
+			"always pinned to a commit: `hearth lib update` shows the newer ones, --yes applies.",
 		RunE: func(_ *cobra.Command, a []string) error {
 			e, err := engine()
 			if err != nil {
@@ -550,8 +557,17 @@ func linkCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if version > 0 {
+				if cand.Source.Type != "team" {
+					return fmt.Errorf("--version applies to a team's packages; %s is a git source (it is pinned to a commit)", cand.Source.Name)
+				}
+				cand.Version, cand.SHA256 = version, ""
+			}
 			dir, sum, err := e.Fetch(cand)
 			if err != nil {
+				if version > 0 {
+					return fmt.Errorf("%s has no version %d (or it cannot be fetched): %w", cand.Ref(), version, err)
+				}
 				return err
 			}
 			if cand.Source.Trust != "trusted" && !yes {
@@ -559,16 +575,34 @@ func linkCmd() *cobra.Command {
 				fmt.Printf("\n%s comes from untrusted source %q. Review the content above, then re-run with --yes to link it.\n", cand.Ref(), cand.Source.Name)
 				return nil
 			}
-			l, err := e.AddLink(cand, sum)
+			l, err := e.AddLinkWith(cand, sum, pinIt || version > 0)
 			if err != nil {
 				return err
 			}
-			fmt.Printf("linked %s %s from %s (%s)\n", l.Type, l.Name, l.Source, pin(l))
+			fmt.Printf("linked %s %s from %s (%s, %s)\n", l.Type, l.Name, l.Source, pin(l), linkMode(l, cand.Source))
 			return renderAfterChange(e)
 		}}
 	c.Flags().BoolVar(&agent, "agent", false, "link an agent instead of a skill")
 	c.Flags().BoolVarP(&yes, "yes", "y", false, "confirm linking from an untrusted source")
+	c.Flags().BoolVar(&pinIt, "pin", false, "keep this version: do not follow the team's newer ones")
+	c.Flags().Int64Var(&version, "version", 0, "link this version of a team's package and keep it")
 	return c
+}
+
+// linkMode says whether a link follows newer versions.
+func linkMode(l client.Link, src client.Source) string {
+	switch {
+	case l.Auto:
+		return "automatic: one of the team's most used"
+	case l.Commit != "":
+		return "pinned to the commit"
+	case l.Pinned:
+		return "pinned"
+	case src.Type == "team" && src.Trust == "trusted" && client.FollowEnabled(client.Home()):
+		return "follows the newest version"
+	default:
+		return "stays at this version (hearth lib update)"
+	}
 }
 
 func pin(l client.Link) string {
@@ -635,13 +669,56 @@ func unlinkCmd() *cobra.Command {
 }
 
 func linksCmd() *cobra.Command {
-	return &cobra.Command{Use: "links", Short: "List linked shared skills and agents", RunE: func(*cobra.Command, []string) error {
-		ls, err := client.LoadLinks(client.Home())
-		for _, l := range ls {
-			fmt.Printf("%-5s %-28s %-16s %s\n", l.Type, l.Name, l.Source, pin(l))
-		}
-		return err
-	}}
+	var check bool
+	c := &cobra.Command{Use: "links", Short: "List linked shared skills and agents: version, whether it follows newer ones (--check: and the newest)",
+		RunE: func(*cobra.Command, []string) error {
+			home := client.Home()
+			ls, err := client.LoadLinks(home)
+			if err != nil {
+				return err
+			}
+			srcs := map[string]client.Source{}
+			if ss, err := client.LoadSources(home); err == nil {
+				for _, s := range ss {
+					srcs[s.Name] = s
+				}
+			}
+			newest := map[string]string{}
+			if check && len(ls) > 0 {
+				e, err := engine()
+				if err != nil {
+					return err
+				}
+				ups, err := e.CheckUpdates("")
+				for _, u := range ups {
+					newest[u.Link.Type+"/"+u.Link.Name] = pin(client.Link{Version: u.New.Version, Commit: u.New.Commit})
+				}
+				if err != nil {
+					fmt.Fprintln(os.Stderr, "warning: could not check every link:", err)
+				}
+			}
+			w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
+			head := "TYPE\tNAME\tSOURCE\tVERSION\tMODE"
+			if check {
+				head += "\tNEWEST"
+			}
+			fmt.Fprintln(w, head)
+			for _, l := range ls {
+				mode := linkMode(l, srcs[l.Source])
+				row := fmt.Sprintf("%s\t%s\t%s\t%s\t%s", l.Type, l.Name, l.Source, pin(l), mode)
+				if check {
+					n := newest[l.Type+"/"+l.Name]
+					if n == "" {
+						n = "(current)"
+					}
+					row += "\t" + n
+				}
+				fmt.Fprintln(w, row)
+			}
+			return w.Flush()
+		}}
+	c.Flags().BoolVar(&check, "check", false, "ask the sources for the newest version of each link")
+	return c
 }
 
 func updateCmd() *cobra.Command {
@@ -674,7 +751,7 @@ func updateCmd() *cobra.Command {
 					if u.New.Source.Trust != "trusted" {
 						fmt.Printf("    review: %s\n", u.NewDir)
 					}
-					if _, err := e.AddLink(u.New, u.NewSum); err != nil {
+					if _, err := e.AddLinkWith(u.New, u.NewSum, u.Link.Pinned); err != nil {
 						return err
 					}
 				}

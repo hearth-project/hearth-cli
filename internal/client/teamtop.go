@@ -3,6 +3,7 @@ package client
 import (
 	"fmt"
 	"slices"
+	"time"
 
 	"github.com/hearth-project/hearth-cli/internal/library"
 )
@@ -148,6 +149,7 @@ func (e *Engine) SyncTeamTop(dryRun bool) ([]TeamUsed, bool, error) {
 		}
 	}
 	slices.Sort(keys)
+	var moved []LinkUpdate
 	for _, k := range keys {
 		p := want[k]
 		old, wasAuto := oldAuto[k]
@@ -159,7 +161,7 @@ func (e *Engine) SyncTeamTop(dryRun bool) ([]TeamUsed, bool, error) {
 			res = append(res, r)
 			continue
 		}
-		_, sum, err := e.Fetch(p.c)
+		dir, sum, err := e.Fetch(p.c)
 		if err != nil {
 			r.Op, r.Detail = "failed", err.Error()
 			res = append(res, r)
@@ -170,6 +172,10 @@ func (e *Engine) SyncTeamTop(dryRun bool) ([]TeamUsed, bool, error) {
 		}
 		res = append(res, r)
 		changed = true
+		if wasAuto && old.Version != p.c.Version {
+			moved = append(moved, LinkUpdate{Time: time.Now().Unix(), Type: p.c.Type, Name: p.c.Name, Source: p.c.Source.Name,
+				From: old.Version, To: p.c.Version, Auto: true, Changes: e.changesSince(old, dir)})
+		}
 		out = append(out, Link{Type: p.c.Type, Name: p.c.Name, Source: p.c.Source.Name, Version: p.c.Version, SHA256: sum, Auto: true})
 	}
 	if dryRun || !changed {
@@ -178,5 +184,6 @@ func (e *Engine) SyncTeamTop(dryRun bool) ([]TeamUsed, bool, error) {
 	if err := saveLinks(e.Home, out); err != nil {
 		return res, false, fmt.Errorf("save links: %w", err)
 	}
+	recordLinkUpdates(e.Home, moved)
 	return res, true, nil
 }

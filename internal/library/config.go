@@ -124,6 +124,11 @@ type TeamsConfig struct {
 	// UseExclude names team skills/agents never kept automatically
 	// (unlinking an automatic one adds it here).
 	UseExclude []string `toml:"use_exclude,omitempty"`
+	// FollowUpdates moves the skills and agents you linked from a trusted
+	// team to the team's newest version as it is published (the daemon
+	// checks every 20 minutes); nil = true. A link made with --pin or
+	// --version stays where it is. Git sources never follow by themselves.
+	FollowUpdates *bool `toml:"follow_updates,omitempty"`
 }
 
 type RecipesConfig struct {

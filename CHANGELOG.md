@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Shared skills and agents have versions you can see and follow. A link to a trusted team's package now follows the team's newest version by itself: the daemon checks every 20 minutes, moves the link, renders the new content into the agents and records what changed (`hearth status` shows "updated in the last 7 days: bench v1 → v3"; `[teams] follow_updates = false` turns it off). `hearth lib link <name> --pin` keeps the current version and `--version N` links version N and keeps it (also how to go back); linking again without them follows again. `hearth lib links` shows the version and the mode (follows / pinned / automatic), `--check` the newest; `hearth lib update --yes` keeps a pin where it moves. Git sources stay pinned to a commit. The team's most used items, which already followed new versions, are recorded the same way.
 - One install on a Mac: `hearth setup` (so the install one-liner) now also installs the menu bar app when the server has one to hand out (`--no-app` or `HEARTH_NO_APP=1` skips; an installed app is updated with `hearth app install`). The release workflow builds the app on a Mac and attaches `hearth-menubar-darwin.zip` (+ `.sha256`) to the GitHub release, and `scripts/deploy-server.sh` puts it into the server's `dist/` with the binaries.
 
 ## 0.1.1 — 2026-11-07

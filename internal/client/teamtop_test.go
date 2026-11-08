@@ -95,6 +95,10 @@ func TestSyncTeamTop(t *testing.T) {
 	if b, _ := os.ReadFile(filepath.Join(bobCodex, "skills/t0/SKILL.md")); !strings.Contains(string(b), "v2") {
 		t.Fatalf("t0 not updated: %s", b)
 	}
+	// The move is recorded for `hearth status`.
+	if ups := RecentLinkUpdates(bob.Home, time.Unix(0, 0)); len(ups) != 1 || ups[0].Name != "t0" || !ups[0].Auto || ups[0].From != 1 || ups[0].To != 2 {
+		t.Fatalf("recorded updates: %+v", ups)
+	}
 	// Unlinking an automatic one excludes it; t2 takes its place.
 	if err := bob.Unlink("skill", "t1"); err != nil {
 		t.Fatal(err)

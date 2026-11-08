@@ -209,6 +209,24 @@ library 在服务器上明文保存（仅本人可见，团队共享的内容团
 
 团队共享的内容怎么被调用：每个团队里成员用得最多的 20 个 skills 和 20 个 agents 会自动链接到你每台机器的所有 agent 目录，和自己的 skill / agent 一样出现在 agent 的列表里、被自动调用（`[teams] use_top`，`use_exclude` 排除；在小程序里或用 `hearth lib unlink` 取消某个后不会再自动加回）。同名时你自己的版本优先。其余团队 skill 通过 `hearth mcp` 的 `search_skills` / `list_skills` 检索、`get_skill` 按需下载，用到的次数也计入团队排行，用得多了就会进入常驻。
 
+### 共享 skill 的版本与更新
+
+团队里的包有版本：每次 `hearth lib publish`（或自动分享你最常用的几个）只要内容有变化，就生成一个不可变的新版本 v1、v2……；内容相同不会生成新版本，服务器保留全部版本。你自己库里的 skill 没有单个版本历史（整库在你的机器之间同步）。
+
+```bash
+hearth lib link bench                 # 从现在起跟随团队的最新版本
+hearth lib link bench --pin           # 固定在当前版本
+hearth lib link bench --version 2     # 链接第 2 版并固定（也是回退到旧版本的办法）
+hearth lib links [--check]            # 版本、模式（跟随 / 固定 / 自动），加 --check 还显示最新版本
+hearth lib update [name] [--yes]      # 列出新版本和文件变化；--yes 应用（固定的链接也会被移动）
+hearth status                         # “updated in the last 7 days: bench v1 → v3 (2h ago)”
+```
+
+- **跟随。** 链接到可信团队的包，会自动移到最新版本：daemon 每 20 分钟检查一次，切换链接，把新内容渲染进各个 agent，并把变化（`~ SKILL.md`、`+ run.sh`）记在日志和 `hearth status` 里。团队里最常用的那批（见上）同样自动跟随。`[teams] follow_updates = false` 关闭；固定之后想恢复跟随，再执行一次 `hearth lib link <name>`。
+- **固定。** `--pin` 和 `--version N` 让链接停在原处，直到你用 `hearth lib update --yes` 移动它，或重新链接。
+- **git 源** 始终固定在某个 commit；有新 commit 时 `hearth lib update` 会列出，`--yes` 应用。不可信的源不审查就不会移动。
+- **发布。** 维护者用 `hearth lib publish skill <name> --team <team>` 发布新版本；你最常用的 5 个 skill 和 agent 在内容变化时自动重新发布（`share_top`），其他的需要手动发布。
+
 ## 7. Agent
 
 ```bash
