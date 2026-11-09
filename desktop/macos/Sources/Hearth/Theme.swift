@@ -59,6 +59,33 @@ struct RowPressStyle: ButtonStyle {
     }
 }
 
+/// Clickable list rows (library items, team packages): a soft highlight on
+/// hover, a firmer one the moment the pointer goes down, keyboard and
+/// VoiceOver activation for free because the row is a real Button.
+struct ListRowStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View { ListRowBody(configuration: configuration) }
+}
+
+private struct ListRowBody: View {
+    let configuration: ButtonStyleConfiguration
+    @State private var hover = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        configuration.label
+            .padding(.horizontal, 6)
+            .background(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(Color.primary.opacity(configuration.isPressed ? 0.07 : (hover ? 0.035 : 0)))
+            )
+            .padding(.horizontal, -6)
+            .contentShape(Rectangle())
+            .onHover { hover = $0 }
+            .animation(configuration.isPressed ? nil : Theme.motion(Theme.hover, reduce: reduceMotion), value: configuration.isPressed)
+            .animation(Theme.motion(Theme.hover, reduce: reduceMotion), value: hover)
+    }
+}
+
 /// Readable Chinese for the environment check (codes from the server's
 /// machineenv.go); unknown codes fall back to the CLI's English text.
 enum Words {

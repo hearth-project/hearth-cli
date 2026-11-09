@@ -7,6 +7,7 @@ struct MachinesPage: View {
     @State private var note: String?
     @State private var copying = false
     @State private var removing: Machine?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var removingID: String?
     @State private var gone: Set<String> = []
     @State private var result: String?
@@ -82,7 +83,7 @@ struct MachinesPage: View {
                     ForEach(Array(ms.enumerated()), id: \.element.id) { i, m in
                         if i > 0 { Divider().opacity(0.5) }
                         MachineRow(m: m, open: expanded == m.id,
-                                   toggle: { withAnimation(.easeOut(duration: 0.15)) { expanded = expanded == m.id ? nil : m.id } },
+                                   toggle: { withAnimation(Theme.motion(Theme.spring, reduce: reduceMotion)) { expanded = expanded == m.id ? nil : m.id } },
                                    say: { note = $0 },
                                    rename: { try await store.rename(m, to: $0) },
                                    info: portal.device(m),
@@ -123,9 +124,9 @@ struct LibraryPage: View {
                         VStack(spacing: 0) {
                             ForEach(Array(items.enumerated()), id: \.element.id) { i, x in
                                 if i > 0 { Divider().opacity(0.5) }
-                                itemRow(x)
-                                    .contentShape(Rectangle())
-                                    .onTapGesture { open = x }
+                                Button { open = x } label: { itemRow(x) }
+                                    .buttonStyle(ListRowStyle())
+                                    .help("查看 \(x.name)")
                             }
                         }
                     }

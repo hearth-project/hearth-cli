@@ -70,7 +70,9 @@ struct TeamsPage: View {
                 Divider().opacity(0.5)
                 ForEach(Array(t.packages.enumerated()), id: \.element.id) { i, p in
                     if i > 0 { Divider().opacity(0.35) }
-                    packageRow(p).contentShape(Rectangle()).onTapGesture { open = OpenPackage(team: t.name, pkg: p) }
+                    Button { open = OpenPackage(team: t.name, pkg: p) } label: { packageRow(p) }
+                        .buttonStyle(ListRowStyle())
+                        .help("查看 \(p.name)")
                 }
             }
         }
