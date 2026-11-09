@@ -38,7 +38,7 @@ struct MenuView: View {
         Task {
             let s = await store.copyInstallCommand()
             copying = false
-            withAnimation { note = s }
+            withAnimation(Theme.motion(Theme.spring, reduce: reduceMotion)) { note = s }
         }
     }
 
@@ -212,7 +212,7 @@ struct MenuView: View {
         .task(id: note) {
             if note != nil {
                 try? await Task.sleep(nanoseconds: 3_000_000_000)
-                withAnimation { note = nil }
+                withAnimation(Theme.motion(Theme.spring, reduce: reduceMotion)) { note = nil }
             }
         }
     }

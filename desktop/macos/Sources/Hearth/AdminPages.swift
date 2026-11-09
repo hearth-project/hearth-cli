@@ -111,8 +111,7 @@ struct AdminUsersPage: View {
                 Image(systemName: "magnifyingglass").foregroundStyle(.tertiary)
                 TextField("搜索邮箱", text: $query).textFieldStyle(.plain)
             }
-            .padding(8).background(Theme.card, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).strokeBorder(Color.primary.opacity(0.07)))
+            .padding(8).cardSurface(radius: 9)
             Panel {
                 let rest = shown.filter { $0.status != "pending" }
                 if rest.isEmpty { Text("没有匹配的用户").font(.system(size: 12)).foregroundStyle(.tertiary) }

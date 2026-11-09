@@ -36,6 +36,15 @@ enum Theme {
     static func motion(_ a: Animation, reduce: Bool) -> Animation? { reduce ? nil : a }
 }
 
+extension View {
+    /// The native pages' card: the grouped fill with a hairline border.
+    func cardSurface(radius: CGFloat = 12) -> some View {
+        self
+            .background(Theme.card, in: RoundedRectangle(cornerRadius: radius, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous).strokeBorder(Color.primary.opacity(0.07)))
+    }
+}
+
 /// Menu rows and similar plain buttons: the press shows on pointer-down with
 /// no delay and eases away on release, like a native menu item.
 struct RowPressStyle: ButtonStyle {
@@ -47,6 +56,33 @@ struct RowPressStyle: ButtonStyle {
                     .allowsHitTesting(false)
             )
             .animation(configuration.isPressed ? nil : Theme.hover, value: configuration.isPressed)
+    }
+}
+
+/// Clickable list rows (library items, team packages): a soft highlight on
+/// hover, a firmer one the moment the pointer goes down, keyboard and
+/// VoiceOver activation for free because the row is a real Button.
+struct ListRowStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View { ListRowBody(configuration: configuration) }
+}
+
+private struct ListRowBody: View {
+    let configuration: ButtonStyleConfiguration
+    @State private var hover = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        configuration.label
+            .padding(.horizontal, 6)
+            .background(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(Color.primary.opacity(configuration.isPressed ? 0.07 : (hover ? 0.035 : 0)))
+            )
+            .padding(.horizontal, -6)
+            .contentShape(Rectangle())
+            .onHover { hover = $0 }
+            .animation(configuration.isPressed ? nil : Theme.motion(Theme.hover, reduce: reduceMotion), value: configuration.isPressed)
+            .animation(Theme.motion(Theme.hover, reduce: reduceMotion), value: hover)
     }
 }
 

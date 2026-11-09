@@ -34,8 +34,7 @@ struct Panel<Content: View>: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Color.primary.opacity(0.07)))
+        .cardSurface()
     }
 }
 
@@ -44,39 +43,45 @@ struct KPI: View {
     var value: String
     var icon: String
     var tint: Color
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var body: some View {
         HStack(spacing: 10) {
             RoundedRectangle(cornerRadius: 8, style: .continuous).fill(tint.opacity(0.14)).frame(width: 34, height: 34)
                 .overlay(Image(systemName: icon).font(.system(size: 15, weight: .medium)).foregroundStyle(tint))
             VStack(alignment: .leading, spacing: 1) {
                 Text(value).font(.system(size: 18, weight: .semibold)).lineLimit(1).minimumScaleFactor(0.7)
+                    .contentTransition(.numericText())
+                    .animation(Theme.motion(Theme.spring, reduce: reduceMotion), value: value)
                 Text(title).font(.system(size: 11)).foregroundStyle(.secondary)
             }
             Spacer(minLength: 0)
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Color.primary.opacity(0.07)))
+        .cardSurface()
     }
 }
 
 /// Bytes uploaded per day, as bars.
 struct UploadChart: View {
     var series: [DaySeries]
+    @State private var grown = Snapshot.active
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var body: some View {
         let peak = max(series.map(\.bytes).max() ?? 0, 1)
         VStack(spacing: 4) {
             HStack(alignment: .bottom, spacing: 3) {
-                ForEach(series, id: \.day) { d in
+                ForEach(Array(series.enumerated()), id: \.element.day) { i, d in
                     RoundedRectangle(cornerRadius: 2, style: .continuous)
                         .fill(d.bytes > 0 ? Theme.blue : Theme.blue.opacity(0.18))
-                        .frame(height: max(3, 90 * CGFloat(d.bytes) / CGFloat(peak)))
+                        .frame(height: grown ? max(3, 90 * CGFloat(d.bytes) / CGFloat(peak)) : 3)
                         .frame(maxWidth: .infinity)
+                        .animation(Theme.motion(Theme.spring.delay(Double(i) * 0.012), reduce: reduceMotion), value: grown)
                         .help("\(d.day)  \(Fmt.bytes(d.bytes))")
                 }
             }
             .frame(height: 90, alignment: .bottom)
+            .onAppear { grown = true }
             HStack {
                 Text(String((series.first?.day ?? "").dropFirst(5)))
                 Spacer()
@@ -93,25 +98,29 @@ struct UploadChart: View {
 struct RankBars: View {
     var items: [NameCount]
     var tint: Color
+    @State private var grown = Snapshot.active
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var body: some View {
         if items.isEmpty {
             Text("最近 30 天还没有使用记录").font(.system(size: 12)).foregroundStyle(.tertiary)
         } else {
             let top = max(items.map(\.count).max() ?? 1, 1)
             VStack(spacing: 7) {
-                ForEach(items.prefix(6), id: \.name) { it in
+                ForEach(Array(items.prefix(6).enumerated()), id: \.element.name) { i, it in
                     HStack(spacing: 8) {
                         Text(it.name).font(.system(size: 12)).lineLimit(1).frame(width: 120, alignment: .leading)
                         GeometryReader { g in
                             Capsule().fill(tint.opacity(0.75))
-                                .frame(width: max(4, g.size.width * CGFloat(it.count) / CGFloat(top)), height: 6)
+                                .frame(width: grown ? max(4, g.size.width * CGFloat(it.count) / CGFloat(top)) : 4, height: 6)
                                 .frame(maxHeight: .infinity, alignment: .center)
+                                .animation(Theme.motion(Theme.spring.delay(Double(i) * 0.03), reduce: reduceMotion), value: grown)
                         }
                         .frame(height: 12)
                         Text("\(it.count)").font(.system(size: 11)).foregroundStyle(.secondary).frame(width: 36, alignment: .trailing)
                     }
                 }
             }
+            .onAppear { grown = true }
         }
     }
 }
@@ -199,19 +208,23 @@ struct CountChart: View {
     var series: [(String, Int)]
     var tint: Color
     var unit: String
+    @State private var grown = Snapshot.active
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var body: some View {
         let peak = max(series.map(\.1).max() ?? 0, 1)
         VStack(spacing: 4) {
             HStack(alignment: .bottom, spacing: 3) {
-                ForEach(Array(series.enumerated()), id: \.offset) { _, d in
+                ForEach(Array(series.enumerated()), id: \.offset) { i, d in
                     RoundedRectangle(cornerRadius: 2, style: .continuous)
                         .fill(d.1 > 0 ? tint : tint.opacity(0.18))
-                        .frame(height: max(3, 90 * CGFloat(d.1) / CGFloat(peak)))
+                        .frame(height: grown ? max(3, 90 * CGFloat(d.1) / CGFloat(peak)) : 3)
                         .frame(maxWidth: .infinity)
+                        .animation(Theme.motion(Theme.spring.delay(Double(i) * 0.012), reduce: reduceMotion), value: grown)
                         .help("\(d.0)  \(d.1) \(unit)")
                 }
             }
             .frame(height: 90, alignment: .bottom)
+            .onAppear { grown = true }
             HStack {
                 Text(String((series.first?.0 ?? "").dropFirst(5)))
                 Spacer()
