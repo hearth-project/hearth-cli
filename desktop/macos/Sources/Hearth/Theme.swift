@@ -36,6 +36,15 @@ enum Theme {
     static func motion(_ a: Animation, reduce: Bool) -> Animation? { reduce ? nil : a }
 }
 
+extension View {
+    /// The native pages' card: the grouped fill with a hairline border.
+    func cardSurface(radius: CGFloat = 12) -> some View {
+        self
+            .background(Theme.card, in: RoundedRectangle(cornerRadius: radius, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous).strokeBorder(Color.primary.opacity(0.07)))
+    }
+}
+
 /// Menu rows and similar plain buttons: the press shows on pointer-down with
 /// no delay and eases away on release, like a native menu item.
 struct RowPressStyle: ButtonStyle {

@@ -115,6 +115,7 @@ struct NativeRoot: View {
     @ObservedObject var portal: PortalStore
     @ObservedObject var admin: AdminStore
     @State private var dest: Dest = .user(.overview)
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var isAdmin: Bool { portal.me?.admin == true }
 
@@ -159,7 +160,11 @@ struct NativeRoot: View {
                     }
                 }
             }
+            // Pages cross-fade briefly; sidebar navigation is frequent, so keep it short.
+            .id(dest)
+            .transition(.opacity)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .animation(Theme.motion(.easeOut(duration: 0.15), reduce: reduceMotion), value: dest)
             .background(Color(nsColor: .windowBackgroundColor))
             .toastHost(root: true)
             .toolbar {

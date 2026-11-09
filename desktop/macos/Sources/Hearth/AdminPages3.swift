@@ -136,8 +136,7 @@ struct AdminAuditPage: View {
                 Image(systemName: "magnifyingglass").foregroundStyle(.tertiary)
                 TextField("搜索操作人、动作、对象", text: $query).textFieldStyle(.plain)
             }
-            .padding(8).background(Theme.card, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).strokeBorder(Color.primary.opacity(0.07)))
+            .padding(8).cardSurface(radius: 9)
             Panel {
                 if shown.isEmpty { Text("没有记录").font(.system(size: 12)).foregroundStyle(.tertiary) }
                 ForEach(Array(shown.enumerated()), id: \.element.id) { i, e in
