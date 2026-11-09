@@ -33,7 +33,6 @@ struct MachinesPage: View {
                 if let n = note { Text(n).font(.system(size: 12)).foregroundStyle(.secondary) }
                 Spacer()
             }
-            PortalNoticeBar(store: portal)
             if let e = store.error { Text(e).font(.system(size: 12)).foregroundStyle(Theme.bad) }
             if store.list == nil && store.error == nil {
                 HStack { Spacer(); ProgressView(); Spacer() }.padding(.top, 60)
@@ -53,6 +52,7 @@ struct MachinesPage: View {
                         result = "已移除 \(m.title)。" + (m.online ? "它会在约 30 秒内停止同步并清理 Hearth 自己的数据。" : "它下次上线时会完成清理。")
                     } else {
                         result = "没有移除 \(m.title)：" + (portal.notice ?? "未知错误") + "\n请稍后重试。"
+                        portal.notice = nil
                     }
                     await store.refresh()
                     await portal.refresh()
@@ -102,7 +102,6 @@ struct LibraryPage: View {
 
     var body: some View {
         PageScroll(title: "技能与 Agent", trailing: portal.library.map { "资源库 v\($0.version)" }) {
-            PortalNoticeBar(store: portal)
             if let e = portal.error { Text(e).font(.system(size: 12)).foregroundStyle(Theme.bad) }
             if let lib = portal.library {
                 let count = { (k: String) in lib.items.filter { $0.type == k }.count }
@@ -137,7 +136,7 @@ struct LibraryPage: View {
                 HStack { Spacer(); ProgressView(); Spacer() }.padding(.top, 60)
             }
         }
-        .sheet(item: $open) { x in LibraryDetailSheet(portal: portal, item: x) { open = nil } }
+        .sheet(item: $open) { x in LibraryDetailSheet(portal: portal, item: x) { open = nil }.toastHost() }
     }
 
     private func itemRow(_ x: LibraryItem) -> some View {

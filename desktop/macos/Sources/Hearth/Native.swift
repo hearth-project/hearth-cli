@@ -161,6 +161,7 @@ struct NativeRoot: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color(nsColor: .windowBackgroundColor))
+            .toastHost(root: true)
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Button {

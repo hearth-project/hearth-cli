@@ -7,7 +7,6 @@ struct AdminInvitesPage: View {
 
     var body: some View {
         PageScroll(title: "邀请码", trailing: "\(store.invites.count) 个") {
-            NoticeBar(store: store)
             Panel(title: "生成邀请码") {
                 HStack(spacing: 10) {
                     Picker("有效期", selection: $days) {
@@ -67,7 +66,6 @@ struct AdminTeamsPage: View {
 
     var body: some View {
         PageScroll(title: "团队管理", trailing: "\(store.teams.count) 个") {
-            NoticeBar(store: store)
             Panel(title: "新建团队") {
                 HStack(spacing: 8) {
                     TextField("团队名", text: $name).textFieldStyle(.roundedBorder)

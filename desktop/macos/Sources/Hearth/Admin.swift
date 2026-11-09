@@ -153,8 +153,11 @@ final class AdminStore: ObservableObject {
     @Published var error: String?
     @Published var loading = false
     @Published var updated: Date?
-    /// Last action result or failure, shown as a banner.
-    @Published var notice: String?
+    /// Last action result or failure, shown once as a toast on the topmost layer.
+    /// Set `noticeIsError` before `notice`.
+    @Published var notice: String? {
+        didSet { if let n = notice { Toasts.shared.show(n, error: noticeIsError) } else { Toasts.shared.hide() } }
+    }
     @Published var noticeIsError = false
 
     init() {}
@@ -197,12 +200,12 @@ final class AdminStore: ObservableObject {
         }
         do {
             let out = try await HearthCLI.run(args, timeout: 40)
-            if let done { notice = done; noticeIsError = false }
+            if let done { noticeIsError = false; notice = done }
             if reload { await refreshQuietly() }
             return out
         } catch {
-            notice = error.localizedDescription
             noticeIsError = true
+            notice = error.localizedDescription
             return nil
         }
     }

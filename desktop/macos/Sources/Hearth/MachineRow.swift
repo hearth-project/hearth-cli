@@ -19,6 +19,7 @@ struct MachineRow: View {
     @State private var hover = false
     @State private var draft = ""
     @State private var saving = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -36,24 +37,30 @@ struct MachineRow: View {
                     if !m.online {
                         Text(Words.ago(m.last_seen)).font(.system(size: 11)).foregroundStyle(.tertiary).lineLimit(1).fixedSize()
                     }
-                    if hover {
-                        Button(action: copyName) {
-                            Image(systemName: "doc.on.doc").font(.system(size: 11))
-                        }
-                        .buttonStyle(.borderless)
-                        .foregroundStyle(.secondary)
-                        .help("复制 \(m.host)")
+                    // Always laid out, so showing it on hover does not shift the row.
+                    Button(action: copyName) {
+                        Image(systemName: "doc.on.doc").font(.system(size: 11))
                     }
+                    .buttonStyle(.borderless)
+                    .foregroundStyle(.secondary)
+                    .opacity(hover ? 1 : 0)
+                    .allowsHitTesting(hover)
+                    .accessibilityHidden(!hover)
+                    .help("复制 \(m.host)")
                     EnvGlyph(m: m)
                     Image(systemName: "chevron.right")
                         .font(.system(size: 9, weight: .semibold))
                         .foregroundStyle(.tertiary)
                         .rotationEffect(.degrees(open ? 90 : 0))
+                        .animation(Theme.motion(Theme.spring, reduce: reduceMotion), value: open)
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 7)
             .contentShape(Rectangle())
             .onTapGesture(perform: toggle)
+            .accessibilityElement(children: .contain)
+            .accessibilityAddTraits(.isButton)
+            .accessibilityAction(named: open ? "收起" : "展开", toggle)
             .contextMenu {
                 Button("复制机器名", action: copyName)
                 Button(open ? "收起" : "展开", action: toggle)
@@ -63,9 +70,12 @@ struct MachineRow: View {
                 }
             }
             .help("\(m.host)\n单击展开，右键或悬停时点复制按钮复制机器名")
-            if open { detail }
+            if open {
+                detail.transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .top)))
+            }
         }
         .background(Color.primary.opacity(open ? 0.035 : (hover ? 0.03 : 0)))
+        .animation(Theme.motion(Theme.hover, reduce: reduceMotion), value: hover)
         .onHover { hover = $0 }
     }
 

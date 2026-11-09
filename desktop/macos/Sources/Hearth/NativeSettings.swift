@@ -16,7 +16,6 @@ struct MySettingsPage: View {
 
     var body: some View {
         PageScroll(title: "我的设置") {
-            PortalNoticeBar(store: portal)
             if !portal.intents.isEmpty { pending }
             resident
             sharing

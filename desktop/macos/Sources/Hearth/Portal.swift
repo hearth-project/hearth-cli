@@ -166,8 +166,14 @@ final class PortalStore: ObservableObject {
     @Published var devices: [Device] = []
     @Published var settings: MySettings?
     @Published var intents: [Intent] = []
-    @Published var notice: String?
+    /// Last action result or failure, shown once as a toast on the topmost layer.
+    /// Set `noticeIsError` before `notice`.
+    @Published var notice: String? {
+        didSet { if let n = notice { Toasts.shared.show(n, error: noticeIsError) } else { Toasts.shared.hide() } }
+    }
     @Published var noticeIsError = false
+    /// Resident skills just chosen here, shown until the server reports them.
+    @Published var pendingResident: [String]?
     @Published var error: String?
     @Published var loading = false
     @Published var loginExpired = false
@@ -199,6 +205,7 @@ final class PortalStore: ObservableObject {
             devices = r.docs.devices ?? []
             settings = r.docs.settings
             intents = r.docs.intents ?? []
+            if let p = pendingResident, Set(p) == Set(settings?.resident ?? []) { pendingResident = nil }
             error = r.errors?.isEmpty == false ? r.errors!.values.sorted().joined(separator: "；") : nil
             loginExpired = false
             updated = Date()
@@ -225,25 +232,29 @@ final class PortalStore: ObservableObject {
         }
         do {
             let out = try await HearthCLI.run(args, timeout: 40)
-            if let done { notice = done; noticeIsError = false }
+            if let done { noticeIsError = false; notice = done }
             if reload { loading = false; await refresh() }
             return out
         } catch {
-            notice = error.localizedDescription
             noticeIsError = true
+            notice = error.localizedDescription
             return nil
         }
     }
 
     /// Queue a change for the user's machines (resident, share-top, link, unlink).
+    /// The switch flips at once; the page refreshes in the background.
     func queue(_ kind: String, _ data: [String: Any]) async {
-        await call("POST", "/v1/me/intents", ["kind": kind, "data": data],
-                   done: "已保存，你的机器会在一分钟左右内应用。")
+        if kind == "resident" { pendingResident = data["names"] as? [String] }
+        let ok = await call("POST", "/v1/me/intents", ["kind": kind, "data": data],
+                            done: "已保存，你的机器会在一分钟左右内应用。", reload: false) != nil
+        if !ok, kind == "resident" { pendingResident = nil }
+        if ok { Task { await refresh() } }
     }
 
     /// Skills currently loaded into every agent. Empty setting means all.
     var residentNames: [String] {
-        let r = settings?.resident ?? []
+        let r = pendingResident ?? settings?.resident ?? []
         if !r.isEmpty { return r }
         return (library?.items ?? []).filter { $0.type == "skill" }.map(\.name)
     }
