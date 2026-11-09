@@ -211,6 +211,9 @@ func InstallCA(home, src string) error {
 // server admin sees which versions are in use (set by main).
 var Version string
 
+// libraryPutTimeout bounds a whole-library upload (up to api.MaxLibraryBytes).
+const libraryPutTimeout = 10 * time.Minute
+
 func (a *API) do(method, path string, in any, raw []byte, hdr map[string]string, out any) (http.Header, error) {
 	var body io.Reader
 	if in != nil {
@@ -240,7 +243,15 @@ func (a *API) do(method, path string, in any, raw []byte, hdr map[string]string,
 	for k, v := range hdr {
 		req.Header.Set(k, v)
 	}
-	resp, err := a.HC.Do(req)
+	hc := a.HC
+	if method == "PUT" && strings.SplitN(path, "?", 2)[0] == "/v1/library" && hc.Timeout > 0 && hc.Timeout < libraryPutTimeout {
+		// The whole library goes up in one request; on a slow uplink it
+		// needs longer than the default per-request timeout.
+		c := *hc
+		c.Timeout = libraryPutTimeout
+		hc = &c
+	}
+	resp, err := hc.Do(req)
 	if err != nil {
 		return nil, netError(a.Base, err)
 	}

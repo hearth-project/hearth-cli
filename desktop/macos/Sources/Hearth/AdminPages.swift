@@ -4,24 +4,6 @@ func adminPath(_ s: String) -> String {
     s.addingPercentEncoding(withAllowedCharacters: CharacterSet.urlPathAllowed.subtracting(CharacterSet(charactersIn: "/?#"))) ?? s
 }
 
-/// Result of the last admin action.
-struct NoticeBar: View {
-    @ObservedObject var store: AdminStore
-    var body: some View {
-        if let n = store.notice {
-            HStack(spacing: 8) {
-                Image(systemName: store.noticeIsError ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
-                    .foregroundStyle(store.noticeIsError ? Theme.bad : Theme.ok)
-                Text(n).font(.system(size: 12)).lineLimit(3).textSelection(.enabled)
-                Spacer()
-                Button { store.notice = nil } label: { Image(systemName: "xmark") }.buttonStyle(.plain).foregroundStyle(.tertiary)
-            }
-            .padding(10)
-            .background((store.noticeIsError ? Theme.bad : Theme.ok).opacity(0.10), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-        }
-    }
-}
-
 struct AdminDashboardPage: View {
     @ObservedObject var store: AdminStore
     var body: some View {
@@ -92,7 +74,6 @@ struct AdminUsersPage: View {
 
     var body: some View {
         PageScroll(title: "用户", trailing: "\(store.users.count) 位") {
-            NoticeBar(store: store)
             let waiting = shown.filter { $0.status == "pending" }
             if !waiting.isEmpty {
                 Panel(title: "等待审批") {
@@ -141,7 +122,7 @@ struct AdminUsersPage: View {
                 }
             }
         }
-        .sheet(item: $devicesOf) { u in UserDevicesSheet(store: store, user: u) }
+        .sheet(item: $devicesOf) { u in UserDevicesSheet(store: store, user: u).toastHost() }
         .confirmationDialog("删除 \(pendingDelete?.email ?? "")？", isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }), titleVisibility: .visible) {
             Button("删除用户及其全部数据", role: .destructive) {
                 if let u = pendingDelete { Task { await store.call("DELETE", "/v1/admin/users/\(adminPath(u.email))", done: "已删除 \(u.email)") } }

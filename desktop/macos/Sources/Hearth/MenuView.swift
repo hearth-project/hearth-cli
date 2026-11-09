@@ -10,6 +10,7 @@ struct MenuView: View {
     @State var expanded: String? = nil
     @State var note: String? = nil
     @State private var copying = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// Height of the machine list. A MenuBarExtra window sizes itself to its
     /// content's ideal size and a ScrollView has none, so the list gets this
     /// height (at most 460) explicitly; without it the list collapses to zero.
@@ -140,17 +141,22 @@ struct MenuView: View {
     }
 
     /// A short message after an action ("已复制 …"), over the bottom of the list.
-    @ViewBuilder private var noteView: some View {
-        if let n = note {
-            Text(n).font(.system(size: 11, weight: .medium)).lineLimit(2).multilineTextAlignment(.center)
-                .padding(.horizontal, 10).padding(.vertical, 5)
-                .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(.regularMaterial))
-                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Color.primary.opacity(0.08)))
-                .shadow(color: .black.opacity(0.12), radius: 4, y: 1)
-                .padding(.horizontal, 16)
-                .padding(.bottom, 8)
-                .transition(.opacity)
+    /// It rises from the edge it sits on and fades; `say` sets `note` without
+    /// `withAnimation`, so the animation is attached to the value here.
+    private var noteView: some View {
+        ZStack {
+            if let n = note {
+                Text(n).font(.system(size: 11, weight: .medium)).lineLimit(2).multilineTextAlignment(.center)
+                    .padding(.horizontal, 10).padding(.vertical, 5)
+                    .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(.regularMaterial))
+                    .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Color.primary.opacity(0.08)))
+                    .shadow(color: .black.opacity(0.12), radius: 4, y: 1)
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 8)
+                    .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .bottom)))
+            }
         }
+        .animation(Theme.motion(Theme.spring, reduce: reduceMotion), value: note)
     }
 
     private func section(_ title: String, _ ms: [Machine]) -> some View {
@@ -169,7 +175,7 @@ struct MenuView: View {
                 ForEach(Array(ms.enumerated()), id: \.element.id) { i, m in
                     if i > 0 { Divider().padding(.leading, 46) }
                     MachineRow(m: m, open: expanded == m.id, toggle: {
-                        withAnimation(.easeInOut(duration: 0.18)) { expanded = expanded == m.id ? nil : m.id }
+                        withAnimation(Theme.motion(Theme.spring, reduce: reduceMotion)) { expanded = expanded == m.id ? nil : m.id }
                     }, say: { note = $0 }, rename: { name in try await store.rename(m, to: name) })
                 }
             }
@@ -225,7 +231,7 @@ struct MenuRow<Trailing: View>: View {
         Button(action: action) {
             MenuRowLabel(icon: icon, title: title, hover: hover, trailing: trailing)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(RowPressStyle())
         .onHover { hover = $0 }
     }
 }
@@ -256,6 +262,7 @@ struct MenuRowLabel<Trailing: View>: View {
         .frame(height: 28)
         .contentShape(Rectangle())
         .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(Color.primary.opacity(hover ? 0.08 : 0)))
+        .animation(Theme.hover, value: hover)
     }
 }
 

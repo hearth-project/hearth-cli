@@ -12,7 +12,6 @@ struct AdminSettingsPage: View {
 
     var body: some View {
         PageScroll(title: "服务器设置", trailing: nil) {
-            NoticeBar(store: store)
             if let s = store.settings {
                 Panel(title: "注册方式") {
                     ForEach(Self.modes, id: \.0) { m in
@@ -76,7 +75,6 @@ struct AdminMaintenancePage: View {
 
     var body: some View {
         PageScroll(title: "维护", trailing: nil) {
-            NoticeBar(store: store)
             Panel(title: "清理") {
                 Text("清理过期会话和没有引用的文件。先预览，确认后再执行。")
                     .font(.system(size: 12)).foregroundStyle(.secondary)

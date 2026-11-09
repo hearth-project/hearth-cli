@@ -54,7 +54,7 @@ struct LoginItemRow: View {
                     .toggleStyle(.switch).controlSize(.mini).labelsHidden()
             }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(RowPressStyle())
         .onHover { hover = $0 }
     }
 

@@ -1,23 +1,5 @@
 import SwiftUI
 
-/// Result of the last action on a user page.
-struct PortalNoticeBar: View {
-    @ObservedObject var store: PortalStore
-    var body: some View {
-        if let n = store.notice {
-            HStack(spacing: 8) {
-                Image(systemName: store.noticeIsError ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
-                    .foregroundStyle(store.noticeIsError ? Theme.bad : Theme.ok)
-                Text(n).font(.system(size: 12)).lineLimit(3).textSelection(.enabled)
-                Spacer()
-                Button { store.notice = nil } label: { Image(systemName: "xmark") }.buttonStyle(.plain).foregroundStyle(.tertiary)
-            }
-            .padding(10)
-            .background((store.noticeIsError ? Theme.bad : Theme.ok).opacity(0.10), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-        }
-    }
-}
-
 struct ItemFile: Decodable, Hashable { var path: String; var size: Int64? }
 struct ItemBody: Decodable { var content: String?; var files: [ItemFile]? }
 
@@ -39,6 +21,8 @@ struct SheetHeader: View {
             Spacer()
             Button(action: close) { Image(systemName: "xmark.circle.fill").font(.system(size: 16)) }
                 .buttonStyle(.plain).foregroundStyle(.tertiary).keyboardShortcut(.cancelAction)
+                .focusable(false)
+                .help("关闭（Esc）")
         }
     }
 }
@@ -104,12 +88,11 @@ struct LibraryDetailSheet: View {
                 }
             }
             .frame(maxHeight: .infinity, alignment: .top)
-            PortalNoticeBar(store: portal)
         }
         .padding(18)
         .frame(width: 620, height: 560)
         .task { await load() }
-        .sheet(isPresented: $sharing) { ShareSheet(portal: portal, item: item) { sharing = false } }
+        .sheet(isPresented: $sharing) { ShareSheet(portal: portal, item: item) { sharing = false }.toastHost() }
     }
 
     private func load() async {

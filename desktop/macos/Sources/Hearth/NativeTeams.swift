@@ -19,7 +19,6 @@ struct TeamsPage: View {
 
     var body: some View {
         PageScroll(title: "团队") {
-            PortalNoticeBar(store: portal)
             if let e = portal.error { Text(e).font(.system(size: 12)).foregroundStyle(Theme.bad) }
             if let i = invite { inviteBox(i.team, i.code) }
             if portal.teams.isEmpty {
@@ -27,7 +26,7 @@ struct TeamsPage: View {
             }
             ForEach(portal.teams) { t in teamCard(t) }
         }
-        .sheet(item: $open) { o in PackageSheet(portal: portal, team: o.team, pkg: o.pkg) { open = nil } }
+        .sheet(item: $open) { o in PackageSheet(portal: portal, team: o.team, pkg: o.pkg) { open = nil }.toastHost() }
         .confirmationDialog(leaving.map { "退出团队 \($0.name)？" } ?? "", isPresented: Binding(get: { leaving != nil }, set: { if !$0 { leaving = nil } })) {
             Button("退出团队", role: .destructive) {
                 if let t = leaving { Task { await portal.call("DELETE", "/v1/me/teams/\(adminPath(t.name))", done: "已退出 \(t.name)") } }
@@ -102,7 +101,7 @@ struct TeamsPage: View {
             HStack {
                 Text(cmd).font(.system(size: 12, design: .monospaced)).textSelection(.enabled)
                 Spacer()
-                Button { Actions.copy(cmd); portal.notice = "已复制"; portal.noticeIsError = false } label: { Label("复制", systemImage: "doc.on.doc") }
+                Button { Actions.copy(cmd); portal.noticeIsError = false; portal.notice = "已复制" } label: { Label("复制", systemImage: "doc.on.doc") }
                 Button { invite = nil } label: { Image(systemName: "xmark") }.buttonStyle(.plain).foregroundStyle(.tertiary)
             }
             Text("让对方在已登录 Hearth 的机器上运行这条命令。").font(.system(size: 11)).foregroundStyle(.secondary)
@@ -196,7 +195,6 @@ struct PackageSheet: View {
                 }
             }
             .frame(maxHeight: .infinity, alignment: .top)
-            PortalNoticeBar(store: portal)
         }
         .padding(18)
         .frame(width: 620, height: 560)

@@ -25,6 +25,29 @@ enum Theme {
         default: return idle
         }
     }
+
+    // Motion. Critically damped by default (no overshoot): rows and panels
+    // that open or close are not thrown, so they should not bounce. Hover is
+    // a short ease-out; a press shows at once (see `RowPressStyle`).
+    static let spring = Animation.spring(response: 0.34, dampingFraction: 1.0)
+    static let hover = Animation.easeOut(duration: 0.12)
+
+    /// `nil` when the user asked for reduced motion.
+    static func motion(_ a: Animation, reduce: Bool) -> Animation? { reduce ? nil : a }
+}
+
+/// Menu rows and similar plain buttons: the press shows on pointer-down with
+/// no delay and eases away on release, like a native menu item.
+struct RowPressStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .overlay(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(Color.primary.opacity(configuration.isPressed ? 0.06 : 0))
+                    .allowsHitTesting(false)
+            )
+            .animation(configuration.isPressed ? nil : Theme.hover, value: configuration.isPressed)
+    }
 }
 
 /// Readable Chinese for the environment check (codes from the server's
