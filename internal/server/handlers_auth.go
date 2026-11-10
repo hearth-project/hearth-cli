@@ -310,7 +310,7 @@ func (s *Server) handleListDevices(w http.ResponseWriter, r *http.Request) {
 		_ = json.Unmarshal([]byte(d.HealthJSON), &health)
 		dev := api.Device{ID: d.ID, Name: d.Name, Alias: d.Alias, Status: d.Status, LastSeen: d.LastSeen, LastIP: d.LastIP, Online: online, Machine: machine, Health: health, HealthAt: d.HealthAt}
 		if d.Status == "active" {
-			b, _ := json.Marshal(s.machineEnv(d.HealthJSON, d.ClientVersion, d.LastIP))
+			b, _ := json.Marshal(s.machineEnv(d.HealthJSON, d.ClientVersion, d.LastIP, d.ID))
 			_ = json.Unmarshal(b, &dev.Env)
 		}
 		out = append(out, dev)
