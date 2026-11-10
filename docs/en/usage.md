@@ -1,6 +1,6 @@
 # Usage
 
-[中文](../zh/usage.md) · [Back to README](../../README.md)
+[中文](../zh/usage.md) · [Back to README](../../README.en.md)
 
 Every command takes `--help`; the full list is in the [CLI reference](../cli.md). You can also just tell your agent "use hearth" and the `hearth` skill runs these for you.
 

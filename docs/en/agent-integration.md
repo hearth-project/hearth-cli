@@ -1,6 +1,6 @@
 # Agent integration
 
-[中文](../zh/agent-integration.md) · [Back to README](../../README.md)
+[中文](../zh/agent-integration.md) · [Back to README](../../README.en.md)
 
 How Hearth supports an agent. Goal: **one core for sync, encryption, index and restore; every agent's differences live in a replaceable integration layer.** Adding an agent adds an integration and tests, never branches in the core.
 

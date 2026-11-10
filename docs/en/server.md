@@ -1,6 +1,6 @@
 # Running and administering the server
 
-[中文](../zh/server.md) · [Back to README](../../README.md)
+[中文](../zh/server.md) · [Back to README](../../README.en.md)
 
 Server and client are the same `hearth` binary. The server stores ciphertext (sessions, credentials) and each user's own library; it cannot decrypt anything.
 
@@ -163,6 +163,15 @@ cp /tmp/hearth-app/hearth-menubar-darwin.zip $D/dist/
 ```
 
 A release already carries the zip (`hearth-menubar-darwin.zip` with a `.sha256`, built on a Mac by the release workflow a few minutes after the binaries), and `scripts/deploy-server.sh` copies it into `dist/` with them; re-run the script to pick it up if it was not there yet. The `macos-app` GitHub workflow builds the same zip for every change (artifact `hearth-menubar`). The app is signed ad hoc; `hearth app install` removes the download quarantine, so Gatekeeper does not block it.
+
+## The SSH relay
+
+Machines that nobody can connect to (a container on a private network, behind a firewall) still accept SSH from the user's other machines through the server ([usage](usage.md#ssh-between-your-machines)). Each daemon holds one outbound WebSocket (`/v1/relay/agent`, pinged every 25 s); when another machine asks for it (`/v1/relay/connect`), the server joins that request with a second WebSocket from the daemon (`/v1/relay/accept`). `/v1/relay/status` lists the user's connected machines. The SSH session runs inside the tunnel, so the server relays ciphertext. There is nothing to configure; what to know:
+
+- A reverse proxy or load balancer in front of the server must pass WebSocket upgrades on `/v1/relay/*` and keep idle connections longer than the 25 s ping.
+- The relay state lives in the memory of one server process. With several instances, the machines and the clients of an account have to reach the same one; otherwise a machine is reported as not connected to the relay.
+- At most 64 relayed connections per account at a time, and the traffic is the server's bandwidth: bulk data goes with `hearth cp` or `hearth transfer`.
+- A removed or revoked device is dropped within about 25 s.
 
 ## Performance
 

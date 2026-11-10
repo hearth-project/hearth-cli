@@ -1,6 +1,6 @@
 # Memory roadmap
 
-[中文](../zh/memory-roadmap.md) · [Back to README](../../README.md)
+[中文](../zh/memory-roadmap.md) · [Back to README](../../README.en.md)
 
 > Status: **M1 shipped, M2 in progress** (see "Unreleased" in [CHANGELOG](../../CHANGELOG.md)). Available now: memory cards, the local FTS5 index, `hearth recall`, `hearth memory remember|forget|list`, MCP `recall` / `remember` / `forget`, and the Codex and Claude Code prompt hooks. Still open: `hearth memory review`, confirming proposed facts, the resident profile block, Comate, and all of M3; schedule in the [development roadmap](https://github.com/hearth-project/hearth-cli/issues/1).
 >

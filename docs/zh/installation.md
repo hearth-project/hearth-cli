@@ -1,6 +1,6 @@
 # 安装指南
 
-[English](../en/installation.md) · [返回 README](../../README.zh-CN.md)
+[English](../en/installation.md) · [返回 README](../../README.md)
 
 Hearth 客户端是一个静态二进制，支持 Linux（x86_64、ARM64）和 macOS（Apple Silicon、Intel）。Windows 暂不支持，可在 WSL 中按 Linux 方式安装。
 
@@ -62,6 +62,7 @@ curl -fsSL -k https://<server>/install.sh | sh
 | `HEARTH_HOME=<目录>` | 客户端状态目录，默认 `~/.hearth`（或工作区下的 `.hearth`） |
 | `HEARTH_NO_SKILLS=1` | 不安装 `hearth` skill |
 | `HEARTH_NO_PATH=1` | 不修改 shell 启动文件、不建软链接 |
+| `--no-app`、`HEARTH_NO_APP=1` | 在 Mac 上，不安装菜单栏小程序（服务器提供时 `hearth setup` 默认会装） |
 
 变量写在 `sh` 前面，例如 `curl … | HEARTH_NO_SKILLS=1 sh -s -- --install-only`。
 
@@ -143,6 +144,7 @@ hearth self-update --auto off      # 本机关闭自动更新（on 重新打开�
 
 ```bash
 hearth daemon stop                      # 先停止后台同步（会先上传未同步的内容）
+hearth app uninstall                    # 仅 Mac：退出并删除菜单栏小程序
 rm ~/.local/bin/hearth                  # 以及 /usr/local/bin/hearth（若安装脚本建了软链接）
 rm -r ~/.codex/skills/hearth ~/.claude/skills/hearth ~/.comate/skills/hearth
 rm -r ~/.hearth                         # 本机状态和缓存的密钥；工作区模式下是 <工作目录>/.hearth

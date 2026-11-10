@@ -1,6 +1,6 @@
 # 使用指南
 
-[English](../en/usage.md) · [返回 README](../../README.zh-CN.md)
+[English](../en/usage.md) · [返回 README](../../README.md)
 
 所有命令都可以加 `--help`，完整列表见 [命令参考](../cli.md)。也可以直接对 agent 说「用 hearth」，由 `hearth` skill 代为执行下面的操作。
 

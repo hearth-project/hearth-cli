@@ -1,6 +1,6 @@
 # Hearth technical reference
 
-> Detailed behaviour of every part of Hearth. For installation and everyday use start with the [README](../../README.md); commands are listed in [cli.md](../cli.md).
+> Detailed behaviour of every part of Hearth. For installation and everyday use start with the [README](../../README.en.md); commands are listed in [cli.md](../cli.md).
 
 A home for your coding agents. Hearth keeps Codex and Claude Code sessions, skills, agents, credentials and setup steps end-to-end encrypted on a server you host, so any machine can be replaced or killed without losing agent context, and a new one is restored with one command.
 
@@ -347,6 +347,13 @@ hearth mcp-config sync [--adopt]    # Comate mcp.json, Claude ~/.claude.json, Co
 
 ``config.toml` `[mcp]`` references credentials as `${secret:NAME}`; they are resolved at render time. Existing servers that hearth did not create are left alone unless `--adopt`.
 
+## Connections between machines
+
+- **SSH.** Every logged-in Linux machine runs a public-key-only sshd for the user's own devices (default port 8022; an sshd already there is used). The device keys are published end to end encrypted and written to `authorized_keys` (a marked block, or a file of their own on a shared account); the host keys are published the same way and checked by the clients from Hearth's own `known_hosts`. Details and settings: [usage](usage.md#ssh-between-your-machines).
+- **Copy.** `hearth cp` opens its control channel over SSH and moves the data over parallel TCP connections between the two machines, AES-256-GCM with a key that only travels through SSH. The server is not on the path.
+- **Relay.** For a machine nobody can connect to, the daemon holds an outbound WebSocket to the server (`GET /v1/relay/agent`). A client asks for a connection (`GET /v1/relay/connect?device=`), the server tells the daemon, the daemon opens a second WebSocket (`GET /v1/relay/accept?id=`) joined to its sshd, and the server copies bytes between the two. SSH runs inside, so the server sees ciphertext and the clients check the same host keys. `ssh`, `scp`, `rsync` and IDEs use it through a `ProxyCommand` (`hearth ssh-proxy`: direct address first, relay after 2 s); the state is in the memory of one server process, at most 64 joined connections per account.
+- **Storage transfers.** `hearth transfer` is a client for a DataTool-compatible service. The service's address, token and path rules are in `<data>/transfer.json` on the Hearth server, served to logged-in users at `GET /v1/transfer/config`; the token is only sent to the service's own URL, and the AFS UGI is read from the user's vault. A `[transfer]` section in the user's `config.toml` overrides the server's values.
+
 ## Quick start
 
 ### Server host (once)
@@ -411,6 +418,7 @@ hearth flush                 # upload everything now (k8s preStop hook)
 - Windows is not supported (use WSL). The darwin and linux-arm64 builds are cross-compiled and served by tests, but were not executed on those platforms here.
 - Client side: no systemd unit for the daemon; run `hearth up` after a reboot or container restart.
 - Path translation covers home and workspace only; other absolute paths (e.g. /mnt/data on one machine, /data on another) are kept as they are.
+- The SSH relay keeps its state in the memory of one server process: with several instances, an account's machines and clients have to reach the same one. It still needs the machine's own sshd; an SSH server inside the daemon (no sshd at all) and direct connections between NATed machines (hole punching) are not done.
 - Polling instead of fsnotify. The only agent hooks are the memory hooks of Codex and Claude Code.
 
 Planned work for these and other items: [development roadmap](https://github.com/hearth-project/hearth-cli/issues/1).

@@ -1,6 +1,6 @@
 # 常见问题与故障排查
 
-[English](../en/troubleshooting.md) · [返回 README](../../README.zh-CN.md)
+[English](../en/troubleshooting.md) · [返回 README](../../README.md)
 
 先运行 `hearth onboard status`，它会检查安装、登录、工作区、后台同步、agent、skill，并给出按顺序的下一步。
 
@@ -50,6 +50,16 @@ Desktop 运行时 `hearth session restore` 会通过它的后端让会话立即�
 library（skills、agents、配置）在服务器上明文保存。skill 里的凭证文件会自动加密同步；其他位置（配置、recipes、agent 文件）发现疑似凭证会拒绝上传，后续 library 同步（包括 `config.toml` `[backup]`）都会停住。把真实值移到本地认证文件，用 `hearth secret set <名字> --file <文件> --restore-to <路径>` 加密备份，skill 从文件读取；确实是文档示例的行加注释 `hearth:allow-secret`。
 
 **新机器上缺少某个认证文件。** `hearth secret list` 确认已保存，`hearth secret restore` 写回；没有保存过就在原机器 `hearth learn` 或 `hearth secret set --file`。
+
+## 机器之间的 SSH
+
+**`hearth ssh <机器>` 提示机器没有响应。** 这台机器的 sshd 从当前位置连不上（私网容器、防火墙）。如果两端都是较新的 Hearth，且 `[ssh] relay` 没有设成 `false`，`hearth ssh`、`hearth cp` 和 `~/.ssh/config` 里的条目会自动经服务器中转（见[使用指南](usage.md#机器之间的-ssh)）。没有生效时，在那台机器上先 `hearth self-update`，再 `hearth daemon stop && hearth daemon start`；daemon 日志里出现 `relay: connected` 说明已接入。`hearth ssh status` 可以看它的 sshd 是否在运行。
+
+**`that machine is not connected to the relay`（机器没有连上中转）。** 那台机器的 daemon 没在运行、版本太旧，或设了 `[ssh] relay = false`。在那台机器上照上面做。机器关机或重启过的，daemon 重新启动后会自己回来。
+
+**`sshd is not running on that machine`（那台机器上 sshd 没有运行）。** daemon 已连上，但它转发的 sshd 没起来：在那台机器上看 `hearth ssh status`，`hearth ssh enable` 可以启动。
+
+**直接 `ssh <host>` 只有部分机器能用。** `~/.ssh/config` 里的 Hearth 块只会给「从本机连不通、但已连上中转」的机器写 `ProxyCommand`，这个块每次同步都会重写。Linux 机器执行 `hearth ssh config` 后才有这个块。
 
 ## 服务器
 

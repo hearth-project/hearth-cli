@@ -1,6 +1,6 @@
 # Installation
 
-[中文](../zh/installation.md) · [Back to README](../../README.md)
+[中文](../zh/installation.md) · [Back to README](../../README.en.md)
 
 The Hearth client is one static binary for Linux (x86_64, ARM64) and macOS (Apple Silicon, Intel). Windows is not supported yet; install the Linux build inside WSL.
 
@@ -62,6 +62,7 @@ curl -fsSL -k https://<server>/install.sh | sh
 | `HEARTH_HOME=<dir>` | client state directory, default `~/.hearth` (or `.hearth` in the workspace) |
 | `HEARTH_NO_SKILLS=1` | do not install the `hearth` skill |
 | `HEARTH_NO_PATH=1` | do not touch shell startup files or create links |
+| `--no-app`, `HEARTH_NO_APP=1` | on a Mac, do not install the menu bar app that `hearth setup` otherwise installs when the server has one |
 
 Variables go before `sh`, e.g. `curl … | HEARTH_NO_SKILLS=1 sh -s -- --install-only`.
 
@@ -143,6 +144,7 @@ hearth self-update --auto off      # turn automatic updates off on this machine 
 
 ```bash
 hearth daemon stop                      # uploads pending data first
+hearth app uninstall                    # Mac only: quit and remove the menu bar app
 rm ~/.local/bin/hearth                  # and /usr/local/bin/hearth if the installer linked it
 rm -r ~/.codex/skills/hearth ~/.claude/skills/hearth ~/.comate/skills/hearth
 rm -r ~/.hearth                         # local state and cached key; <workspace>/.hearth in workspace mode
