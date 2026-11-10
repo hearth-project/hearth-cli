@@ -64,6 +64,17 @@ func (s *Server) RelayAgents() int {
 	return len(s.relay.agents)
 }
 
+// relayConnected reports whether the device holds a relay connection now.
+func (s *Server) relayConnected(device string) bool {
+	if device == "" || s.relay == nil {
+		return false
+	}
+	s.relay.mu.Lock()
+	defer s.relay.mu.Unlock()
+	_, ok := s.relay.agents[device]
+	return ok
+}
+
 // handleRelayStatus lists the caller's machines that hold a relay
 // connection now: {"devices": ["<device id>", ...]}.
 func (s *Server) handleRelayStatus(w http.ResponseWriter, r *http.Request) {

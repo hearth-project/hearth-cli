@@ -152,8 +152,9 @@ var envToolOrder = []string{"codex", "codex-mixin", "claude", "node"}
 var toolAgent = map[string]string{"codex": "codex", "codex-mixin": "codex", "claude": "claude"}
 
 // machineEnv judges a machine. clientVersion is the Hearth build it runs,
-// lastIP the address its requests come from.
-func (s *Server) machineEnv(healthJSON, clientVersion, lastIP string) *MachineEnv {
+// lastIP the address its requests come from, device its device id (to see
+// whether it holds a relay connection).
+func (s *Server) machineEnv(healthJSON, clientVersion, lastIP, device string) *MachineEnv {
 	var h reportedHealth
 	if strings.TrimSpace(healthJSON) == "" || healthJSON == "{}" || json.Unmarshal([]byte(healthJSON), &h) != nil || h.CheckedAt == 0 {
 		return &MachineEnv{Status: "unknown", Problems: []EnvProblem{}}
@@ -267,6 +268,11 @@ func (s *Server) machineEnv(healthJSON, clientVersion, lastIP string) *MachineEn
 				es.Status, es.Address = "ok", reached
 			case !done:
 				es.Status = "checking"
+			case s.relayConnected(device):
+				// The server cannot dial the sshd itself (a container's private
+				// network), but the machine accepts connections through the
+				// relay, which is how every device reaches it: not a problem.
+				es.Status, es.Detail = "ok", "reachable through the server relay"
 			default:
 				es.Status = "blocked"
 				p := EnvProblem{Level: "warn", Code: "ssh_blocked", Tool: "ssh", Have: x.Address + ":" + strconv.Itoa(x.Port)}

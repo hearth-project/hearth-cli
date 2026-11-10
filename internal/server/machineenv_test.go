@@ -30,7 +30,7 @@ func TestMachineEnv(t *testing.T) {
 	          "codex-mixin":{"expected":true,"installed":true,"version":"0.7.3","ok":false,"detail":"provider not logged in"},
 	          "claude":{"expected":true,"installed":false},"node":{"expected":false,"installed":true,"version":"24.4.1"}},
 	 "recipe_todo":2,"todo_steps":["codex-mixin-import","gateway"]}`
-	env := s.machineEnv(health, "", "")
+	env := s.machineEnv(health, "", "", "")
 	if env.Status != "error" {
 		t.Fatalf("status %s", env.Status)
 	}
@@ -49,10 +49,10 @@ func TestMachineEnv(t *testing.T) {
 			t.Fatalf("missing %s in %+v", k, env.Problems)
 		}
 	}
-	if s.machineEnv("{}", "", "").Status != "unknown" {
+	if s.machineEnv("{}", "", "", "").Status != "unknown" {
 		t.Fatal("no report is unknown")
 	}
-	ok := s.machineEnv(`{"checked_at":1,"tools":{"codex":{"expected":true,"installed":true,"version":"0.165.0"}}}`, "", "")
+	ok := s.machineEnv(`{"checked_at":1,"tools":{"codex":{"expected":true,"installed":true,"version":"0.165.0"}}}`, "", "", "")
 	if ok.Status != "ok" || len(ok.Problems) != 0 {
 		t.Fatalf("%+v", ok)
 	}
@@ -65,7 +65,7 @@ func TestMachineEnvUnusedAgents(t *testing.T) {
 	s.versions.set("codex", []string{"0.166.0", "0.165.0"})
 	env := s.machineEnv(`{"checked_at":1,
 	 "agents":{"claude":{"enabled":true,"installed":true,"used":false},"codex":{"enabled":true,"installed":true,"ready":true,"used":true}},
-	 "tools":{"claude":{"installed":true,"version":"2.1.293","ok":false},"codex":{"expected":true,"installed":true,"version":"0.165.0"}}}`, "", "")
+	 "tools":{"claude":{"installed":true,"version":"2.1.293","ok":false},"codex":{"expected":true,"installed":true,"version":"0.165.0"}}}`, "", "", "")
 	for _, p := range env.Problems {
 		if p.Tool == "claude" {
 			t.Fatalf("unused claude judged: %+v", p)
@@ -81,7 +81,7 @@ func TestMachineEnvCodexBypass(t *testing.T) {
 	health := `{"checked_at":1,"tools":{"codex":{"expected":true,"installed":true,"version":"0.1.0",
 	  "route":{"home":"/shared/x/codex_home","set_by":"/shared/x/bashrc:15 (sourced from /root/.bashrc:483)","provider":"openai","base_url":"https://api.openai.com/v1","gateway":false,"reach":false,"detail":"timeout"}},
 	  "codex-mixin":{"expected":true,"installed":true,"version":"0.7.3","ok":true}}}`
-	env := s.machineEnv(health, "", "")
+	env := s.machineEnv(health, "", "", "")
 	found := false
 	for _, p := range env.Problems {
 		if p.Code == "bypass" && p.Level == "error" && strings.Contains(p.Detail, "/root/.bashrc:483") {
@@ -101,7 +101,7 @@ func TestMachineEnvCodexNoLogin(t *testing.T) {
 	  "route":{"home":"/root/.codex","provider":"openai","base_url":"https://api.openai.com/v1","gateway":false,"missing":["auth.json","config.toml"]},
 	  "stale_app_servers":[{"pid":7,"codex_home":"/root/.codex"},{"pid":8,"codex_home":"/root/.codex"}]},
 	  "codex-mixin":{"expected":true,"installed":true,"version":"0.7.3","ok":true}}}`
-	env := s.machineEnv(health, "", "")
+	env := s.machineEnv(health, "", "", "")
 	codes := map[string]EnvProblem{}
 	for _, p := range env.Problems {
 		codes[p.Code] = p
@@ -128,7 +128,7 @@ func TestMachineEnvSSHAndLevels(t *testing.T) {
 	s := &Server{versions: newToolVersions(), cfg: Config{Now: func() time.Time { return now }}}
 	at := strconv.FormatInt(now.Unix(), 10)
 	env := s.machineEnv(`{"checked_at":`+at+`,"tools":{"codex":{"expected":true,"installed":false}},
-	 "ssh":{"on":true,"running":false,"address":"127.0.0.1","port":1,"answers":false,"detail":"sshd not found"}}`, "", "")
+	 "ssh":{"on":true,"running":false,"address":"127.0.0.1","port":1,"answers":false,"detail":"sshd not found"}}`, "", "", "")
 	codes := map[string]string{}
 	for _, p := range env.Problems {
 		codes[p.Code] = p.Level
@@ -154,12 +154,12 @@ func TestMachineEnvSSHAndLevels(t *testing.T) {
 	}()
 	port := l.Addr().(*net.TCPAddr).Port
 	rep := `{"checked_at":` + at + `,"ssh":{"on":true,"running":true,"address":"127.0.0.1","port":` + strconv.Itoa(port) + `,"answers":true,"key_ok":true}}`
-	if e := s.machineEnv(rep, "", ""); e.SSH.Status != "checking" || len(e.Problems) != 0 {
+	if e := s.machineEnv(rep, "", "", ""); e.SSH.Status != "checking" || len(e.Problems) != 0 {
 		t.Fatalf("first look: %+v", e.SSH)
 	}
 	deadline := time.Now().Add(5 * time.Second)
 	for {
-		e := s.machineEnv(rep, "", "")
+		e := s.machineEnv(rep, "", "", "")
 		if e.SSH.Status == "ok" && e.Status == "ok" {
 			break
 		}
@@ -170,7 +170,7 @@ func TestMachineEnvSSHAndLevels(t *testing.T) {
 	}
 	// An old report (machine offline) is not judged.
 	old := strconv.FormatInt(now.Unix()-3600, 10)
-	if e := s.machineEnv(`{"checked_at":`+old+`,"ssh":{"on":true,"answers":false}}`, "", ""); e.SSH.Status != "stale" || len(e.Problems) != 0 {
+	if e := s.machineEnv(`{"checked_at":`+old+`,"ssh":{"on":true,"answers":false}}`, "", "", ""); e.SSH.Status != "stale" || len(e.Problems) != 0 {
 		t.Fatalf("stale: %+v %+v", e.SSH, e.Problems)
 	}
 }
@@ -201,7 +201,7 @@ func TestMachineEnvSSHAddresses(t *testing.T) {
 	wait := func(rep, lastIP string, done func(*MachineEnv) bool) *MachineEnv {
 		deadline := time.Now().Add(5 * time.Second)
 		for {
-			e := s.machineEnv(rep, "", lastIP)
+			e := s.machineEnv(rep, "", lastIP, "")
 			if done(e) || time.Now().After(deadline) {
 				return e
 			}
@@ -221,5 +221,32 @@ func TestMachineEnvSSHAddresses(t *testing.T) {
 	e = wait(nat, "127.0.0.3", func(e *MachineEnv) bool { return e.SSH.Status == "blocked" })
 	if len(e.Problems) != 1 || e.Problems[0].Code != "ssh_blocked" {
 		t.Fatalf("blocked: %+v", e.Problems)
+	}
+}
+
+// A machine the server cannot dial (a container behind NAT) that holds a
+// relay connection is reachable by every device: no ssh problem is raised.
+func TestMachineEnvSSHRelayConnected(t *testing.T) {
+	now := time.Unix(1_800_000_000, 0)
+	s := &Server{versions: newToolVersions(), relay: newRelayHub(), cfg: Config{Now: func() time.Time { return now }}}
+	at := strconv.FormatInt(now.Unix(), 10)
+	// 127.0.0.1:1 refuses connections, so the direct probe fails.
+	rep := `{"checked_at":` + at + `,"ssh":{"on":true,"running":true,"address":"127.0.0.1","port":1,"answers":true,"key_ok":true}}`
+	s.relay.agents["dev1"] = &relayAgent{}
+	wait := func(device string) *MachineEnv {
+		deadline := time.Now().Add(5 * time.Second)
+		for {
+			e := s.machineEnv(rep, "", "10.79.185.146", device)
+			if (e.SSH.Status != "checking") || time.Now().After(deadline) {
+				return e
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+	}
+	if e := wait("dev1"); e.SSH.Status != "ok" || len(e.Problems) != 0 {
+		t.Fatalf("relay connected: %+v %+v", e.SSH, e.Problems)
+	}
+	if e := wait("other"); e.SSH.Status != "blocked" || len(e.Problems) != 1 || e.Problems[0].Code != "ssh_nat" {
+		t.Fatalf("not on the relay: %+v %+v", e.SSH, e.Problems)
 	}
 }
