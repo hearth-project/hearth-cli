@@ -19,11 +19,11 @@ struct AdminDashboardPage: View {
 
     @ViewBuilder private func loaded(_ o: AdminOverview) -> some View {
         let s = o.stats
-        let cols = [GridItem(.adaptive(minimum: 200), spacing: 12)]
+        let cols = Columns.grid
         if let p = o.pending_users, p > 0 {
             Label("有 \(p) 位用户等待审批", systemImage: "person.badge.clock").font(.system(size: 12)).foregroundStyle(Theme.warn)
         }
-        LazyVGrid(columns: cols, spacing: 12) {
+        LazyVGrid(columns: cols, spacing: Columns.spacing) {
             KPI(title: "用户", value: "\(s.Users ?? 0)", icon: "person.2", tint: Theme.blue)
             KPI(title: "30 天活跃", value: "\(s.ActiveUsers30d ?? 0)", icon: "waveform.path.ecg", tint: Theme.ok)
             KPI(title: "在线设备", value: "\(o.online_devices ?? 0) / \(s.Devices ?? 0)", icon: "desktopcomputer", tint: Theme.ok)
@@ -31,17 +31,10 @@ struct AdminDashboardPage: View {
             KPI(title: "团队包", value: "\(s.Packages ?? 0)", icon: "shippingbox", tint: Theme.accent)
             KPI(title: "占用空间", value: Fmt.bytes((s.SessionBytes ?? 0) + (s.LibraryBytes ?? 0) + (s.PackageBytes ?? 0)), icon: "externaldrive", tint: Theme.slate)
         }
-        HStack(alignment: .top, spacing: 12) {
+        CardRow(spans: [1, 1, 1]) {
             Panel(title: "每日上传") {
                 UploadChart(series: (o.series ?? []).map { DaySeries(day: $0.day, bytes: $0.bytes ?? 0) })
             }
-            Panel(title: "客户端版本") {
-                let vs = o.client_versions ?? []
-                if vs.isEmpty { Text("没有设备").font(.system(size: 12)).foregroundStyle(.tertiary) }
-                RankBars(items: vs.map { NameCount(name: $0.name, count: $0.count) }, tint: Theme.blue)
-            }
-        }
-        HStack(alignment: .top, spacing: 12) {
             Panel(title: "每日活跃用户") {
                 CountChart(series: (o.series ?? []).map { ($0.day, $0.active_users ?? 0) }, tint: Theme.ok, unit: "人")
             }
@@ -49,7 +42,12 @@ struct AdminDashboardPage: View {
                 CountChart(series: (o.series ?? []).map { ($0.day, $0.signups ?? 0) }, tint: Theme.accent, unit: "人")
             }
         }
-        HStack(alignment: .top, spacing: 12) {
+        CardRow(spans: [1, 1, 1]) {
+            Panel(title: "客户端版本") {
+                let vs = o.client_versions ?? []
+                if vs.isEmpty { Text("没有设备").font(.system(size: 12)).foregroundStyle(.tertiary) }
+                RankBars(items: vs.map { NameCount(name: $0.name, count: $0.count) }, tint: Theme.blue)
+            }
             Panel(title: "常用 Skills（30 天）") { RankBars(items: (o.top_skills ?? []).map { NameCount(name: $0.name, count: $0.count) }, tint: Theme.accent) }
             Panel(title: "常用 Agents（30 天）") { RankBars(items: (o.top_agents ?? []).map { NameCount(name: $0.name, count: $0.count) }, tint: Color(red: 0.55, green: 0.40, blue: 0.85)) }
         }
