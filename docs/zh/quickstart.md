@@ -1,6 +1,6 @@
 # 快速上手：10 分钟部署服务器和客户端
 
-[English](../en/quickstart.md) · [返回 README](../../README.zh-CN.md)
+[English](../en/quickstart.md) · [返回 README](../../README.md)
 
 本文从零开始：先在一台机器上部署 Hearth 服务器，再在开发机上安装客户端、创建账号，最后在第二台机器上一键恢复。示例中的地址都是占位符，请换成你自己的：
 
@@ -93,7 +93,7 @@ curl -fsSL -k https://<server-host>:8787/install.sh | sh
 
 ### 记录这台机器的环境
 
-新加的 skills、环境变量、工具版本、MCP 配置和 shell 配置（`~/.bashrc` 里你自己加的部分）由后台同步自动记录；凭证在 setup 时问一次是否自动备份。剩下需要你决定的（例如本机副本和备份不一致的），`hearth status` 会提示。也可以在 Codex 或 Claude Code 里说：**「用 hearth 记录这台机器的配置」**。agent 会列出发现的 SSH key、git / gh 登录、agent 登录、常用工具和环境变量，由你选择哪些要在新机器上恢复。也可以在终端执行 `hearth learn`。
+新加的 skills、环境变量、工具版本、MCP 配置和 shell 配置（`~/.bashrc` 里你自己加的部分）由后台同步自动记录；凭证（SSH key、登录信息、skill 声明的凭证文件）也默认自动记录，端到端加密（`hearth learn --auto-credentials=false` 可改为逐项自己决定）。剩下需要你决定的（例如本机副本和备份不一致的），`hearth status` 会提示。也可以在 Codex 或 Claude Code 里说：**「用 hearth 记录这台机器的配置」**。agent 会列出发现的 SSH key、git / gh 登录、agent 登录、常用工具和环境变量，由你选择哪些要在新机器上恢复。也可以在终端执行 `hearth learn`。
 
 ### 看一下现在的状态
 

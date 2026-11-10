@@ -1,6 +1,6 @@
 # Agent 接入规范（Agent Integration）
 
-[English](../en/agent-integration.md) · [返回 README](../../README.zh-CN.md)
+[English](../en/agent-integration.md) · [返回 README](../../README.md)
 
 本文档定义 Hearth 如何接入一个 agent。目标是：**核心同步、加密、索引、恢复逻辑只有一套；每个 agent 的差异被收敛到可替换的适配层。** 新增 agent 时不改核心流程，只新增适配代码和测试。
 

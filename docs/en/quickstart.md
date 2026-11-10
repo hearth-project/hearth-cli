@@ -1,6 +1,6 @@
 # Quick start: server and clients in 10 minutes
 
-[中文](../zh/quickstart.md) · [Back to README](../../README.md)
+[中文](../zh/quickstart.md) · [Back to README](../../README.en.md)
 
 From scratch: deploy a Hearth server on one machine, install the client on a dev machine and create an account, then restore a second machine with one command. Addresses below are placeholders; use your own:
 
@@ -93,7 +93,7 @@ After the login setup asks for your working directory on this machine (your home
 
 ### Record this machine's setup
 
-New skills, environment variables, tool versions, MCP servers and your shell lines (your own part of `~/.bashrc`) are recorded by the background sync; setup asks once whether credentials are kept automatically too. Whatever needs your choice (e.g. a copy that differs from the stored one) shows up in `hearth status`. You can also tell Codex or Claude Code: **"use hearth to record this machine's setup"**. The agent lists the SSH keys, git / gh logins, agent logins, tools and environment variables it found and lets you choose what new machines restore. Or run `hearth learn` in a terminal.
+New skills, environment variables, tool versions, MCP servers and your shell lines (your own part of `~/.bashrc`) are recorded by the background sync; credentials (SSH keys, logins, the files skills declare) are recorded automatically too, encrypted (`hearth learn --auto-credentials=false` to decide each yourself). Whatever needs your choice (e.g. a copy that differs from the stored one) shows up in `hearth status`. You can also tell Codex or Claude Code: **"use hearth to record this machine's setup"**. The agent lists the SSH keys, git / gh logins, agent logins, tools and environment variables it found and lets you choose what new machines restore. Or run `hearth learn` in a terminal.
 
 ### Look around
 

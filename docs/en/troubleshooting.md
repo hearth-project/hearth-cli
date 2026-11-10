@@ -1,6 +1,6 @@
 # FAQ and troubleshooting
 
-[中文](../zh/troubleshooting.md) · [Back to README](../../README.md)
+[中文](../zh/troubleshooting.md) · [Back to README](../../README.en.md)
 
 Start with `hearth onboard status`: it checks install, login, workspace, background sync, agents and the skill, and lists the next steps in order.
 
@@ -50,6 +50,16 @@ With Desktop running, `hearth session restore` makes the thread appear through i
 The library (skills, agents, settings) is stored in plaintext. Credential files inside skills sync encrypted by themselves; a likely secret elsewhere (config, recipes, agent files) refuses the upload, and library sync (including `config.toml` `[backup]`) stops until it is fixed. Move the real values into local auth files, back them up with `hearth secret set <name> --file <file> --restore-to <path>`, and have the skill read the file; mark lines that really are documented examples with a `hearth:allow-secret` comment.
 
 **An auth file is missing on the new machine.** `hearth secret list` shows whether it was stored, `hearth secret restore` writes it back; if it never was, run `hearth learn` or `hearth secret set --file` on the original machine.
+
+## SSH between machines
+
+**`hearth ssh <machine>` says the machine does not answer.** The machine's sshd is not reachable from here (a container on a private network, a firewall). If both sides run a current Hearth with `[ssh] relay` not `false`, `hearth ssh`, `hearth cp` and the `~/.ssh/config` entries go through the Hearth server by themselves ([usage](usage.md#ssh-between-your-machines)). When they do not, on the machine: `hearth self-update`, then `hearth daemon stop && hearth daemon start`; the daemon log has a `relay: connected` line when it joined. `hearth ssh status` says whether its sshd runs.
+
+**`that machine is not connected to the relay`.** The machine's daemon is not running, is too old, or has `[ssh] relay = false`. Same steps on the machine. A machine that is switched off or restarted comes back when its daemon starts again.
+
+**`sshd is not running on that machine`.** The daemon is connected, but the sshd it serves is down: `hearth ssh status` on the machine; `hearth ssh enable` starts it.
+
+**Plain `ssh <host>` works for some machines only.** The Hearth block in `~/.ssh/config` gets a `ProxyCommand` line only for a machine that does not answer from this machine but is connected to the relay; the block is rewritten on every sync. On a Linux machine it exists after `hearth ssh config`.
 
 ## Server
 

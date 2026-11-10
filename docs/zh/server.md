@@ -1,6 +1,6 @@
 # 服务器部署与管理
 
-[English](../en/server.md) · [返回 README](../../README.zh-CN.md)
+[English](../en/server.md) · [返回 README](../../README.md)
 
 服务器和客户端是同一个 `hearth` 二进制。服务器只保存密文（会话、凭证）和用户自己的 library，没有解密能力。
 
@@ -163,6 +163,15 @@ cp /tmp/hearth-app/hearth-menubar-darwin.zip $D/dist/
 ```
 
 发布的 Release 里已经带这个 zip（`hearth-menubar-darwin.zip` 和 `.sha256`，由发布流程在 Mac 上构建，比二进制晚几分钟），`scripts/deploy-server.sh` 会把它和二进制一起放进 `dist/`；还没有时稍后重新运行脚本即可。GitHub 上的 `macos-app` workflow 对每次改动也会构建同一个 zip（artifact 名为 `hearth-menubar`）。小程序是 ad hoc 签名；`hearth app install` 会去掉下载隔离标记，Gatekeeper 不会拦。
+
+## SSH 中转
+
+在私网容器里、防火墙后面、别人连不进去的机器，也能通过服务器接受你其他机器的 SSH（见[使用指南](usage.md#机器之间的-ssh)）。每台机器的 daemon 保持一条出站 WebSocket（`/v1/relay/agent`，每 25 秒 ping 一次）；别的机器要连它时（`/v1/relay/connect`），服务器把这个请求和 daemon 新开的第二条 WebSocket（`/v1/relay/accept`）接起来。`/v1/relay/status` 列出该用户当前连着的机器。SSH 会话在隧道里面，服务器转发的只是密文。服务器上不需要配置；需要知道的几点：
+
+- 服务器前面的反向代理或负载均衡必须放行 `/v1/relay/*` 的 WebSocket 升级，空闲超时要比 25 秒的 ping 间隔长。
+- 中转状态只在一个服务进程的内存里。多实例时，同一个账号的机器和客户端必须连到同一个实例，否则会提示机器没有连上中转。
+- 每个账号同时最多 64 条中转连接，流量用的是服务器的带宽；大量数据用 `hearth cp` 或 `hearth transfer`。
+- 被移除或吊销的设备在约 25 秒内断开。
 
 ## 性能
 
