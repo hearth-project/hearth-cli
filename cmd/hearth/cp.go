@@ -83,6 +83,7 @@ func cpCmd() *cobra.Command {
 			if !strings.Contains(a[0], ":") && !strings.Contains(a[1], ":") {
 				return localCopy(ctx, a[0], a[1], opts, quiet)
 			}
+			ui := newCPUI(quiet)
 			e, err := engine()
 			if err != nil {
 				return err
@@ -105,26 +106,25 @@ func cpCmd() *cobra.Command {
 			case src.machine != "" && dst.machine != "":
 				return thirdParty(src, dst, cmd)
 			}
-			cfg := xfer.ClientConfig{Opts: opts, Compress: compress, NoShared: noShared}
-			if !quiet {
-				cfg.Progress = newProgress()
-				cfg.Info = func(f string, x ...any) { cpLine(""); fmt.Fprintf(os.Stderr, "hearth cp: "+f+"\n", x...) }
-			}
+			cfg := xfer.ClientConfig{Opts: opts, Compress: compress, NoShared: noShared,
+				Progress: ui.progress, Info: ui.info, Route: ui.route}
 			send := dst.machine != ""
 			machine, local, remote := dst.machine, src.path, dst.path
 			if !send {
 				machine, local, remote = src.machine, dst.path, src.path
 			}
+			ui.header(a[0], a[1])
 			var res *xfer.Result
 			for attempt := 1; ; attempt++ {
+				ui.connecting("connecting to " + machine)
 				res, err = remoteCopy(ctx, e, eps, machine, send, local, remote, cfg)
 				if err == nil || ctx.Err() != nil || attempt == 3 || errors.As(err, new(*unreachableError)) {
 					break
 				}
-				fmt.Fprintf(os.Stderr, "\nhearth cp: %v; trying again (it resumes)\n", err)
+				ui.line("retry", fmt.Sprintf("%v; trying again (it resumes)", err))
 				time.Sleep(time.Second)
 			}
-			cpLine("")
+			ui.stop()
 			if err != nil && ctx.Err() != nil {
 				return errors.New("interrupted; run the same command again to resume")
 			}
@@ -140,7 +140,7 @@ func cpCmd() *cobra.Command {
 			if send {
 				where = machine + ":" + where
 			}
-			summary(res, where)
+			ui.done(res, where)
 			return nil
 		},
 	}
@@ -159,17 +159,14 @@ type unreachableError struct{ err error }
 func (u *unreachableError) Error() string { return u.err.Error() }
 
 func localCopy(ctx context.Context, src, dst string, o xfer.Options, quiet bool) error {
-	var pr xfer.Progress
-	if !quiet {
-		pr = newProgress()
-	}
+	ui := newCPUI(quiet)
 	t0 := time.Now()
-	p, err := xfer.Local(ctx, src, dst, o, pr)
-	cpLine("")
+	p, err := xfer.Local(ctx, src, dst, o, ui.progress)
+	ui.stop()
 	if err != nil {
 		return err
 	}
-	summary(&xfer.Result{Plan: p, Bytes: p.Bytes, Took: time.Since(t0), Streams: max(o.Streams, 16), Via: "local"}, p.Target)
+	ui.done(&xfer.Result{Plan: p, Bytes: p.Bytes, Took: time.Since(t0), Streams: max(o.Streams, 16), Via: "local"}, p.Target)
 	return nil
 }
 
@@ -319,65 +316,8 @@ func quietExit(err error) error {
 	return err
 }
 
-func summary(r *xfer.Result, where string) {
-	p := r.Plan
-	rate := ""
-	if s := r.Took.Seconds(); s > 0 && r.Bytes > 0 {
-		rate = fmt.Sprintf(", %s/s", bytesString(int64(float64(r.Bytes)/s)))
-	}
-	extra := []string{}
-	if p.Skipped > 0 {
-		extra = append(extra, fmt.Sprintf("%d up to date", p.Skipped))
-	}
-	if p.Resumed > 0 {
-		extra = append(extra, fmt.Sprintf("%d resumed", p.Resumed))
-	}
-	if len(p.Kept) > 0 {
-		extra = append(extra, fmt.Sprintf("%d kept (--no-clobber)", len(p.Kept)))
-	}
-	more := ""
-	if len(extra) > 0 {
-		more = " (" + strings.Join(extra, ", ") + ")"
-	}
-	via := r.Via
-	if via != "shared disk" && via != "local" {
-		via = fmt.Sprintf("%d %s connections", r.Streams, via)
-	}
-	fmt.Printf("copied %s in %d file(s)%s to %s in %s%s, %s\n", bytesString(r.Bytes), len(p.Files), more, where, r.Took.Round(100*time.Millisecond), rate, via)
-}
-
-// progress on stderr: one updated line in a terminal, a line every 10 s
-// otherwise.
+// cpTTY: progress and spinners only in a terminal.
 var cpTTY = term.IsTerminal(int(os.Stderr.Fd()))
-
-func cpLine(s string) {
-	if cpTTY {
-		fmt.Fprintf(os.Stderr, "\r\033[K%s", s)
-	} else if s != "" {
-		fmt.Fprintln(os.Stderr, s)
-	}
-}
-
-func newProgress() xfer.Progress {
-	t0 := time.Now()
-	var last time.Time
-	return func(done, total int64) {
-		if !cpTTY && time.Since(last) < 10*time.Second && done < total {
-			return
-		}
-		last = time.Now()
-		el := time.Since(t0).Seconds()
-		rate := float64(done) / max(el, 0.001)
-		pct, eta := 100.0, ""
-		if total > 0 {
-			pct = 100 * float64(done) / float64(total)
-			if rate > 0 && done < total {
-				eta = " · " + (time.Duration(float64(total-done) / rate * float64(time.Second))).Round(time.Second).String() + " left"
-			}
-		}
-		cpLine(fmt.Sprintf("%s / %s  %.0f%% · %s/s%s", bytesString(done), bytesString(total), pct, bytesString(int64(rate)), eta))
-	}
-}
 
 func xferCmd() *cobra.Command {
 	c := &cobra.Command{Use: "xfer", Hidden: true, Short: "The other end of hearth cp"}
