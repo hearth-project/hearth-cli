@@ -143,6 +143,11 @@ type ClientConfig struct {
 	Compress string // auto, on, off
 	Progress Progress
 	Info     func(format string, a ...any)
+	// Route, when set, reports the data connections instead of Info: how
+	// many, how they go (direct, reverse, through SSH), the measured round
+	// trip (meaningless through SSH: it times the local forward) and
+	// whether chunks are compressed.
+	Route func(n int, via string, rtt time.Duration, compress bool)
 	// Tunnel opens n SSH port forwards to the remote's port and returns the
 	// local addresses (the last way when no direct connection works).
 	Tunnel func(port, n int) ([]string, error)
@@ -214,7 +219,11 @@ func Client(ctx context.Context, c *Ctrl, send bool, local, remotePath string, c
 	if err := c.Send(Msg{Op: "conns", N: len(conns), Compress: compress}); err != nil {
 		return nil, err
 	}
-	info("%d data connections (%s, round trip %s)%s", len(conns), via, rtt.Round(100*time.Microsecond), map[bool]string{true: ", zstd where it helps"}[compress])
+	if cfg.Route != nil {
+		cfg.Route(len(conns), via, rtt, compress)
+	} else {
+		info("%d data connections (%s, round trip %s)%s", len(conns), via, rtt.Round(100*time.Microsecond), map[bool]string{true: ", zstd where it helps"}[compress])
+	}
 	var p *Plan
 	if send {
 		p, err = runSend(ctx, c, local, conns, compress, cfg.Progress)
