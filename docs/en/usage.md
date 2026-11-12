@@ -221,6 +221,26 @@ The library is stored in plaintext on the server (visible to you only; team publ
 
 How team items get invoked: each team's 20 most used skills and 20 most used agents (by its members, last 30 days) are linked into every agent on all your machines, so the agents list and invoke them like your own (`[teams] use_top`, `use_exclude`; unlinking one keeps it out). Your own item of the same name wins. The other team skills are found through `hearth mcp` (`search_skills`, `list_skills`) and loaded by `get_skill`; that use counts toward the team ranking, so a skill that gets used becomes resident.
 
+### A team's git repository
+
+A team owner can bind a git repository to the team, keeping the repository's and the team's skills and agents in step:
+
+```bash
+hearth team repo set <team> ssh://you@icode.example.com:8235/group/repo --machine <machine>   # bind (owners)
+hearth team repo <team>                     # the binding and the last sync
+hearth team repo sync <team> --dry-run      # on the syncing machine: only what it would publish and propose
+hearth team repo sync <team>                # sync now (elsewhere: asks the syncing machine to)
+hearth team repo unset <team>               # unbind (the team keeps its items)
+```
+
+- Only `skills/` (a `SKILL.md` at any depth, e.g. `skills/<category>/<name>/`) and `agents/*.md` of the repository are read or written.
+- The sync runs on **one of the owner's own machines**, chosen by the owner, with the owner's git credentials on that machine; the server keeps the binding and the last result, never a credential. Pick a machine that is usually online and reaches the repository.
+- Daily, or when a maintainer asks (*Sync now* on the macOS app's Teams page, or `hearth team repo sync`): the syncing machine picks it up within a few minutes.
+- **Repository → team**: skills and agents that are new in the repository, or changed only there, are published as new team versions.
+- **The team wins**: when an item differs and the team's copy changed (or it was never synced, as on the first sync), the team keeps its version and proposes it to the repository; the repository's copy never replaces it (the result says so).
+- **Team → repository**: the team's new or changed items go back as one review: `refs/for/<branch>` by default (an icode / Gerrit CR; one Change-Id until it is merged), `--push branch` for a branch `hearth/team-<team>`, `--push off` for none. New skills go under `--new-dir` (default `skills/`). Nothing that looks like a credential is committed.
+- A skill removed from the repository stays in the team (the result says so); `hearth team unshare` removes it.
+
 ### Versions and updates of shared skills
 
 A team package has versions: every `hearth lib publish` (or an automatic share of your most used items) that changes the content makes a new immutable version, v1, v2, …; publishing identical content makes none. The server keeps them all. Your own library has no per-skill history (it syncs as a whole between your machines).

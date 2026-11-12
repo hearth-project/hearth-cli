@@ -88,6 +88,10 @@ Generated from `hearth --help` by `hearth docs cli > docs/cli.md`; every command
 | [`hearth team remove`](#hearth-team-remove) | Remove a member (owners), or leave (yourself) |
 | [`hearth team share-usage`](#hearth-team-share-usage) | Upload your usage counts of this team's published skills (opt-in, last 30 days) |
 | [`hearth team stats`](#hearth-team-stats) | Most used skills in a team (last 30 days, from members who share usage) |
+| [`hearth team repo`](#hearth-team-repo) | The team's git repository: its skills/ and agents/ sync into the team every day; the team's new items go back as a review |
+| [`hearth team repo set`](#hearth-team-repo-set) | Bind a repository to the team (owners); --machine: one of your machines that syncs it |
+| [`hearth team repo sync`](#hearth-team-repo-sync) | Sync now: on the syncing machine it runs here; elsewhere it asks that machine to |
+| [`hearth team repo unset`](#hearth-team-repo-unset) | Unbind the repository (owners); the team keeps its items |
 | [`hearth team packages`](#hearth-team-packages) | Skills and agents published in a team |
 | [`hearth mcp-config`](#hearth-mcp-config) | MCP servers for every agent from [mcp.servers] in config.toml (secrets via ${secret:NAME}) |
 | [`hearth mcp-config import`](#hearth-mcp-config-import) | Import an agent's mcpServers; credential env values become secrets |
@@ -244,24 +248,24 @@ Log in, restore the newest conversations, skills and credentials, and start back
 hearth setup [flags]
 
 Flags:
-      --alias string     a name for this machine (default: asked in a terminal, proposing e.g. gb-node-e05-13); an offline machine's name continues that machine; hearth device rename changes it
-      --ca-cert string   PEM certificate to trust for a self-signed server
-      --device string    device name (default: hostname)
-      --email string     account email (default: this machine's local identity, as hearth login)
-      --force            overwrite local session files that differ from the server
-      --full             restore everything now (credentials, conversations, shell lines, agent setup) instead of on demand
-      --insecure         allow plain HTTP to a non-loopback server
-      --invite string    invite code: create the account first (first machine only)
-      --new              create the account first (first machine only; servers in invite mode also need --invite)
-      --no-app           on a Mac, do not install the menu bar app [$HEARTH_NO_APP=1]
-      --no-daemon        do not start background sync
-      --no-import        do not record this machine for new ones (its skills and agents, new setup items, shell lines)
-      --no-register      never create the account; fail when the login does not exist
-      --server string    server URL (default: this login's, $HEARTH_SERVER, or the server hearth was installed from)
-      --sessions int     restore this many most recently active conversations (0 = all; a new machine restores none unless given) (default 10)
-      --switch           replace an existing login to another account or server
-      --team string      join a team with this invite code, or create a team of this name (asked in a terminal when you have none)
-      --token string     one-time install token from an install command (the Hearth app, hearth machine install-command): log in without the password (works once, 30 minutes) [$HEARTH_INSTALL_TOKEN]
+      --alias string               a name for this machine (default: asked in a terminal, proposing e.g. gb-node-e05-13); an offline machine's name continues that machine; hearth device rename changes it
+      --ca-cert string             PEM certificate to trust for a self-signed server
+      --device string              device name (default: hostname)
+      --email string               account email (default: this machine's local identity, as hearth login)
+      --force[=true|false]         overwrite local session files that differ from the server
+      --full[=true|false]          restore everything now (credentials, conversations, shell lines, agent setup) instead of on demand
+      --insecure[=true|false]      allow plain HTTP to a non-loopback server
+      --invite string              invite code: create the account first (first machine only)
+      --new[=true|false]           create the account first (first machine only; servers in invite mode also need --invite)
+      --no-app[=true|false]        on a Mac, do not install the menu bar app [$HEARTH_NO_APP=1]
+      --no-daemon[=true|false]     do not start background sync
+      --no-import[=true|false]     do not record this machine for new ones (its skills and agents, new setup items, shell lines)
+      --no-register[=true|false]   never create the account; fail when the login does not exist
+      --server string              server URL (default: this login's, $HEARTH_SERVER, or the server hearth was installed from)
+      --sessions int               restore this many most recently active conversations (0 = all; a new machine restores none unless given) (default 10)
+      --switch[=true|false]        replace an existing login to another account or server
+      --team string                join a team with this invite code, or create a team of this name (asked in a terminal when you have none)
+      --token string               one-time install token from an install command (the Hearth app, hearth machine install-command): log in without the password (works once, 30 minutes) [$HEARTH_INSTALL_TOKEN]
 ```
 
 ## hearth status
@@ -272,7 +276,7 @@ Everything at a glance: login, background sync, storage, agents, library and wha
 hearth status [flags]
 
 Flags:
-      --json   machine-readable (onboard status plus the daemon heartbeat)
+      --json[=true|false]   machine-readable (onboard status plus the daemon heartbeat)
 ```
 
 ## hearth restore
@@ -285,13 +289,13 @@ or pass one or more ids (any unique prefix) to restore just those.
 hearth restore [session-id ...] [flags]
 
 Flags:
-      --agent string     only restore sessions of this agent (codex, claude)
-      --all              restore every conversation
-      --force            overwrite local files that differ from the server copy
-      --include-online   also restore conversations last written on machines that are still online (left out by default)
-  -n, --last int         restore the N most recently active conversations (default 10)
-  -i, --pick             choose the conversations from a numbered list (default in a terminal)
-  -y, --yes              do not ask: restore the newest N right away
+      --agent string                  only restore sessions of this agent (codex, claude)
+      --all[=true|false]              restore every conversation
+      --force[=true|false]            overwrite local files that differ from the server copy
+      --include-online[=true|false]   also restore conversations last written on machines that are still online (left out by default)
+  -n, --last int                      restore the N most recently active conversations (default 10)
+  -i, --pick[=true|false]             choose the conversations from a numbered list (default in a terminal)
+  -y, --yes[=true|false]              do not ask: restore the newest N right away
 ```
 
 ## hearth config
@@ -302,7 +306,7 @@ Show the single settings file (skills, agents, backup, tools, MCP, workspaces)
 hearth config [flags]
 
 Flags:
-      --edit   open the file in $EDITOR
+      --edit[=true|false]   open the file in $EDITOR
 ```
 
 ## hearth session
@@ -321,14 +325,14 @@ Lists the searchable index of stored sessions: title, turns, last write, machine
 hearth session list [flags]
 
 Flags:
-      --agent string    filter by agent
-      --files           also list backed-up files and memory notes (default: conversations only)
-      --host string     filter by machine or device
-      --json            print the index as JSON
-  -n, --limit int       show the N most recently active sessions (0 = all) (default 20)
-  -s, --search string   match title, path or working directory
-      --status string   filter by status (active, expired)
-  -w, --wide            show full titles (no cut to the terminal width)
+      --agent string         filter by agent
+      --files[=true|false]   also list backed-up files and memory notes (default: conversations only)
+      --host string          filter by machine or device
+      --json[=true|false]    print the index as JSON
+  -n, --limit int            show the N most recently active sessions (0 = all) (default 20)
+  -s, --search string        match title, path or working directory
+      --status string        filter by status (active, expired)
+  -w, --wide[=true|false]    show full titles (no cut to the terminal width)
 ```
 
 ## hearth session list find
@@ -347,13 +351,13 @@ Search stored sessions by title, path or working directory
 hearth session find <query> [flags]
 
 Flags:
-      --agent string    filter by agent
-      --files           also list backed-up files and memory notes (default: conversations only)
-      --host string     filter by machine or device
-      --json            print the index as JSON
-  -n, --limit int       show the N most recently active matches (0 = all) (default 20)
-      --status string   filter by status (active, expired)
-  -w, --wide            show full titles (no cut to the terminal width)
+      --agent string         filter by agent
+      --files[=true|false]   also list backed-up files and memory notes (default: conversations only)
+      --host string          filter by machine or device
+      --json[=true|false]    print the index as JSON
+  -n, --limit int            show the N most recently active matches (0 = all) (default 20)
+      --status string        filter by status (active, expired)
+  -w, --wide[=true|false]    show full titles (no cut to the terminal width)
 ```
 
 ## hearth session show
@@ -372,7 +376,7 @@ Restore chosen sessions (any unique id prefix) and take their lease
 hearth session restore <session-id> [session-id ...] [flags]
 
 Flags:
-      --force   overwrite local files that differ from the server copy
+      --force[=true|false]   overwrite local files that differ from the server copy
 ```
 
 ## hearth session scope
@@ -423,8 +427,8 @@ Delete sessions on the server that ran outside the uploading machine's workspace
 hearth session scope prune [flags]
 
 Flags:
-      --keep strings   directories whose sessions are yours after all (repeatable)
-      --yes            delete them
+      --keep strings       directories whose sessions are yours after all (repeatable)
+      --yes[=true|false]   delete them
 ```
 
 ## hearth session touch
@@ -553,8 +557,8 @@ key are removed). A backup of the shared default's config goes to
 hearth agents isolate <codex|claude> [flags]
 
 Flags:
-      --dir string   new home (default <hearth home>/agent-homes/<agent>)
-  -y, --yes          do not ask
+      --dir string         new home (default <hearth home>/agent-homes/<agent>)
+  -y, --yes[=true|false]   do not ask
 ```
 
 ## hearth agents where
@@ -578,7 +582,7 @@ Hearth set before; other people's processes are not touched.
 hearth agents restart-app-server [flags]
 
 Flags:
-  -y, --yes   do not ask
+  -y, --yes[=true|false]   do not ask
 ```
 
 ## hearth agents disable
@@ -600,8 +604,8 @@ the current directory.
 hearth agents import <agent> [session-file | hearth-session-id ...] [flags]
 
 Flags:
-      --dry-run       only show what would be imported
-      --from string   source agent to import from (default "claude")
+      --dry-run[=true|false]   only show what would be imported
+      --from string            source agent to import from (default "claude")
 ```
 
 ## hearth backup
@@ -643,7 +647,7 @@ Show what the selection uploads from this machine
 hearth backup status [flags]
 
 Flags:
-      --all   list every file, selected or not
+      --all[=true|false]   list every file, selected or not
 ```
 
 ## hearth backup enable
@@ -694,8 +698,8 @@ Copy an agent's existing skills, agents and instructions into the library
 hearth lib import codex|claude|comate [flags]
 
 Flags:
-      --from string   agent directory to import from (default: $CODEX_HOME / ~/.claude); a project's .codex or .claude also works
-      --overwrite     replace items already in the library
+      --from string              agent directory to import from (default: $CODEX_HOME / ~/.claude); a project's .codex or .claude also works
+      --overwrite[=true|false]   replace items already in the library
 ```
 
 ## hearth lib sync
@@ -706,8 +710,8 @@ Render the library into every agent (skills symlinked, agents converted)
 hearth lib sync [flags]
 
 Flags:
-      --adopt     back up and replace existing unmanaged skills/agents with the library version
-      --dry-run   only show what would change
+      --adopt[=true|false]     back up and replace existing unmanaged skills/agents with the library version
+      --dry-run[=true|false]   only show what would change
 ```
 
 ## hearth lib push
@@ -718,7 +722,7 @@ Upload the library to your private space on the server
 hearth lib push [flags]
 
 Flags:
-      --allow-secrets   upload even if the secret scan finds something
+      --allow-secrets[=true|false]   upload even if the secret scan finds something
 ```
 
 ## hearth lib pull
@@ -729,7 +733,7 @@ Download the library from the server and render it
 hearth lib pull [flags]
 
 Flags:
-      --force   discard unsynced local changes (they are backed up)
+      --force[=true|false]   discard unsynced local changes (they are backed up)
 ```
 
 ## hearth lib status
@@ -748,7 +752,7 @@ Show the single settings file (skills, agents, backup, tools, MCP, workspaces)
 hearth lib config [flags]
 
 Flags:
-      --edit   open the file in $EDITOR
+      --edit[=true|false]   open the file in $EDITOR
 ```
 
 ## hearth lib skills-dir
@@ -781,8 +785,8 @@ Most used skills, last 30 days (MCP get_skill + session logs)
 hearth lib stats [flags]
 
 Flags:
-      --days int   window in days (default 30)
-      --server     rank across all machines of this account (usage is uploaded first)
+      --days int              window in days (default 30)
+      --server[=true|false]   rank across all machines of this account (usage is uploaded first)
 ```
 
 ## hearth lib usage
@@ -803,8 +807,8 @@ Machines no longer upload counts of skills they do not have, so pruned names do 
 hearth lib usage prune [skill ...] [flags]
 
 Flags:
-      --dry-run   only list what would be deleted
-  -y, --yes       do not ask
+      --dry-run[=true|false]   only list what would be deleted
+  -y, --yes[=true|false]       do not ask
 ```
 
 ## hearth lib resident
@@ -835,8 +839,8 @@ Search every source for shared skills and agents
 hearth lib find <query> [flags]
 
 Flags:
-      --limit int   results (default 10)
-      --refresh     fetch git sources even if fetched recently
+      --limit int              results (default 10)
+      --refresh[=true|false]   fetch git sources even if fetched recently
 ```
 
 ## hearth lib link
@@ -852,10 +856,10 @@ always pinned to a commit: `hearth lib update` shows the newer ones, --yes appli
 hearth lib link <name|source:name> [flags]
 
 Flags:
-      --agent         link an agent instead of a skill
-      --pin           keep this version: do not follow the team's newer ones
-      --version int   link this version of a team's package and keep it
-  -y, --yes           confirm linking from an untrusted source
+      --agent[=true|false]   link an agent instead of a skill
+      --pin[=true|false]     keep this version: do not follow the team's newer ones
+      --version int          link this version of a team's package and keep it
+  -y, --yes[=true|false]     confirm linking from an untrusted source
 ```
 
 ## hearth lib unlink
@@ -866,7 +870,7 @@ Stop using a shared skill (or --agent)
 hearth lib unlink <name> [flags]
 
 Flags:
-      --agent   unlink an agent
+      --agent[=true|false]   unlink an agent
 ```
 
 ## hearth lib links
@@ -877,7 +881,7 @@ List linked shared skills and agents: version, whether it follows newer ones (--
 hearth lib links [flags]
 
 Flags:
-      --check   ask the sources for the newest version of each link
+      --check[=true|false]   ask the sources for the newest version of each link
 ```
 
 ## hearth lib update
@@ -888,7 +892,7 @@ Show (and with --yes apply) newer versions of linked items
 hearth lib update [name] [flags]
 
 Flags:
-  -y, --yes   apply the updates
+  -y, --yes[=true|false]   apply the updates
 ```
 
 ## hearth lib publish
@@ -899,8 +903,8 @@ Publish a library skill or agent as a new immutable version (maintainers)
 hearth lib publish skill|agent <name> --team <team> [flags]
 
 Flags:
-      --allow-secrets   publish even if the secret scan finds something
-      --team string     team
+      --allow-secrets[=true|false]   publish even if the secret scan finds something
+      --team string                  team
 ```
 
 ## hearth lib source
@@ -935,9 +939,9 @@ Use a git repository of skills (skills/<name>/SKILL.md or a flat list)
 hearth lib source add git <name> <url> [flags]
 
 Flags:
-      --ref string      branch or tag (default: the remote's default branch)
-      --subdir string   directory in the repo that contains skills/ (or the skill directories)
-      --trusted         skip the review step when linking from this source
+      --ref string             branch or tag (default: the remote's default branch)
+      --subdir string          directory in the repo that contains skills/ (or the skill directories)
+      --trusted[=true|false]   skip the review step when linking from this source
 ```
 
 ## hearth lib source list
@@ -1024,7 +1028,7 @@ Share skills or agents of your library with a team (a new version each time they
 hearth team share <team> <skill|agent> ... [flags]
 
 Flags:
-      --allow-secrets   share even if the secret scan finds something
+      --allow-secrets[=true|false]   share even if the secret scan finds something
 ```
 
 ## hearth team unshare
@@ -1046,7 +1050,7 @@ Share your most used skills and agents with your teams now (automatic every 20 m
 hearth team share-top [flags]
 
 Flags:
-      --dry-run   only show what would be shared
+      --dry-run[=true|false]   only show what would be shared
 ```
 
 ## hearth team use-top
@@ -1057,7 +1061,7 @@ Keep your teams' most used skills and agents in all your agents now (automatic e
 hearth team use-top [flags]
 
 Flags:
-      --dry-run   only show what would change
+      --dry-run[=true|false]   only show what would change
 ```
 
 ## hearth team share-with
@@ -1068,7 +1072,7 @@ Let another team's members use this team's skills and agents (owners; --off to s
 hearth team share-with <team> [other-team] [flags]
 
 Flags:
-      --off   stop sharing with that team
+      --off[=true|false]   stop sharing with that team
 ```
 
 ## hearth team members
@@ -1106,8 +1110,8 @@ Upload your usage counts of this team's published skills (opt-in, last 30 days)
 hearth team share-usage <team> [flags]
 
 Flags:
-      --auto   keep sharing from the daemon (hourly, synced setting)
-      --off    stop automatic sharing
+      --auto[=true|false]   keep sharing from the daemon (hourly, synced setting)
+      --off[=true|false]    stop automatic sharing
 ```
 
 ## hearth team stats
@@ -1116,6 +1120,59 @@ Most used skills in a team (last 30 days, from members who share usage)
 
 ```text
 hearth team stats <team>
+```
+
+## hearth team repo
+
+A team owner binds a git repository and picks one of their own machines to sync it. That machine, with
+the owner's git credentials (the server never gets them), fetches the repository every day or when a
+maintainer asks, publishes the skills (skills/**/SKILL.md) and agents (agents/*.md) that changed only there
+into the team (the team wins: its changed items are never replaced), and proposes the team's new or changed items back as one review:
+refs/for/<branch> (icode / Gerrit, one Change-Id until it is merged), or a branch hearth/team-<team>.
+
+  hearth team repo <team>                                show the binding and the last sync
+  hearth team repo set <team> <url> --machine <machine>  bind (owners)
+  hearth team repo sync <team> [--dry-run]               sync now (on the syncing machine: runs here)
+  hearth team repo unset <team>
+
+```text
+hearth team repo <team> [flags]
+
+Flags:
+      --json[=true|false]   machine-readable
+```
+
+## hearth team repo set
+
+Bind a repository to the team (owners); --machine: one of your machines that syncs it
+
+```text
+hearth team repo set <team> <url> [flags]
+
+Flags:
+      --machine string   the machine that syncs (one of yours, with git access; default: this one)
+      --new-dir string   where new skills from the team go in the repository (skills or a directory under it) (default "skills")
+      --push string      how the team's items go back: cr (refs/for/<branch>, a review), branch (hearth/team-<team>), off (default "cr")
+      --ref string       branch (default: the repository's default branch)
+```
+
+## hearth team repo sync
+
+Sync now: on the syncing machine it runs here; elsewhere it asks that machine to
+
+```text
+hearth team repo sync <team> [flags]
+
+Flags:
+      --dry-run[=true|false]   only say what it would publish and propose
+```
+
+## hearth team repo unset
+
+Unbind the repository (owners); the team keeps its items
+
+```text
+hearth team repo unset <team>
 ```
 
 ## hearth team packages
@@ -1142,8 +1199,8 @@ Import an agent's mcpServers; credential env values become secrets
 hearth mcp-config import comate|claude [flags]
 
 Flags:
-      --file string   path to an mcpServers JSON file
-      --overwrite     replace servers already in config.toml
+      --file string              path to an mcpServers JSON file
+      --overwrite[=true|false]   replace servers already in config.toml
 ```
 
 ## hearth mcp-config sync
@@ -1154,7 +1211,7 @@ Register the config.toml [mcp.servers] in Codex, Claude Code and Comate
 hearth mcp-config sync [flags]
 
 Flags:
-      --adopt   replace servers with the same name that hearth did not create
+      --adopt[=true|false]   replace servers with the same name that hearth did not create
 ```
 
 ## hearth mcp-config list
@@ -1177,18 +1234,18 @@ hearth learn [flags]
 
 Flags:
       --accept strings            keep these finding IDs for all machines ("all": every new or changed one); no prompts
-      --all                       also ask about items already learned and unchanged
+      --all[=true|false]          also ask about items already learned and unchanged
       --auto-credentials string   true / false: let the background sync record new credentials by itself (encrypted)
       --here strings              keep these finding IDs only for machines like this one (its profile)
       --here-step stringArray     add a step only for machines like this one (repeatable)
-      --json                      with --list: print JSON (id, kind, title, detail, status, per_machine)
-      --later                     do not remind me in hearth status for 30 days
-      --list                      only list findings
+      --json[=true|false]         with --list: print JSON (id, kind, title, detail, status, per_machine)
+      --later[=true|false]        do not remind me in hearth status for 30 days
+      --list[=true|false]         only list findings
       --never strings             never ask about these finding IDs again
-      --no-push                   do not push the library afterwards
-      --one-by-one                ask about each finding in turn instead of one checklist
+      --no-push[=true|false]      do not push the library afterwards
+      --one-by-one[=true|false]   ask about each finding in turn instead of one checklist
       --step stringArray          add a step for all machines: "$ command" runs a command, other text is a reminder (repeatable)
-      --yes-all                   accept every finding without asking
+      --yes-all[=true|false]      accept every finding without asking
 ```
 
 ## hearth recipe
@@ -1207,9 +1264,9 @@ Run the recipes' commands yourself (setup only restores their files; agents go t
 hearth recipe apply [flags]
 
 Flags:
-      --dry-run        only show what would change
-      --only strings   recipe names
-  -y, --yes            approve the commands shown as needs-approval
+      --dry-run[=true|false]   only show what would change
+      --only strings           recipe names
+  -y, --yes[=true|false]       approve the commands shown as needs-approval
 ```
 
 ## hearth recipe plan
@@ -1223,8 +1280,8 @@ hearth recipe done <key>.
 hearth recipe plan [flags]
 
 Flags:
-      --all    also steps done or skipped on this machine
-      --json   JSON for agents
+      --all[=true|false]    also steps done or skipped on this machine
+      --json[=true|false]   JSON for agents
 ```
 
 ## hearth recipe run
@@ -1243,7 +1300,7 @@ Mark restore steps as done on this machine (keys from hearth recipe plan; none: 
 hearth recipe done [step-key ...] [flags]
 
 Flags:
-      --all   mark every step still to do
+      --all[=true|false]   mark every step still to do
 ```
 
 ## hearth recipe proposals
@@ -1283,8 +1340,8 @@ done. With --on <machine> it goes over hearth ssh -t. Without a terminal (an age
 hearth recipe login <step-key> [flags]
 
 Flags:
-      --on string   the machine (default: this one)
-      --print       only print the command for the user's terminal
+      --on string            the machine (default: this one)
+      --print[=true|false]   only print the command for the user's terminal
 ```
 
 ## hearth recipe list
@@ -1327,7 +1384,7 @@ Run recipe checks and show pending manual steps (changes nothing)
 hearth doctor [flags]
 
 Flags:
-      --all   also run optional checks
+      --all[=true|false]   also run optional checks
 ```
 
 ## hearth tools
@@ -1346,10 +1403,10 @@ Add a tool to the synced manifest (built in: claude, codex)
 hearth tools add <name> [flags]
 
 Flags:
-      --check string     custom tool: shell command printing its version
-      --current          pin the version installed on this machine
-      --install string   custom tool: shell command installing it ($VERSION is set)
-      --version string   pin this version (x.y.z)
+      --check string           custom tool: shell command printing its version
+      --current[=true|false]   pin the version installed on this machine
+      --install string         custom tool: shell command installing it ($VERSION is set)
+      --version string         pin this version (x.y.z)
 ```
 
 ## hearth tools install
@@ -1360,8 +1417,8 @@ Install missing or mismatched tools from the manifest
 hearth tools install [flags]
 
 Flags:
-      --dry-run   only show what would be installed
-  -y, --yes       approve custom install commands shown in the output
+      --dry-run[=true|false]   only show what would be installed
+  -y, --yes[=true|false]       approve custom install commands shown in the output
 ```
 
 ## hearth tools list
@@ -1399,8 +1456,8 @@ List your machines, architecture and agent readiness
 hearth machine list [flags]
 
 Flags:
-      --all    also revoked machines
-      --json   machine-readable (the macOS menu bar app reads it)
+      --all[=true|false]    also revoked machines
+      --json[=true|false]   machine-readable (the macOS menu bar app reads it)
 ```
 
 ## hearth machine inspect
@@ -1428,7 +1485,7 @@ hearth machine add <name> [flags]
 
 Flags:
       --description string     description
-      --here                   match machines like this one (by GPU model, else OS and architecture)
+      --here[=true|false]      match machines like this one (by GPU model, else OS and architecture)
       --match stringToString   conditions, e.g. --match gpu=h800,h100 --match arch=x86_64 (keys: os, arch, gpu, hostname, label) (default [])
       --workspace string       working directory on these machines, e.g. /mnt/ssd/$USER/work
 ```
@@ -1441,7 +1498,7 @@ Print a one-time command that installs hearth on a new machine and logs it in (3
 hearth machine install-command [flags]
 
 Flags:
-      --json   machine-readable (the macOS menu bar app reads it)
+      --json[=true|false]   machine-readable (the macOS menu bar app reads it)
 ```
 
 ## hearth machine rm
@@ -1496,7 +1553,7 @@ Write file secrets back to their paths (mode 0600); names: only those
 hearth secret restore [NAME...] [flags]
 
 Flags:
-      --force   overwrite existing files that differ
+      --force[=true|false]   overwrite existing files that differ
 ```
 
 ## hearth secret get
@@ -1563,7 +1620,7 @@ After a container restart: start the sync daemon and recipe services
 hearth up [flags]
 
 Flags:
-  -y, --yes   approve service start commands
+  -y, --yes[=true|false]   approve service start commands
 ```
 
 ## hearth init
@@ -1578,7 +1635,7 @@ log in inside the workspace with hearth setup.
 hearth init [dir] [flags]
 
 Flags:
-      --move-login   move the login and state of ~/.hearth into this workspace
+      --move-login[=true|false]   move the login and state of ~/.hearth into this workspace
 ```
 
 ## hearth daemon
@@ -1642,12 +1699,12 @@ pass --switch to replace another account.
 hearth login [flags]
 
 Flags:
-      --ca-cert string   PEM certificate to trust for a self-signed server
-      --device string    device name (default: hostname)
-      --email string     account email (default: the local identity)
-      --insecure         allow plain HTTP to a non-loopback server
-      --server string    server URL (default: the existing login's, else $HEARTH_SERVER)
-      --switch           replace an existing login to another account or server
+      --ca-cert string          PEM certificate to trust for a self-signed server
+      --device string           device name (default: hostname)
+      --email string            account email (default: the local identity)
+      --insecure[=true|false]   allow plain HTTP to a non-loopback server
+      --server string           server URL (default: the existing login's, else $HEARTH_SERVER)
+      --switch[=true|false]     replace an existing login to another account or server
 ```
 
 ## hearth logout
@@ -1714,11 +1771,11 @@ Forgot the password: set a new one with the recovery key (signs out all devices)
 hearth recover [flags]
 
 Flags:
-      --ca-cert string   PEM certificate to trust for a self-signed server
-      --device string    device name (default: hostname)
-      --email string     account email
-      --insecure         allow plain HTTP to a non-loopback server
-      --server string    server URL
+      --ca-cert string          PEM certificate to trust for a self-signed server
+      --device string           device name (default: hostname)
+      --email string            account email
+      --insecure[=true|false]   allow plain HTTP to a non-loopback server
+      --server string           server URL
 ```
 
 ## hearth recovery-key
@@ -1745,27 +1802,27 @@ Run the sync server (SQLite + local directory by default; PostgreSQL and S3 opti
 hearth server [flags]
 
 Flags:
-      --addr string                  listen address [$HEARTH_ADDR] (default "127.0.0.1:8787")
-      --blobs string                 blob store: empty = <data>/objects, file:///path, or s3://bucket/prefix?endpoint=host:9000 [$HEARTH_BLOBS]
-      --data string                  data directory (default database, blobs, TLS files) [$HEARTH_DATA] (default "./hearth-data")
-      --db string                    metadata database: empty = SQLite in --data, sqlite:///path, or postgres://user:pass@host/db [$HEARTH_DB]
-      --device-days int              forget machines not seen for N days (offline, reclaimed or revoked: their entry, health report and login; 0 = keep) [$HEARTH_DEVICE_DAYS] (default 7)
-      --dist-dir string              directory with client builds hearth-<os>-<arch> for other platforms (scripts/build-dist.sh; default <data>/dist) [$HEARTH_DIST_DIR]
-      --expire-days int              mark sessions expired after N days without access (default 30)
-      --gc-interval duration         how often to run expiry (default 1h0m0s)
-      --grace-days int               delete expired sessions after N more days (default 7)
-      --identity-broker string       platform identity broker for passwordless login, e.g. https://identity.example.com [$HEARTH_IDENTITY_BROKER_URL]
-      --identity-broker-key string   system key used to sign identity-broker requests [$HEARTH_IDENTITY_BROKER_KEY]
-      --no-client-auto-update        client daemons do not install new builds by themselves (hearth self-update still works) [$HEARTH_NO_CLIENT_AUTO_UPDATE=1]
-      --no-version-check             do not look up the latest Codex CLI / Claude Code / codex-mixin releases (npm registry, GitHub; every 6 hours, through $HTTPS_PROXY; $HEARTH_NPM_REGISTRY for a mirror) for the machines' environment check [$HEARTH_NO_VERSION_CHECK=1]
-      --pin-install                  self-signed certificate: put --pinnedpubkey in the install one-liner, so even the first download is verified (default: plain -k; the installer then pins the certificate) [$HEARTH_PIN_INSTALL=1]
-      --public-url string            URL clients use to reach this server; enables /install.sh [$HEARTH_PUBLIC_URL]
-      --quota string                 default storage quota per user, e.g. 10GiB (per-user: hearth server admin quota) [$HEARTH_QUOTA] (default "unlimited")
-      --registration string          who may register: invite, open, approval (admin approves each account) or closed; an admin can change it in the Hearth app [$HEARTH_REGISTRATION] (default "invite")
-      --site string                  organisation defaults for every user: recipes/, files/, learn.json (default <data>/site) [$HEARTH_SITE]
-      --site-auth                    serve the site defaults only to logged-in users (default: anyone who can reach the server, so the installer gets them before login) [$HEARTH_SITE_AUTH=1]
-      --tls-cert string              TLS certificate file
-      --tls-key string               TLS key file
+      --addr string                          listen address [$HEARTH_ADDR] (default "127.0.0.1:8787")
+      --blobs string                         blob store: empty = <data>/objects, file:///path, or s3://bucket/prefix?endpoint=host:9000 [$HEARTH_BLOBS]
+      --data string                          data directory (default database, blobs, TLS files) [$HEARTH_DATA] (default "./hearth-data")
+      --db string                            metadata database: empty = SQLite in --data, sqlite:///path, or postgres://user:pass@host/db [$HEARTH_DB]
+      --device-days int                      forget machines not seen for N days (offline, reclaimed or revoked: their entry, health report and login; 0 = keep) [$HEARTH_DEVICE_DAYS] (default 7)
+      --dist-dir string                      directory with client builds hearth-<os>-<arch> for other platforms (scripts/build-dist.sh; default <data>/dist) [$HEARTH_DIST_DIR]
+      --expire-days int                      mark sessions expired after N days without access (default 30)
+      --gc-interval duration                 how often to run expiry (default 1h0m0s)
+      --grace-days int                       delete expired sessions after N more days (default 7)
+      --identity-broker string               platform identity broker for passwordless login, e.g. https://identity.example.com [$HEARTH_IDENTITY_BROKER_URL]
+      --identity-broker-key string           system key used to sign identity-broker requests [$HEARTH_IDENTITY_BROKER_KEY]
+      --no-client-auto-update[=true|false]   client daemons do not install new builds by themselves (hearth self-update still works) [$HEARTH_NO_CLIENT_AUTO_UPDATE=1]
+      --no-version-check[=true|false]        do not look up the latest Codex CLI / Claude Code / codex-mixin releases (npm registry, GitHub; every 6 hours, through $HTTPS_PROXY; $HEARTH_NPM_REGISTRY for a mirror) for the machines' environment check [$HEARTH_NO_VERSION_CHECK=1]
+      --pin-install[=true|false]             self-signed certificate: put --pinnedpubkey in the install one-liner, so even the first download is verified (default: plain -k; the installer then pins the certificate) [$HEARTH_PIN_INSTALL=1]
+      --public-url string                    URL clients use to reach this server; enables /install.sh [$HEARTH_PUBLIC_URL]
+      --quota string                         default storage quota per user, e.g. 10GiB (per-user: hearth server admin quota) [$HEARTH_QUOTA] (default "unlimited")
+      --registration string                  who may register: invite, open, approval (admin approves each account) or closed; an admin can change it in the Hearth app [$HEARTH_REGISTRATION] (default "invite")
+      --site string                          organisation defaults for every user: recipes/, files/, learn.json (default <data>/site) [$HEARTH_SITE]
+      --site-auth[=true|false]               serve the site defaults only to logged-in users (default: anyone who can reach the server, so the installer gets them before login) [$HEARTH_SITE_AUTH=1]
+      --tls-cert string                      TLS certificate file
+      --tls-key string                       TLS key file
 ```
 
 ## hearth server invite
@@ -1837,11 +1894,11 @@ Pass the same --quota as the server (or set $HEARTH_QUOTA) so default quotas are
 hearth server admin
 
 Flags:
-      --blobs string   blob store URL [$HEARTH_BLOBS]
-      --data string    server data directory [$HEARTH_DATA] (default "./hearth-data")
-      --db string      metadata database URL [$HEARTH_DB]
-      --json           print JSON
-      --quota string   server default quota, as given to hearth server --quota [$HEARTH_QUOTA]
+      --blobs string        blob store URL [$HEARTH_BLOBS]
+      --data string         server data directory [$HEARTH_DATA] (default "./hearth-data")
+      --db string           metadata database URL [$HEARTH_DB]
+      --json[=true|false]   print JSON
+      --quota string        server default quota, as given to hearth server --quota [$HEARTH_QUOTA]
 ```
 
 ## hearth server admin stats
@@ -1908,7 +1965,7 @@ Delete an account and all its sessions, library and secrets
 hearth server admin delete-user <email> [flags]
 
 Flags:
-      --yes   confirm
+      --yes[=true|false]   confirm
 ```
 
 ## hearth server admin grant
@@ -1960,8 +2017,8 @@ blob deletes, then removes blobs no database row refers to (older than --min-age
 hearth server admin gc [flags]
 
 Flags:
-      --dry-run            only report
-      --min-age duration   keep orphans younger than this (uploads in flight) (default 1h0m0s)
+      --dry-run[=true|false]   only report
+      --min-age duration       keep orphans younger than this (uploads in flight) (default 1h0m0s)
 ```
 
 ## hearth server start
@@ -2051,8 +2108,8 @@ Fetch the site defaults now (works before login with --server)
 hearth site pull [flags]
 
 Flags:
-      --quiet           print nothing unless it fails
-      --server string   server URL (default: the one you are logged in to)
+      --quiet[=true|false]   print nothing unless it fails
+      --server string        server URL (default: the one you are logged in to)
 ```
 
 ## hearth site status
@@ -2079,7 +2136,7 @@ Print the account's overview, library and teams as JSON (the macOS app's own pag
 hearth app data [flags]
 
 Flags:
-      --json   machine-readable
+      --json[=true|false]   machine-readable
 ```
 
 ## hearth app admin-data
@@ -2090,7 +2147,7 @@ Print the administration pages' documents as JSON (admin accounts only; the macO
 hearth app admin-data [flags]
 
 Flags:
-      --json   machine-readable
+      --json[=true|false]   machine-readable
 ```
 
 ## hearth app admin-call
@@ -2141,7 +2198,7 @@ Import Claude Code sessions into Codex (alias for `agent import codex --from cla
 hearth codex-import [claude-session-file | hearth-session-id ...] [flags]
 
 Flags:
-      --dry-run   only show what would be imported
+      --dry-run[=true|false]   only show what would be imported
 ```
 
 ## hearth codex-threads
@@ -2172,11 +2229,11 @@ A target that is an existing directory or ends in / receives the source inside i
 hearth cp <[machine:]source> <[machine:]target> [flags]
 
 Flags:
-      --compress string   zstd per chunk, kept where it helps: auto (across regions), on, off (default "auto")
-      --force             copy files even when their size and time match
-  -n, --no-clobber        keep files that already exist at the target
-  -q, --quiet             no progress
-  -j, --streams int       parallel data connections (default: 16 nearby, up to 64 across regions)
+      --compress string           zstd per chunk, kept where it helps: auto (across regions), on, off (default "auto")
+      --force[=true|false]        copy files even when their size and time match
+  -n, --no-clobber[=true|false]   keep files that already exist at the target
+  -q, --quiet[=true|false]        no progress
+  -j, --streams int               parallel data connections (default: 16 nearby, up to 64 across regions)
 ```
 
 ## hearth docs
@@ -2195,7 +2252,7 @@ How to install and check Node, Codex CLI, Claude Code and codex-mixin, plus your
 hearth docs env [flags]
 
 Flags:
-      --en   English
+      --en[=true|false]   English
 ```
 
 ## hearth docs cli
@@ -2206,7 +2263,7 @@ Print the command reference as Markdown
 hearth docs cli [flags]
 
 Flags:
-  -h, --help   help for cli
+  -h, --help[=true|false]   help for cli
 ```
 
 ## hearth env
@@ -2292,8 +2349,8 @@ Remember a fact or habit for all your agents (end-to-end encrypted)
 hearth memory remember <text> [flags]
 
 Flags:
-      --here           only for the current directory tree
-      --scope string   only for this directory tree (e.g. a repository)
+      --here[=true|false]   only for the current directory tree
+      --scope string        only for this directory tree (e.g. a repository)
 ```
 
 ## hearth memory forget
@@ -2368,7 +2425,7 @@ What is set up on this machine and what to do next
 hearth onboard status [flags]
 
 Flags:
-      --json   JSON for agents
+      --json[=true|false]   JSON for agents
 ```
 
 ## hearth onboard install-skill
@@ -2379,8 +2436,8 @@ Install the hearth skill into every agent on this machine (--print shows it)
 hearth onboard install-skill [flags]
 
 Flags:
-      --print   print the skill instead of installing it
-      --quiet   print nothing (setup tells the user about the skill)
+      --print[=true|false]   print the skill instead of installing it
+      --quiet[=true|false]   print nothing (setup tells the user about the skill)
 ```
 
 ## hearth recall
@@ -2391,10 +2448,10 @@ Search long-term memory: your conversations on every machine and agent, remember
 hearth recall [words ...] [flags]
 
 Flags:
-      --cwd string    rank memories of this directory higher (default: the current one)
-      --json          JSON
-  -n, --limit int     results (default 5)
-      --show string   print one memory in full (id from the results)
+      --cwd string          rank memories of this directory higher (default: the current one)
+      --json[=true|false]   JSON
+  -n, --limit int           results (default 5)
+      --show string         print one memory in full (id from the results)
 ```
 
 ## hearth register
@@ -2405,11 +2462,11 @@ Create an account (prints a one-time recovery key)
 hearth register [flags]
 
 Flags:
-      --ca-cert string   PEM certificate to trust for a self-signed server
-      --email string     account email
-      --insecure         allow plain HTTP to a non-loopback server
-      --invite string    single-use invite code from the server admin
-      --server string    server URL
+      --ca-cert string          PEM certificate to trust for a self-signed server
+      --email string            account email
+      --insecure[=true|false]   allow plain HTTP to a non-loopback server
+      --invite string           single-use invite code from the server admin
+      --server string           server URL
 ```
 
 ## hearth save
@@ -2420,7 +2477,7 @@ Run every capture step now (the daemon also runs them on schedule)
 hearth save [flags]
 
 Flags:
-  -y, --yes   approve capture commands
+  -y, --yes[=true|false]   approve capture commands
 ```
 
 ## hearth shell
@@ -2455,7 +2512,7 @@ Write the stored lines as snippets in <hearth home>/shell and source them from t
 hearth shell restore [flags]
 
 Flags:
-      --dry-run   print what would be written, change nothing
+      --dry-run[=true|false]   print what would be written, change nothing
 ```
 
 ## hearth shell uninstall
@@ -2483,7 +2540,7 @@ there is used as it is). Revoking a device removes its keys everywhere within a 
 hearth ssh [machine] [-- command ...] [flags]
 
 Flags:
-  -t, --tty   give the command a terminal (logins that show a QR code or ask questions): hearth ssh -t <machine> -- <command>
+  -t, --tty[=true|false]   give the command a terminal (logins that show a QR code or ask questions): hearth ssh -t <machine> -- <command>
 ```
 
 ## hearth ssh enable
@@ -2494,7 +2551,7 @@ Accept SSH on this machine (default on Linux)
 hearth ssh enable [flags]
 
 Flags:
-      --all   every machine of the account (synced setting)
+      --all[=true|false]   every machine of the account (synced setting)
 ```
 
 ## hearth ssh disable
@@ -2505,7 +2562,7 @@ Stop accepting SSH on this machine (--all: on every machine of the account)
 hearth ssh disable [flags]
 
 Flags:
-      --all   every machine of the account (synced setting)
+      --all[=true|false]   every machine of the account (synced setting)
 ```
 
 ## hearth ssh authorize
@@ -2591,13 +2648,13 @@ pass --yes. --dry-run asks the service for a dry run. AFS needs a UGI: [transfer
 hearth transfer submit --from STORAGE:PATH --to STORAGE:PATH [flags]
 
 Flags:
-      --checkers int    parallel checkers (default: the service's, at most its limit)
-      --dry-run         ask the service for a dry run
-      --from string     source, STORAGE:PATH
-      --name string     task name (default: hearth-<destination directory>-<date>)
-      --to string       destination, STORAGE:PATH (an empty directory)
-      --transfers int   parallel file transfers (default: the service's, at most its limit)
-  -y, --yes             do not ask; you confirm the destination directory is empty
+      --checkers int           parallel checkers (default: the service's, at most its limit)
+      --dry-run[=true|false]   ask the service for a dry run
+      --from string            source, STORAGE:PATH
+      --name string            task name (default: hearth-<destination directory>-<date>)
+      --to string              destination, STORAGE:PATH (an empty directory)
+      --transfers int          parallel file transfers (default: the service's, at most its limit)
+  -y, --yes[=true|false]       do not ask; you confirm the destination directory is empty
 ```
 
 ## hearth transfer list
@@ -2609,11 +2666,11 @@ The service does not tell users apart, so by default only the tasks this machine
 hearth transfer list [flags]
 
 Flags:
-      --all              every task on the service, not only this machine's
-      --json             JSON output
-      --keyword string   only tasks whose name or id contains this
-  -n, --limit int        at most this many tasks (default 20)
-      --status string    only this state (pending, serving, running, cleaning, succeeded, failed, canceling, canceled)
+      --all[=true|false]    every task on the service, not only this machine's
+      --json[=true|false]   JSON output
+      --keyword string      only tasks whose name or id contains this
+  -n, --limit int           at most this many tasks (default 20)
+      --status string       only this state (pending, serving, running, cleaning, succeeded, failed, canceling, canceled)
 ```
 
 ## hearth transfer status
@@ -2624,7 +2681,7 @@ State, progress and error of one task
 hearth transfer status <task-id> [flags]
 
 Flags:
-      --json   JSON output
+      --json[=true|false]   JSON output
 ```
 
 ## hearth transfer cancel
@@ -2636,5 +2693,5 @@ this machine submitted; --force cancels any task id, which can stop somebody els
 hearth transfer cancel <task-id> [flags]
 
 Flags:
-      --force   cancel a task this machine did not submit
+      --force[=true|false]   cancel a task this machine did not submit
 ```

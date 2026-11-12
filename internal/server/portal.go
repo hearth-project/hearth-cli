@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"errors"
+	"github.com/hearth-project/hearth-cli/internal/api"
 	"io"
 	"net/http"
 	"path"
@@ -62,6 +63,7 @@ func (s *Server) portalRoutes(m *http.ServeMux) {
 	u("PUT /v1/me/devices/{id}/alias", func(w http.ResponseWriter, r *http.Request, c userCtx) { s.putDeviceAlias(w, r, c.uid) })
 	u("GET /v1/me/library", s.apiMyLibrary)
 	u("GET /v1/me/teams", s.apiMyTeams)
+	s.teamRepoPortal(u)
 	u("POST /v1/me/teams/{team}/invite", s.apiMyTeamInvite)
 	u("DELETE /v1/me/teams/{team}", s.apiLeaveTeam)
 	u("POST /v1/me/share", s.apiShareItem)
@@ -306,6 +308,8 @@ type myTeam struct {
 	Packages   []teamPkg   `json:"packages"`
 	SharedWith []string    `json:"shared_with"`
 	SharedFrom []string    `json:"shared_from"`
+	// Repo: the team's bound git repository (members), nil when none.
+	Repo *api.TeamRepo `json:"repo,omitempty"`
 }
 
 // apiMyTeams lists the user's teams (and teams shared with them) with
@@ -328,6 +332,11 @@ func (s *Server) apiMyTeams(w http.ResponseWriter, _ *http.Request, c userCtx) {
 			mt.Packages = s.teamHeat(t.ID, ps)
 		}
 		mt.SharedWith, mt.SharedFrom, _ = s.st.teamShares(t.ID)
+		if t.Role != "reader" {
+			if rep, err := s.loadTeamRepo(t.ID, t.Name); err == nil {
+				mt.Repo = &rep
+			}
+		}
 		out = append(out, mt)
 	}
 	writeJSON(w, http.StatusOK, out)

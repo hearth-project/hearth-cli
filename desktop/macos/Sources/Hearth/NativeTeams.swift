@@ -16,6 +16,7 @@ struct TeamsPage: View {
     @State private var open: OpenPackage?
     @State private var leaving: Team?
     @State private var invite: (team: String, code: String)?
+    @State private var binding: Team?
 
     var body: some View {
         PageScroll(title: "团队") {
@@ -27,6 +28,7 @@ struct TeamsPage: View {
             ForEach(portal.teams) { t in teamCard(t) }
         }
         .sheet(item: $open) { o in PackageSheet(portal: portal, team: o.team, pkg: o.pkg) { open = nil }.toastHost() }
+        .sheet(item: $binding) { t in RepoSheet(portal: portal, team: t) { binding = nil }.toastHost() }
         .confirmationDialog(leaving.map { "退出团队 \($0.name)？" } ?? "", isPresented: Binding(get: { leaving != nil }, set: { if !$0 { leaving = nil } })) {
             Button("退出团队", role: .destructive) {
                 if let t = leaving { Task { await portal.call("DELETE", "/v1/me/teams/\(adminPath(t.name))", done: "已退出 \(t.name)") } }
@@ -54,6 +56,15 @@ struct TeamsPage: View {
                 }
                 if t.role != "reader" && t.via == nil {
                     Menu {
+                        if t.role == "owner" {
+                            Button(t.repo == nil ? "绑定 git 仓库…" : "修改仓库绑定…") { binding = t }
+                            if t.repo != nil {
+                                Button("解除仓库绑定", role: .destructive) {
+                                    Task { await portal.call("DELETE", "/v1/me/teams/\(adminPath(t.name))/repo", done: "已解除 \(t.name) 的仓库绑定") }
+                                }
+                            }
+                            Divider()
+                        }
                         Button("退出团队…", role: .destructive) { leaving = t }
                     } label: { Image(systemName: "ellipsis.circle") }
                     .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
@@ -66,6 +77,7 @@ struct TeamsPage: View {
             if !links.isEmpty {
                 Text("与其他团队共享：" + links.joined(separator: "、")).font(.system(size: 11)).foregroundStyle(.secondary)
             }
+            if let r = t.repo { repoRow(t, r) }
             if !t.packages.isEmpty {
                 Divider().opacity(0.5)
                 ForEach(Array(t.packages.enumerated()), id: \.element.id) { i, p in
@@ -76,6 +88,35 @@ struct TeamsPage: View {
                 }
             }
         }
+    }
+
+    /// The bound repository: where, who syncs, the last result, sync now.
+    private func repoRow(_ t: Team, _ r: TeamRepo) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "arrow.triangle.2.circlepath").foregroundStyle(Theme.blue).frame(width: 18).padding(.top, 1)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(r.url + (r.ref.map { $0.isEmpty ? "" : "  ·  " + $0 } ?? "")).font(.system(size: 11.5, design: .monospaced)).lineLimit(1).truncationMode(.middle).textSelection(.enabled)
+                Text(repoStatus(r)).font(.system(size: 11)).foregroundStyle(r.status == "failed" ? Theme.bad : .secondary).lineLimit(2)
+                if let v = r.review, !v.isEmpty, let u = URL(string: v), v.hasPrefix("http") {
+                    Link("评审：\(v)", destination: u).font(.system(size: 11))
+                }
+            }
+            Spacer()
+            if t.canPublish {
+                Button { Task { await portal.call("POST", "/v1/me/teams/\(adminPath(t.name))/repo/sync", [:], done: "已通知 \(r.device_name ?? "同步机器") 立即同步，几分钟内完成") } } label: { Label("立即同步", systemImage: "arrow.clockwise") }
+                    .disabled((r.requested_at ?? 0) > 0)
+            }
+        }
+        .padding(8)
+        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Theme.blue.opacity(0.06)))
+    }
+
+    private func repoStatus(_ r: TeamRepo) -> String {
+        let who = "由 \(r.device_name ?? r.device) 同步"
+        if (r.requested_at ?? 0) > 0 { return who + " · 等待同步…" }
+        guard let at = r.synced_at, at > 0 else { return who + " · 还没同步过" }
+        let st = r.status == "failed" ? "失败" : "成功"
+        return who + " · 上次 \(Fmt.ago(at))\(st)" + (r.detail.map { $0.isEmpty ? "" : "：" + $0 } ?? "")
     }
 
     private func packageRow(_ p: TeamPackage) -> some View {
@@ -204,6 +245,66 @@ struct PackageSheet: View {
             let path = "/v1/me/teams/\(adminPath(team))/packages/\(adminPath(pkg.type))/\(adminPath(pkg.name))"
             guard let d = await portal.call("GET", path, reload: false) else { failed = portal.notice ?? "读取失败"; portal.notice = nil; return }
             do { detail = try JSONDecoder().decode(PackageDetail.self, from: d) } catch { failed = "读取失败：\(error.localizedDescription)" }
+        }
+    }
+}
+
+/// Bind (or change) a team's git repository: the URL, the branch and which
+/// of the owner's machines syncs it.
+struct RepoSheet: View {
+    @ObservedObject var portal: PortalStore
+    var team: Team
+    var close: () -> Void
+    @State private var url = ""
+    @State private var ref = ""
+    @State private var device = ""
+    @State private var push = "cr"
+    @State private var saving = false
+
+    private var machines: [Device] { portal.devices.filter { ($0.status ?? "active") == "active" } }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            SheetHeader(icon: "arrow.triangle.2.circlepath", title: "\(team.name) 的 git 仓库",
+                        subtitle: "仓库里 skills/ 和 agents/ 下的内容每天同步进团队；团队里新增或修改的会以评审（CR）提交回仓库。", close: close)
+            Form {
+                TextField("仓库地址", text: $url, prompt: Text("ssh://you@icode.example.com:8235/group/repo"))
+                TextField("分支", text: $ref, prompt: Text("留空 = 默认分支"))
+                Picker("同步机器", selection: $device) {
+                    ForEach(machines) { d in Text((d.alias?.isEmpty == false ? d.alias! : d.name) + ((d.online ?? false) ? "" : "（离线）")).tag(d.id) }
+                }
+                Picker("回推方式", selection: $push) {
+                    Text("提评审（refs/for/分支）").tag("cr")
+                    Text("推到分支 hearth/team-\(team.name)").tag("branch")
+                    Text("不回推").tag("off")
+                }
+            }
+            Text("同步机器用它自己的 git 凭证 clone 和提交，服务器不保存任何凭证。选一台常在线、能访问这个仓库的机器。")
+                .font(.system(size: 11)).foregroundStyle(.secondary)
+            HStack {
+                Spacer()
+                Button("取消", action: close)
+                Button(saving ? "保存中…" : "保存") {
+                    saving = true
+                    Task {
+                        let ok = await portal.call("PUT", "/v1/me/teams/\(adminPath(team.name))/repo",
+                                                   ["url": url, "ref": ref, "device": device, "push": push],
+                                                   done: "已绑定，\(team.name) 会在几分钟内第一次同步") != nil
+                        saving = false
+                        if ok { close() }
+                    }
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(saving || url.trimmingCharacters(in: .whitespaces).isEmpty || device.isEmpty)
+            }
+        }
+        .padding(20)
+        .frame(width: 560)
+        .onAppear {
+            url = team.repo?.url ?? ""
+            ref = team.repo?.ref ?? ""
+            push = team.repo?.push ?? "cr"
+            device = team.repo?.device ?? (machines.first { $0.online ?? false }?.id ?? machines.first?.id ?? "")
         }
     }
 }

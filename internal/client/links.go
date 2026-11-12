@@ -263,15 +263,21 @@ func (e *Engine) bundleItem(typ, name string, allowSecrets bool) (data []byte, s
 	default:
 		return nil, "", "", fmt.Errorf("type must be skill or agent")
 	}
-	// Credential files a skill ships (CLI credentials, keys) stay with the
-	// user (synced encrypted for them): the team copy goes without them,
-	// and members bring their own. A credential in SKILL.md or an agent
-	// still refuses the share.
+	data, sum, err = bundleTree(typ, root, allowSecrets)
+	return data, sum, desc, err
+}
+
+// bundleTree packs a skill directory, or a directory holding an agent's
+// AGENT.md, the way the team gets it. Credential files a skill ships (CLI
+// credentials, keys) stay with the user (synced encrypted for them): the
+// team copy goes without them, and members bring their own. A credential
+// in SKILL.md or an agent still refuses the share.
+func bundleTree(typ, root string, allowSecrets bool) (data []byte, sum string, err error) {
 	exclude := map[string]bool{}
 	if !allowSecrets {
 		fs, err := library.ScanSecrets(root)
 		if err != nil {
-			return nil, "", "", err
+			return nil, "", err
 		}
 		var block []library.Finding
 		for _, f := range fs {
@@ -282,9 +288,8 @@ func (e *Engine) bundleItem(typ, name string, allowSecrets bool) (data []byte, s
 			}
 		}
 		if len(block) > 0 {
-			return nil, "", "", &SecretsError{Findings: block}
+			return nil, "", &SecretsError{Findings: block}
 		}
 	}
-	data, sum, err = library.Library{Root: root, Exclude: exclude}.Bundle()
-	return data, sum, desc, err
+	return library.Library{Root: root, Exclude: exclude}.Bundle()
 }

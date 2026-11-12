@@ -254,6 +254,27 @@ CREATE TABLE IF NOT EXISTS install_tokens (
 );
 CREATE INDEX IF NOT EXISTS install_tokens_by_user ON install_tokens(user_id);
 
+-- A git repository bound to a team: the owner's chosen device (one of the
+-- owner's own machines, with the owner's git credentials) syncs its
+-- skills/ and agents/ into the team every day and proposes the team's new
+-- items back as a review (CR). The server keeps no credential.
+CREATE TABLE IF NOT EXISTS team_repos (
+  team_id        INTEGER PRIMARY KEY REFERENCES teams(id) ON DELETE CASCADE,
+  user_id        INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  device_id      TEXT NOT NULL,
+  url            TEXT NOT NULL,
+  ref            TEXT NOT NULL DEFAULT '',
+  push           TEXT NOT NULL DEFAULT 'cr',
+  new_dir        TEXT NOT NULL DEFAULT 'skills',
+  created_at     INTEGER NOT NULL,
+  requested_at   INTEGER NOT NULL DEFAULT 0,
+  synced_at      INTEGER NOT NULL DEFAULT 0,
+  status         TEXT NOT NULL DEFAULT '',
+  detail         TEXT NOT NULL DEFAULT '',
+  commit_id      TEXT NOT NULL DEFAULT '',
+  review         TEXT NOT NULL DEFAULT ''
+);
+
 -- Indexes for the hot read paths.
 CREATE INDEX IF NOT EXISTS sessions_by_access ON sessions(user_id, last_accessed_at DESC);
 CREATE INDEX IF NOT EXISTS sessions_for_gc ON sessions(status, last_accessed_at);

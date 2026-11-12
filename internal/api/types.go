@@ -367,3 +367,27 @@ type AccountUsage struct {
 	SecretBytes  int64 `json:"secret_bytes"`
 	Devices      int64 `json:"devices"`
 }
+
+// TeamRepo is a git repository bound to a team. The device (one of the
+// owner's machines) syncs the repository's skills/ and agents/ into the
+// team every day, or when someone asks (Requested), and proposes the
+// team's new or changed items back to the repository as a review.
+type TeamRepo struct {
+	Team   string `json:"team,omitempty"`
+	URL    string `json:"url"`
+	Ref    string `json:"ref,omitempty"`     // branch ("" = the default branch)
+	Push   string `json:"push,omitempty"`    // cr (refs/for/<ref>, a review), branch (a new branch), off
+	NewDir string `json:"new_dir,omitempty"` // where new skills go in the repository ("skills")
+	Device string `json:"device"`            // device id of the machine that syncs
+	Owner  string `json:"owner,omitempty"`   // email of the owner who bound it
+	// Set by the server.
+	DeviceName string `json:"device_name,omitempty"`
+	Requested  int64  `json:"requested_at,omitempty"`
+	SyncedAt   int64  `json:"synced_at,omitempty"`
+	Due        bool   `json:"due,omitempty"` // for the device: sync now
+	// Reported by the device after a sync.
+	Status string `json:"status,omitempty"` // ok, failed
+	Detail string `json:"detail,omitempty"`
+	Commit string `json:"commit,omitempty"`
+	Review string `json:"review,omitempty"` // the review (CR / branch) pushed last
+}

@@ -86,6 +86,7 @@ func (s *Server) routes() {
 	m.HandleFunc("POST /v1/devices/self/offline", s.authed(s.handleDeviceOffline))
 
 	s.teamRoutes(m)
+	s.teamRepoRoutes(m)
 	s.adminRoutes(m)
 	m.HandleFunc("GET /v1/secrets", s.authed(s.handleListSecrets))
 	m.HandleFunc("PUT /v1/secrets/{id}", s.authed(s.handlePutSecret))

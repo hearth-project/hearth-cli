@@ -221,6 +221,26 @@ library 在服务器上明文保存（仅本人可见，团队共享的内容团
 
 团队共享的内容怎么被调用：每个团队里成员用得最多的 20 个 skills 和 20 个 agents 会自动链接到你每台机器的所有 agent 目录，和自己的 skill / agent 一样出现在 agent 的列表里、被自动调用（`[teams] use_top`，`use_exclude` 排除；在小程序里或用 `hearth lib unlink` 取消某个后不会再自动加回）。同名时你自己的版本优先。其余团队 skill 通过 `hearth mcp` 的 `search_skills` / `list_skills` 检索、`get_skill` 按需下载，用到的次数也计入团队排行，用得多了就会进入常驻。
 
+### 团队绑定 git 仓库
+
+团队 owner 可以给团队绑定一个 git 仓库，让仓库和团队的 skills、agents 保持同步：
+
+```bash
+hearth team repo set <团队> ssh://you@icode.example.com:8235/group/repo --machine <机器>   # 绑定（owner）
+hearth team repo <团队>                     # 绑定情况和上次同步结果
+hearth team repo sync <团队> --dry-run      # 在同步机器上：只看会发布、会提交什么
+hearth team repo sync <团队>                # 立即同步（不在同步机器上时，通知它去同步）
+hearth team repo unset <团队>               # 解除绑定（团队里的内容保留）
+```
+
+- 只读写仓库的 `skills/`（任意层级下的 `SKILL.md`，比如 `skills/<分类>/<名字>/`）和 `agents/*.md`，其他目录不碰。
+- 同步由 owner 指定的**自己的一台机器**执行，用那台机器上 owner 自己的 git 凭证 clone 和提交；服务器只保存绑定关系和同步结果，不保存任何凭证。选一台常在线、能访问仓库的机器。
+- 每天同步一次；维护者也可以随时点「立即同步」（Mac 小程序「团队」页，或 `hearth team repo sync`），同步机器几分钟内执行。
+- **仓库 → 团队**：仓库里新增的，或只在仓库里改过的 skill、agent，发布成团队的新版本。
+- **以 Hearth 团队为准**：内容不一致且团队里改过（或从没同步过，比如第一次同步）时，保留团队的版本并提交到仓库评审，仓库里的版本不会覆盖团队，同步结果里会注明。
+- **团队 → 仓库**：团队里新增或改过的内容，合成一个评审提交回仓库：默认推到 `refs/for/<分支>`（icode / Gerrit 的 CR，合入前一直更新同一个 Change-Id），也可以 `--push branch` 推到 `hearth/team-<团队>` 分支，或 `--push off` 不回推。新 skill 放在 `--new-dir`（默认 `skills/`）下。含疑似凭证的内容不会提交。
+- 从仓库删掉的 skill 不会自动从团队里删除，同步结果会提示，需要时用 `hearth team unshare` 删除。
+
 ### 共享 skill 的版本与更新
 
 团队里的包有版本：每次 `hearth lib publish`（或自动分享你最常用的几个）只要内容有变化，就生成一个不可变的新版本 v1、v2……；内容相同不会生成新版本，服务器保留全部版本。你自己库里的 skill 没有单个版本历史（整库在你的机器之间同步）。
