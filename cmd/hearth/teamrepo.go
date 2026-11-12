@@ -47,6 +47,7 @@ func teamRepoCmd() *cobra.Command {
 	c.Flags().BoolVar(&asJSON, "json", false, "machine-readable")
 
 	var ref, machine, push, newDir, commitPrefix string
+	var exclude []string
 	set := &cobra.Command{Use: "set <team> <url>", Short: "Bind a repository to the team (owners); --machine: one of your machines that syncs it", Args: cobra.ExactArgs(2),
 		RunE: func(_ *cobra.Command, a []string) error {
 			e, err := engine()
@@ -65,7 +66,7 @@ func teamRepoCmd() *cobra.Command {
 				}
 				dev = d.ID
 			}
-			r, err := e.API.SetTeamRepo(a[0], api.TeamRepo{URL: a[1], Ref: ref, Device: dev, Push: push, NewDir: newDir, CommitPrefix: commitPrefix})
+			r, err := e.API.SetTeamRepo(a[0], api.TeamRepo{URL: a[1], Ref: ref, Device: dev, Push: push, NewDir: newDir, CommitPrefix: commitPrefix, Exclude: exclude})
 			if err != nil {
 				return err
 			}
@@ -77,6 +78,7 @@ func teamRepoCmd() *cobra.Command {
 	set.Flags().StringVar(&machine, "machine", "", "the machine that syncs (one of yours, with git access; default: this one)")
 	set.Flags().StringVar(&push, "push", "cr", "how the team's items go back: cr (refs/for/<branch>, a review), branch (hearth/team-<team>), off")
 	set.Flags().StringVar(&newDir, "new-dir", "skills", "where new skills from the team go in the repository (skills or a directory under it)")
+	set.Flags().StringSliceVar(&exclude, "exclude", nil, "skills and agents (names, comma-separated) left alone on both sides: neither published into the team nor proposed to the repository")
 	set.Flags().StringVar(&commitPrefix, "commit-prefix", "", "start the review's commit message with this, e.g. the issue id the repository's hooks require (icode: an iCafe card such as proj-123)")
 
 	var dryRun bool
@@ -155,6 +157,9 @@ func printTeamRepo(e *client.Engine, r api.TeamRepo) {
 	fmt.Printf("synced by   %s, for %s; back as %s\n", who, r.Owner, map[string]string{"cr": "a review (refs/for/" + orDefault(r.Ref, "<branch>") + ")", "branch": "branch hearth/team-" + r.Team, "off": "nothing (push off)"}[orDefault(r.Push, "cr")])
 	if r.CommitPrefix != "" {
 		fmt.Println("commits     start with " + r.CommitPrefix)
+	}
+	if len(r.Exclude) > 0 {
+		fmt.Println("excluded    " + strings.Join(r.Exclude, ", "))
 	}
 	switch {
 	case r.SyncedAt == 0:

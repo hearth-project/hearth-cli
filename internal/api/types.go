@@ -381,8 +381,11 @@ type TeamRepo struct {
 	// CommitPrefix starts the review's commit message: an issue id the
 	// repository's hooks require (icode: an iCafe card, e.g. "proj-123").
 	CommitPrefix string `json:"commit_prefix,omitempty"`
-	Device       string `json:"device"`          // device id of the machine that syncs
-	Owner        string `json:"owner,omitempty"` // email of the owner who bound it
+	// Exclude names skills and agents left alone on both sides: neither
+	// published into the team nor proposed to the repository.
+	Exclude []string `json:"exclude,omitempty"`
+	Device  string   `json:"device"`          // device id of the machine that syncs
+	Owner   string   `json:"owner,omitempty"` // email of the owner who bound it
 	// Set by the server.
 	DeviceName string `json:"device_name,omitempty"`
 	Requested  int64  `json:"requested_at,omitempty"`
