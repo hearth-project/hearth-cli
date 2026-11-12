@@ -378,8 +378,11 @@ type TeamRepo struct {
 	Ref    string `json:"ref,omitempty"`     // branch ("" = the default branch)
 	Push   string `json:"push,omitempty"`    // cr (refs/for/<ref>, a review), branch (a new branch), off
 	NewDir string `json:"new_dir,omitempty"` // where new skills go in the repository ("skills")
-	Device string `json:"device"`            // device id of the machine that syncs
-	Owner  string `json:"owner,omitempty"`   // email of the owner who bound it
+	// CommitPrefix starts the review's commit message: an issue id the
+	// repository's hooks require (icode: an iCafe card, e.g. "proj-123").
+	CommitPrefix string `json:"commit_prefix,omitempty"`
+	Device       string `json:"device"`          // device id of the machine that syncs
+	Owner        string `json:"owner,omitempty"` // email of the owner who bound it
 	// Set by the server.
 	DeviceName string `json:"device_name,omitempty"`
 	Requested  int64  `json:"requested_at,omitempty"`

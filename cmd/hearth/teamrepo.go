@@ -46,7 +46,7 @@ func teamRepoCmd() *cobra.Command {
 		}}
 	c.Flags().BoolVar(&asJSON, "json", false, "machine-readable")
 
-	var ref, machine, push, newDir string
+	var ref, machine, push, newDir, commitPrefix string
 	set := &cobra.Command{Use: "set <team> <url>", Short: "Bind a repository to the team (owners); --machine: one of your machines that syncs it", Args: cobra.ExactArgs(2),
 		RunE: func(_ *cobra.Command, a []string) error {
 			e, err := engine()
@@ -65,7 +65,7 @@ func teamRepoCmd() *cobra.Command {
 				}
 				dev = d.ID
 			}
-			r, err := e.API.SetTeamRepo(a[0], api.TeamRepo{URL: a[1], Ref: ref, Device: dev, Push: push, NewDir: newDir})
+			r, err := e.API.SetTeamRepo(a[0], api.TeamRepo{URL: a[1], Ref: ref, Device: dev, Push: push, NewDir: newDir, CommitPrefix: commitPrefix})
 			if err != nil {
 				return err
 			}
@@ -77,6 +77,7 @@ func teamRepoCmd() *cobra.Command {
 	set.Flags().StringVar(&machine, "machine", "", "the machine that syncs (one of yours, with git access; default: this one)")
 	set.Flags().StringVar(&push, "push", "cr", "how the team's items go back: cr (refs/for/<branch>, a review), branch (hearth/team-<team>), off")
 	set.Flags().StringVar(&newDir, "new-dir", "skills", "where new skills from the team go in the repository (skills or a directory under it)")
+	set.Flags().StringVar(&commitPrefix, "commit-prefix", "", "start the review's commit message with this, e.g. the issue id the repository's hooks require (icode: an iCafe card such as proj-123)")
 
 	var dryRun bool
 	sync := &cobra.Command{Use: "sync <team>", Short: "Sync now: on the syncing machine it runs here; elsewhere it asks that machine to", Args: cobra.ExactArgs(1),
@@ -112,7 +113,7 @@ func teamRepoCmd() *cobra.Command {
 				}
 				return nil
 			}
-			st := api.TeamRepo{Status: "ok", Detail: res.Summary(), Commit: res.Commit, Review: res.Review}
+			st := api.TeamRepo{Status: res.Status(), Detail: res.Summary(), Commit: res.Commit, Review: res.Review}
 			if err != nil {
 				st.Status, st.Detail = "failed", err.Error()
 			}
@@ -152,6 +153,9 @@ func printTeamRepo(e *client.Engine, r api.TeamRepo) {
 		who += " (this machine)"
 	}
 	fmt.Printf("synced by   %s, for %s; back as %s\n", who, r.Owner, map[string]string{"cr": "a review (refs/for/" + orDefault(r.Ref, "<branch>") + ")", "branch": "branch hearth/team-" + r.Team, "off": "nothing (push off)"}[orDefault(r.Push, "cr")])
+	if r.CommitPrefix != "" {
+		fmt.Println("commits     start with " + r.CommitPrefix)
+	}
 	switch {
 	case r.SyncedAt == 0:
 		fmt.Println("last sync   not yet")

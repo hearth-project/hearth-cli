@@ -1150,10 +1150,11 @@ Bind a repository to the team (owners); --machine: one of your machines that syn
 hearth team repo set <team> <url> [flags]
 
 Flags:
-      --machine string   the machine that syncs (one of yours, with git access; default: this one)
-      --new-dir string   where new skills from the team go in the repository (skills or a directory under it) (default "skills")
-      --push string      how the team's items go back: cr (refs/for/<branch>, a review), branch (hearth/team-<team>), off (default "cr")
-      --ref string       branch (default: the repository's default branch)
+      --commit-prefix string   start the review's commit message with this, e.g. the issue id the repository's hooks require (icode: an iCafe card such as proj-123)
+      --machine string         the machine that syncs (one of yours, with git access; default: this one)
+      --new-dir string         where new skills from the team go in the repository (skills or a directory under it) (default "skills")
+      --push string            how the team's items go back: cr (refs/for/<branch>, a review), branch (hearth/team-<team>), off (default "cr")
+      --ref string             branch (default: the repository's default branch)
 ```
 
 ## hearth team repo sync

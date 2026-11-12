@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"unicode"
 
 	"github.com/hearth-project/hearth-cli/internal/api"
 )
@@ -72,9 +73,9 @@ func (s *Server) teamOf(w http.ResponseWriter, r *http.Request, uid int64, min s
 func (s *Server) loadTeamRepo(teamID int64, team string) (api.TeamRepo, error) {
 	r := api.TeamRepo{Team: team}
 	var alias string
-	err := s.st.rdb.QueryRow(`SELECT r.url,r.ref,r.push,r.new_dir,r.device_id,u.email,COALESCE(d.name,''),COALESCE(d.alias,''),r.requested_at,r.synced_at,r.status,r.detail,r.commit_id,r.review
+	err := s.st.rdb.QueryRow(`SELECT r.url,r.ref,r.push,r.new_dir,r.commit_prefix,r.device_id,u.email,COALESCE(d.name,''),COALESCE(d.alias,''),r.requested_at,r.synced_at,r.status,r.detail,r.commit_id,r.review
 		FROM team_repos r JOIN users u ON u.id=r.user_id LEFT JOIN devices d ON d.id=r.device_id WHERE r.team_id=?`, teamID).
-		Scan(&r.URL, &r.Ref, &r.Push, &r.NewDir, &r.Device, &r.Owner, &r.DeviceName, &alias, &r.Requested, &r.SyncedAt, &r.Status, &r.Detail, &r.Commit, &r.Review)
+		Scan(&r.URL, &r.Ref, &r.Push, &r.NewDir, &r.CommitPrefix, &r.Device, &r.Owner, &r.DeviceName, &alias, &r.Requested, &r.SyncedAt, &r.Status, &r.Detail, &r.Commit, &r.Review)
 	if errors.Is(err, sql.ErrNoRows) {
 		return r, errNotFound
 	}
@@ -110,6 +111,7 @@ func (s *Server) handlePutTeamRepo(w http.ResponseWriter, r *http.Request, uid i
 		return
 	}
 	req.URL, req.Ref = strings.TrimSpace(req.URL), strings.TrimSpace(req.Ref)
+	req.CommitPrefix = strings.TrimSpace(req.CommitPrefix)
 	if req.Push == "" {
 		req.Push = "cr"
 	}
@@ -129,6 +131,9 @@ func (s *Server) handlePutTeamRepo(w http.ResponseWriter, r *http.Request, uid i
 	case !repoRefRE.MatchString(req.NewDir) || strings.Contains(req.NewDir, "..") || !strings.HasPrefix(req.NewDir+"/", "skills/"):
 		writeErr(w, http.StatusBadRequest, "new_dir must be skills or a directory under skills/")
 		return
+	case len(req.CommitPrefix) > 100 || strings.ContainsFunc(req.CommitPrefix, unicode.IsControl):
+		writeErr(w, http.StatusBadRequest, "commit_prefix must be one line of at most 100 bytes")
+		return
 	}
 	var n int
 	if err := s.st.rdb.QueryRow(`SELECT COUNT(*) FROM devices WHERE id=? AND user_id=? AND status='active'`, req.Device, uid).Scan(&n); err != nil {
@@ -140,10 +145,10 @@ func (s *Server) handlePutTeamRepo(w http.ResponseWriter, r *http.Request, uid i
 		return
 	}
 	now := s.now()
-	if _, err := s.st.db.Exec(`INSERT INTO team_repos(team_id,user_id,device_id,url,ref,push,new_dir,created_at,requested_at) VALUES(?,?,?,?,?,?,?,?,?)
+	if _, err := s.st.db.Exec(`INSERT INTO team_repos(team_id,user_id,device_id,url,ref,push,new_dir,commit_prefix,created_at,requested_at) VALUES(?,?,?,?,?,?,?,?,?,?)
 		ON CONFLICT(team_id) DO UPDATE SET user_id=excluded.user_id, device_id=excluded.device_id, url=excluded.url, ref=excluded.ref,
-		push=excluded.push, new_dir=excluded.new_dir, requested_at=excluded.requested_at`,
-		o.ID, uid, req.Device, req.URL, req.Ref, req.Push, req.NewDir, now, now); err != nil {
+		push=excluded.push, new_dir=excluded.new_dir, commit_prefix=excluded.commit_prefix, requested_at=excluded.requested_at`,
+		o.ID, uid, req.Device, req.URL, req.Ref, req.Push, req.NewDir, req.CommitPrefix, now, now); err != nil {
 		s.writeStoreErr(w, err)
 		return
 	}

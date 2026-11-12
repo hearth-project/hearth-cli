@@ -114,6 +114,7 @@ func openSQLite(file string) (*store, error) {
 		{"devices", "health_json", "TEXT NOT NULL DEFAULT '{}'"},
 		{"devices", "health_at", "INTEGER NOT NULL DEFAULT 0"},
 		{"devices", "alias", "TEXT NOT NULL DEFAULT ''"},
+		{"team_repos", "commit_prefix", "TEXT NOT NULL DEFAULT ''"},
 	} {
 		if err := ensureColumn(db, c.table, c.column, c.def); err != nil {
 			db.Close()

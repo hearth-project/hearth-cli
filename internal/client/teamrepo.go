@@ -61,12 +61,25 @@ type TeamRepoResult struct {
 	Proposed  []string // in the review
 	Review    string   // the review's URL or ref, when one was pushed
 	Notes     []string // conflicts, removed items, items that could not go
+	PushErr   string   // the review could not be pushed (the repository refused it)
+}
+
+// Status is what the sync reports to the server: failed when the review
+// was refused, so the team page shows it.
+func (r TeamRepoResult) Status() string {
+	if r.PushErr != "" {
+		return "failed"
+	}
+	return "ok"
 }
 
 // Summary is the one line a sync reports.
 func (r TeamRepoResult) Summary() string {
 	parts := []string{fmt.Sprintf("%d published to the team", len(r.Published)), fmt.Sprintf("%d proposed to the repository", len(r.Proposed))}
 	s := strings.Join(parts, ", ")
+	if r.PushErr != "" {
+		s = "review not pushed: " + r.PushErr + "; " + s
+	}
 	if len(r.Notes) > 0 {
 		s += "; " + strings.Join(r.Notes, "; ")
 	}
@@ -228,7 +241,7 @@ func (e *Engine) SyncTeamRepo(rep api.TeamRepo, dryRun bool) (TeamRepoResult, er
 		k := it.key()
 		inRepo[k] = it
 		if it.err != nil {
-			res.Notes = append(res.Notes, fmt.Sprintf("%s %s not published: %v", it.Type, it.Name, it.err))
+			res.Notes = append(res.Notes, fmt.Sprintf("%s %s not published: %s", it.Type, it.Name, firstLine(it.err.Error())))
 			continue
 		}
 		t, inTeam := team[k]
@@ -243,7 +256,7 @@ func (e *Engine) SyncTeamRepo(rep api.TeamRepo, dryRun bool) (TeamRepoResult, er
 			// New in the repository, or changed only there.
 			if !dryRun {
 				if _, err := e.API.Publish(rep.Team, it.Type, it.Name, it.Desc, it.Sum, it.data); err != nil {
-					res.Notes = append(res.Notes, fmt.Sprintf("%s %s not published: %v", it.Type, it.Name, err))
+					res.Notes = append(res.Notes, fmt.Sprintf("%s %s not published: %s", it.Type, it.Name, firstLine(err.Error())))
 					continue
 				}
 			}
@@ -294,7 +307,7 @@ func (e *Engine) SyncTeamRepo(rep api.TeamRepo, dryRun bool) (TeamRepoResult, er
 		review, proposed, err := e.proposeTeamItems(dir, rep, ref, propose, team, inRepo, &st)
 		res.Notes = append(res.Notes, st.skipped...)
 		if err != nil {
-			res.Notes = append(res.Notes, "review not pushed: "+err.Error())
+			res.PushErr = err.Error()
 		} else if len(proposed) > 0 {
 			res.Review, res.Proposed = review, proposed
 			st.Pending = want
@@ -395,6 +408,9 @@ func (e *Engine) proposeTeamItems(dir string, rep api.TeamRepo, ref string, keys
 		st.ChangeID = "I" + hex.EncodeToString(b)
 	}
 	msg := fmt.Sprintf("hearth: sync skills and agents from team %s\n\n", rep.Team)
+	if rep.CommitPrefix != "" {
+		msg = rep.CommitPrefix + " " + msg // an issue id the repository's hooks require
+	}
 	for _, d := range done {
 		msg += "- " + d + "\n"
 	}
@@ -418,7 +434,7 @@ func (e *Engine) proposeTeamItems(dir string, rep api.TeamRepo, ref string, keys
 		if strings.Contains(out, "no new changes") {
 			return "", nil, nil
 		}
-		return "", nil, err
+		return "", nil, errors.New(pushRefusal(out, rep))
 	}
 	review := strings.TrimPrefix(target, "+HEAD:")
 	if m := reviewURLRE.FindString(out); m != "" {
@@ -443,7 +459,7 @@ func (e *Engine) TeamRepoJobs(force bool) ([]string, error) {
 			continue
 		}
 		r, err := e.SyncTeamRepo(rep, false)
-		st := api.TeamRepo{Status: "ok", Detail: r.Summary(), Commit: r.Commit, Review: r.Review}
+		st := api.TeamRepo{Status: r.Status(), Detail: r.Summary(), Commit: r.Commit, Review: r.Review}
 		if err != nil {
 			st.Status, st.Detail = "failed", err.Error()
 		}
@@ -460,4 +476,46 @@ func (e *Engine) TeamRepoJobs(force bool) ([]string, error) {
 		}
 	}
 	return log, nil
+}
+
+func firstLine(s string) string {
+	l, _, _ := strings.Cut(strings.TrimSpace(s), "\n")
+	return strings.TrimSpace(l)
+}
+
+var ansiRE = regexp.MustCompile(`\x1b\[[0-9;]*[A-Za-z]`)
+
+// pushRefusal turns git push's output into one readable line: the
+// rejection and the hook's message, without the server's banner, colours
+// and blank lines; plus what to set when the hook wants an issue id.
+func pushRefusal(out string, rep api.TeamRepo) string {
+	out = ansiRE.ReplaceAllString(out, "")
+	lines := strings.Split(out, "\n")
+	start := 0
+	for i, l := range lines {
+		if strings.Contains(l, "[remote rejected]") || strings.Contains(l, "[rejected]") {
+			start = i
+			break
+		}
+	}
+	var keep []string
+	for _, l := range lines[start:] {
+		l = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(l), "remote:"))
+		if l == "" || strings.Trim(l, "=<>. ") == "" || strings.HasPrefix(l, "error: failed to push") {
+			continue
+		}
+		keep = append(keep, l)
+		if len(keep) == 6 {
+			break
+		}
+	}
+	msg := strings.Join(keep, " ")
+	if msg == "" {
+		msg = firstLine(out)
+	}
+	low := strings.ToLower(out)
+	if rep.CommitPrefix == "" && (strings.Contains(low, "card") || strings.Contains(low, "issue")) {
+		msg += fmt.Sprintf(" (if the repository needs an issue id in the commit message: hearth team repo set %s <url> --machine <machine> --commit-prefix <id>)", rep.Team)
+	}
+	return msg
 }
