@@ -21,10 +21,14 @@ import (
 // keeps a clone (with the owner's own git credentials) and, on each sync:
 //
 //  1. publishes the skills (skills/**/SKILL.md) and agents (agents/*.md)
-//     that changed in the repository into the team: the repository wins;
+//     that changed only in the repository into the team;
 //  2. proposes the team's items that changed there (and the new ones) back
 //     to the repository as one review: refs/for/<branch> (a CR, one
 //     Change-Id kept until it is merged) or a branch hearth/team-<team>.
+//
+// The team wins: an item that differs and changed in the team (or was never
+// synced, as on the first sync) keeps the team's version, which is proposed
+// to the repository; the repository's copy never replaces it.
 //
 // Only skills/ and agents/ are read or written. An item removed from the
 // repository stays in the team (the sync says so). State in
@@ -216,7 +220,8 @@ func (e *Engine) SyncTeamRepo(rep api.TeamRepo, dryRun bool) (TeamRepoResult, er
 		team[p.Type+"/"+p.Name] = p
 	}
 
-	// 1. Repository → team (the repository wins).
+	// 1. Repository → team, for what changed only in the repository (the
+	// team wins).
 	inRepo := map[string]repoItem{}
 	var propose []string // keys whose team copy goes to the repository
 	for _, it := range items {
@@ -228,12 +233,14 @@ func (e *Engine) SyncTeamRepo(rep api.TeamRepo, dryRun bool) (TeamRepoResult, er
 		}
 		t, inTeam := team[k]
 		repoChanged := st.Repo[k] != it.Sum
-		teamChanged := inTeam && st.Team[k] != "" && t.SHA256 != st.Team[k]
+		teamChanged := inTeam && t.SHA256 != st.Team[k] // never synced counts as changed
 		switch {
-		case repoChanged && (!inTeam || t.SHA256 != it.Sum):
-			if teamChanged {
-				res.Notes = append(res.Notes, fmt.Sprintf("%s %s changed in both: the repository's version is used", it.Type, it.Name))
-			}
+		case inTeam && t.SHA256 == it.Sum:
+			st.Repo[k], st.Team[k] = it.Sum, t.SHA256 // the same on both sides
+		case !inTeam && !repoChanged:
+			// Removed from the team since the last sync: not brought back.
+		case !inTeam || !teamChanged:
+			// New in the repository, or changed only there.
 			if !dryRun {
 				if _, err := e.API.Publish(rep.Team, it.Type, it.Name, it.Desc, it.Sum, it.data); err != nil {
 					res.Notes = append(res.Notes, fmt.Sprintf("%s %s not published: %v", it.Type, it.Name, err))
@@ -242,14 +249,17 @@ func (e *Engine) SyncTeamRepo(rep api.TeamRepo, dryRun bool) (TeamRepoResult, er
 			}
 			res.Published = append(res.Published, it.Type+" "+it.Name)
 			st.Repo[k], st.Team[k] = it.Sum, it.Sum
-		case repoChanged:
-			st.Repo[k], st.Team[k] = it.Sum, t.SHA256 // already the same
-		case inTeam && t.SHA256 != it.Sum && (teamChanged || st.Team[k] == ""):
-			propose = append(propose, k) // changed in the team only
 		default:
-			if inTeam {
-				st.Team[k] = t.SHA256
+			// Changed in the team (or never synced): the team's version
+			// stays and goes to the repository. st.Team keeps the old sum
+			// so it is proposed again until the repository has it.
+			if repoChanged && st.Repo[k] != "" {
+				res.Notes = append(res.Notes, fmt.Sprintf("%s %s changed in both: the team's version is kept and proposed", it.Type, it.Name))
+			} else if st.Team[k] == "" && st.Repo[k] == "" {
+				res.Notes = append(res.Notes, fmt.Sprintf("%s %s differs from the repository: the team's version is kept and proposed", it.Type, it.Name))
 			}
+			st.Repo[k] = it.Sum
+			propose = append(propose, k)
 		}
 	}
 	for k, t := range team {

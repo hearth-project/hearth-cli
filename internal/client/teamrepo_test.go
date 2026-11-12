@@ -44,6 +44,7 @@ func TestTeamRepoSync(t *testing.T) {
 	}
 	write("skills/connectors/kudoc/SKILL.md", "---\nname: kudoc\ndescription: knowledge base\n---\nv1\n")
 	write("skills/connectors/kudoc/bin/run.sh", "echo hi\n")
+	write("skills/connectors/kusheet/SKILL.md", "---\nname: kusheet\ndescription: sheets\n---\nold in repo\n")
 	write("agents/verifier.md", "---\nname: verifier\ndescription: verifies\ntools: Bash\n---\nVerify.\n")
 	write("agents/verifier.toml", "name = \"verifier\"\n")
 	write("docs/readme.md", "not a skill\n")
@@ -80,17 +81,31 @@ func TestTeamRepoSync(t *testing.T) {
 		t.Fatalf("bob's machine got a job: %+v", js)
 	}
 
-	// The team has one item of its own.
+	// The team has one item of its own, and its own newer kusheet.
 	libWrite(t, alice, "skills/bench/SKILL.md", "---\nname: bench\ndescription: bench\n---\nb1\n")
 	if _, _, err := alice.Publish("infer", "skill", "bench", false); err != nil {
 		t.Fatal(err)
 	}
+	libWrite(t, alice, "skills/kusheet/SKILL.md", "---\nname: kusheet\ndescription: sheets\n---\nnew in team\n")
+	if _, _, err := alice.Publish("infer", "skill", "kusheet", false); err != nil {
+		t.Fatal(err)
+	}
+	teamSum := func(name string) string {
+		ps, _ := alice.API.Packages("infer")
+		for _, p := range ps {
+			if p.Name == name {
+				return p.SHA256
+			}
+		}
+		return ""
+	}
+	kusheet := teamSum("kusheet")
 
 	dry, err := alice.SyncTeamRepo(jobs[0], true)
-	if err != nil || len(dry.Published) != 2 || len(dry.Proposed) != 1 {
+	if err != nil || len(dry.Published) != 2 || len(dry.Proposed) != 2 {
 		t.Fatalf("dry run %+v %v", dry, err)
 	}
-	if ps, _ := alice.API.Packages("infer"); len(ps) != 1 {
+	if ps, _ := alice.API.Packages("infer"); len(ps) != 2 {
 		t.Fatalf("dry run published: %+v", ps)
 	}
 	lines, err := alice.TeamRepoJobs(false)
@@ -102,13 +117,22 @@ func TestTeamRepoSync(t *testing.T) {
 	for _, p := range ps {
 		names[p.Type+"/"+p.Name] = true
 	}
-	if !names["skill/kudoc"] || !names["agent/verifier"] || !names["skill/bench"] || len(ps) != 3 {
+	if !names["skill/kudoc"] || !names["agent/verifier"] || !names["skill/bench"] || len(ps) != 4 {
 		t.Fatalf("team %v", names)
 	}
-	// The review: refs/for/master with the team's skill under skills/.
+	// The team wins: its kusheet is not replaced by the repository's.
+	if teamSum("kusheet") != kusheet {
+		t.Fatal("the repository's kusheet replaced the team's")
+	}
+	// The review: refs/for/master with the team's skills under skills/,
+	// kusheet where the repository has it.
 	out, err := exec.Command("git", "-C", bare, "show", "refs/for/master:skills/bench/SKILL.md").CombinedOutput()
 	if err != nil || !strings.Contains(string(out), "b1") {
 		t.Fatalf("review content: %s %v (sync: %v)", out, err, lines)
+	}
+	out, err = exec.Command("git", "-C", bare, "show", "refs/for/master:skills/connectors/kusheet/SKILL.md").CombinedOutput()
+	if err != nil || !strings.Contains(string(out), "new in team") {
+		t.Fatalf("review kusheet: %s %v", out, err)
 	}
 	msg, _ := exec.Command("git", "-C", bare, "log", "-1", "--format=%B", "refs/for/master").Output()
 	if !strings.Contains(string(msg), "Change-Id: I") || !strings.Contains(string(msg), "skill bench") {
@@ -126,8 +150,10 @@ func TestTeamRepoSync(t *testing.T) {
 	if err != nil || len(again.Published) != 0 || len(again.Proposed) != 0 {
 		t.Fatalf("second sync %+v %v", again, err)
 	}
-	// A maintainer asks for a sync; the repository changed meanwhile.
+	// A maintainer asks for a sync; the repository changed meanwhile: kudoc
+	// (changed only there) comes in, kusheet (the team's still pending) does not.
 	write("skills/connectors/kudoc/SKILL.md", "---\nname: kudoc\ndescription: knowledge base\n---\nv2\n")
+	write("skills/connectors/kusheet/SKILL.md", "---\nname: kusheet\ndescription: sheets\n---\nedited in repo\n")
 	git(t, work, "commit", "-q", "-am", "v2")
 	git(t, work, "push", "-q", "origin", "master")
 	if err := bob.API.RequestTeamRepoSync("infer"); err != nil {
@@ -139,6 +165,9 @@ func TestTeamRepoSync(t *testing.T) {
 	third, err := alice.SyncTeamRepo(jobs[0], false)
 	if err != nil || len(third.Published) != 1 || third.Published[0] != "skill kudoc" {
 		t.Fatalf("third sync %+v %v", third, err)
+	}
+	if teamSum("kusheet") != kusheet || !strings.Contains(strings.Join(third.Notes, "\n"), "kusheet changed in both") {
+		t.Fatalf("kusheet replaced or not noted: %v", third.Notes)
 	}
 	// Only the syncing device reports.
 	if err := bob.API.ReportTeamRepo("infer", jobs[0]); StatusOf(err) != 403 {

@@ -1126,8 +1126,8 @@ hearth team stats <team>
 
 A team owner binds a git repository and picks one of their own machines to sync it. That machine, with
 the owner's git credentials (the server never gets them), fetches the repository every day or when a
-maintainer asks, publishes the skills (skills/**/SKILL.md) and agents (agents/*.md) that changed there
-into the team (the repository wins), and proposes the team's new or changed items back as one review:
+maintainer asks, publishes the skills (skills/**/SKILL.md) and agents (agents/*.md) that changed only there
+into the team (the team wins: its changed items are never replaced), and proposes the team's new or changed items back as one review:
 refs/for/<branch> (icode / Gerrit, one Change-Id until it is merged), or a branch hearth/team-<team>.
 
   hearth team repo <team>                                show the binding and the last sync

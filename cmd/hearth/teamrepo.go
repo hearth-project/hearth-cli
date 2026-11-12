@@ -18,8 +18,8 @@ func teamRepoCmd() *cobra.Command {
 	c := &cobra.Command{Use: "repo <team>", Short: "The team's git repository: its skills/ and agents/ sync into the team every day; the team's new items go back as a review",
 		Long: "A team owner binds a git repository and picks one of their own machines to sync it. That machine, with\n" +
 			"the owner's git credentials (the server never gets them), fetches the repository every day or when a\n" +
-			"maintainer asks, publishes the skills (skills/**/SKILL.md) and agents (agents/*.md) that changed there\n" +
-			"into the team (the repository wins), and proposes the team's new or changed items back as one review:\n" +
+			"maintainer asks, publishes the skills (skills/**/SKILL.md) and agents (agents/*.md) that changed only there\n" +
+			"into the team (the team wins: its changed items are never replaced), and proposes the team's new or changed items back as one review:\n" +
 			"refs/for/<branch> (icode / Gerrit, one Change-Id until it is merged), or a branch hearth/team-<team>.\n\n" +
 			"  hearth team repo <team>                                show the binding and the last sync\n" +
 			"  hearth team repo set <team> <url> --machine <machine>  bind (owners)\n" +
