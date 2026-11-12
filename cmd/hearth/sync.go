@@ -319,7 +319,7 @@ func daemonCmd() *cobra.Command {
 			if err := client.AutoEnableIdentityLogin(e.Home); err != nil {
 				log.Printf("identity login: %v", err)
 			}
-			var lastLib, lastUsage, lastMemory time.Time
+			var lastLib, lastUsage, lastMemory, lastRepos time.Time
 			var lastLibMsg, lastMemoryMsg string
 			// This device's SSH key, so the user's machines accept it.
 			if _, err := e.PublishDeviceKey(); err != nil {
@@ -406,6 +406,12 @@ func daemonCmd() *cobra.Command {
 						}
 						lastStale = n
 					}
+				}
+				// Team repositories this machine syncs (every 2 min: a member's
+				// "sync now" is picked up quickly; each binding syncs daily).
+				if time.Since(lastRepos) >= 2*time.Minute {
+					lastRepos = time.Now()
+					teamRepoDaemon(e, log.Printf)
 				}
 				if time.Since(lastMemory) >= memoryInterval {
 					lastMemory = time.Now()

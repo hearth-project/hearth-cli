@@ -154,8 +154,25 @@ struct Team: Decodable, Identifiable, Hashable {
     var shared_with: [String]?
     var shared_from: [String]?
     var via: String?
+    var repo: TeamRepo?
     var id: String { name }
     var canPublish: Bool { role == "owner" || role == "maintainer" }
+}
+
+/// A git repository bound to a team (hearth team repo): one of the owner's
+/// machines syncs its skills/ and agents/ into the team every day.
+struct TeamRepo: Decodable, Hashable {
+    var url: String
+    var ref: String?
+    var push: String?
+    var device: String
+    var owner: String?
+    var device_name: String?
+    var requested_at: Int64?
+    var synced_at: Int64?
+    var status: String?
+    var detail: String?
+    var review: String?
 }
 
 @MainActor

@@ -167,6 +167,8 @@ hearth team join <code>                            # or on a new machine: hearth
 hearth team share <name> <skill|agent> ...         # publish from the user's library (secret scan first; maintainers)
 hearth team packages <name>                        # what a team shares
 hearth team share-with <name> <other-team> [--off] # owners: let another team use this team's items
+hearth team repo set <name> <git-url> --machine <m> # owners: bind a git repo; <m> (one of the owner's machines, its git credentials) syncs skills/ and agents/ daily; the team's items go back as a CR
+hearth team repo sync <name> [--dry-run]           # sync now (dry run on the syncing machine first); hearth team repo <name> shows the last result
 hearth lib link <team>:<skill>                     # keep a team skill in every agent (otherwise found on demand)
 hearth lib links [--check]                         # versions of linked team skills; a link follows the team's newest version, `link --pin` / `--version N` keeps one
 hearth team use-top [--dry-run]                    # keep each team's most used items in every agent now (automatic)

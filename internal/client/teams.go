@@ -163,3 +163,41 @@ func (a *API) AdminLink() (string, error) {
 	_, err := a.do("POST", "/v1/web/link", struct{}{}, nil, nil, &r)
 	return r.Path, err
 }
+
+// TeamRepo is the team's bound repository (404 when none).
+func (a *API) TeamRepo(team string) (api.TeamRepo, error) {
+	var r api.TeamRepo
+	_, err := a.do("GET", op(team)+"/repo", nil, nil, nil, &r)
+	return r, err
+}
+
+// SetTeamRepo binds (or changes) the team's repository (owners).
+func (a *API) SetTeamRepo(team string, r api.TeamRepo) (api.TeamRepo, error) {
+	var out api.TeamRepo
+	_, err := a.do("PUT", op(team)+"/repo", r, nil, nil, &out)
+	return out, err
+}
+
+func (a *API) DeleteTeamRepo(team string) error {
+	_, err := a.do("DELETE", op(team)+"/repo", nil, nil, nil, nil)
+	return err
+}
+
+// RequestTeamRepoSync asks the syncing machine to sync now (maintainers).
+func (a *API) RequestTeamRepoSync(team string) error {
+	_, err := a.do("POST", op(team)+"/repo/sync", struct{}{}, nil, nil, nil)
+	return err
+}
+
+// MyTeamRepos lists the bindings this device syncs.
+func (a *API) MyTeamRepos() ([]api.TeamRepo, error) {
+	var r []api.TeamRepo
+	_, err := a.do("GET", "/v1/devices/self/team-repos", nil, nil, nil, &r)
+	return r, err
+}
+
+// ReportTeamRepo records a sync's result.
+func (a *API) ReportTeamRepo(team string, r api.TeamRepo) error {
+	_, err := a.do("PUT", op(team)+"/repo/status", r, nil, nil, nil)
+	return err
+}

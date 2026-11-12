@@ -120,6 +120,7 @@ func teamCmd() *cobra.Command {
 				}
 				return nil
 			})},
+		teamRepoCmd(),
 		&cobra.Command{Use: "packages <team>", Short: "Skills and agents published in a team", Args: cobra.ExactArgs(1),
 			RunE: withEngine(func(e *client.Engine, a []string) error {
 				ps, err := e.API.Packages(a[0])
