@@ -238,7 +238,7 @@ hearth team repo unset <team>               # unbind (the team keeps its items)
 - Daily, or when a maintainer asks (*Sync now* on the macOS app's Teams page, or `hearth team repo sync`): the syncing machine picks it up within a few minutes.
 - **Repository → team**: skills and agents that are new in the repository, or changed only there, are published as new team versions.
 - **The team wins**: when an item differs and the team's copy changed (or it was never synced, as on the first sync), the team keeps its version and proposes it to the repository; the repository's copy never replaces it (the result says so).
-- **Team → repository**: the team's new or changed items go back as one review: `refs/for/<branch>` by default (an icode / Gerrit CR; one Change-Id until it is merged), `--push branch` for a branch `hearth/team-<team>`, `--push off` for none. New skills go under `--new-dir` (default `skills/`). Nothing that looks like a credential is committed.
+- **Team → repository**: the team's new or changed items go back as one review: `refs/for/<branch>` by default (an icode / Gerrit CR; one Change-Id until it is merged), `--push branch` for a branch `hearth/team-<team>`, `--push off` for none. New skills go under `--new-dir` (default `skills/`). Nothing that looks like a credential is committed. When the repository's hooks want an issue id in the commit message (icode: an iCafe card), bind with `--commit-prefix <id>` (*Commit prefix* in the app); a refused review marks the sync failed, with the hook's message.
 - A skill removed from the repository stays in the team (the result says so); `hearth team unshare` removes it.
 
 ### Versions and updates of shared skills

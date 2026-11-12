@@ -259,6 +259,7 @@ struct RepoSheet: View {
     @State private var ref = ""
     @State private var device = ""
     @State private var push = "cr"
+    @State private var commitPrefix = ""
     @State private var saving = false
 
     private var machines: [Device] { portal.devices.filter { ($0.status ?? "active") == "active" } }
@@ -278,6 +279,7 @@ struct RepoSheet: View {
                     Text("推到分支 hearth/team-\(team.name)").tag("branch")
                     Text("不回推").tag("off")
                 }
+                TextField("提交前缀", text: $commitPrefix, prompt: Text("可选，如 iCafe 卡片号 proj-123（仓库要求时填）"))
             }
             Text("同步机器用它自己的 git 凭证 clone 和提交，服务器不保存任何凭证。选一台常在线、能访问这个仓库的机器。")
                 .font(.system(size: 11)).foregroundStyle(.secondary)
@@ -288,7 +290,8 @@ struct RepoSheet: View {
                     saving = true
                     Task {
                         let ok = await portal.call("PUT", "/v1/me/teams/\(adminPath(team.name))/repo",
-                                                   ["url": url, "ref": ref, "device": device, "push": push],
+                                                   ["url": url, "ref": ref, "device": device, "push": push,
+                                                    "new_dir": team.repo?.new_dir ?? "skills", "commit_prefix": commitPrefix],
                                                    done: "已绑定，\(team.name) 会在几分钟内第一次同步") != nil
                         saving = false
                         if ok { close() }
@@ -304,6 +307,7 @@ struct RepoSheet: View {
             url = team.repo?.url ?? ""
             ref = team.repo?.ref ?? ""
             push = team.repo?.push ?? "cr"
+            commitPrefix = team.repo?.commit_prefix ?? ""
             device = team.repo?.device ?? (machines.first { $0.online ?? false }?.id ?? machines.first?.id ?? "")
         }
     }

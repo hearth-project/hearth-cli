@@ -70,8 +70,15 @@ func TestTeamRepoSync(t *testing.T) {
 	t.Setenv("GIT_CONFIG_COUNT", "1")
 	t.Setenv("GIT_CONFIG_KEY_0", "url."+bare+".insteadOf")
 	t.Setenv("GIT_CONFIG_VALUE_0", "ssh://git.example.com/infer")
-	if _, err := alice.API.SetTeamRepo("infer", apiRepo("ssh://git.example.com/infer", alice.Cfg.DeviceID)); err != nil {
-		t.Fatal(err)
+	bad := apiRepo("ssh://git.example.com/infer", alice.Cfg.DeviceID)
+	bad.CommitPrefix = "infer-42\nSigned-off-by: x"
+	if _, err := alice.API.SetTeamRepo("infer", bad); StatusOf(err) != 400 {
+		t.Fatalf("multi-line commit prefix: %v", err)
+	}
+	good := apiRepo("ssh://git.example.com/infer", alice.Cfg.DeviceID)
+	good.CommitPrefix = "infer-42"
+	if r, err := alice.API.SetTeamRepo("infer", good); err != nil || r.CommitPrefix != "infer-42" {
+		t.Fatalf("bind %+v %v", r, err)
 	}
 	jobs, err := alice.API.MyTeamRepos()
 	if err != nil || len(jobs) != 1 || !jobs[0].Due {
@@ -135,7 +142,7 @@ func TestTeamRepoSync(t *testing.T) {
 		t.Fatalf("review kusheet: %s %v", out, err)
 	}
 	msg, _ := exec.Command("git", "-C", bare, "log", "-1", "--format=%B", "refs/for/master").Output()
-	if !strings.Contains(string(msg), "Change-Id: I") || !strings.Contains(string(msg), "skill bench") {
+	if !strings.HasPrefix(string(msg), "infer-42 hearth: sync") || !strings.Contains(string(msg), "Change-Id: I") || !strings.Contains(string(msg), "skill bench") {
 		t.Fatalf("commit message %q", msg)
 	}
 	r, _ := alice.API.TeamRepo("infer")
@@ -176,3 +183,23 @@ func TestTeamRepoSync(t *testing.T) {
 }
 
 func apiRepo(url, dev string) api.TeamRepo { return api.TeamRepo{URL: url, Device: dev} }
+
+// A push hook's refusal (icode: no iCafe card) becomes one readable line
+// with the hint, without the banner and colours.
+func TestPushRefusal(t *testing.T) {
+	out := "    ^ ^      |   Hi, alice   |\n|  Welcome to iCode\n|remote: Processing changes: refs: 1, done\n" +
+		"To ssh://icode.example.com:8235/g/r\n ! [remote rejected] hearth-propose -> refs/for/master (CHECK_FAIL\nHCK_F508\n\n" +
+		"\x1b[1m==>\n\nCommit message does not contain an icafe card id\n\n<== \x1b[0m.)\nerror: failed to push some refs to 'ssh://icode.example.com:8235/g/r'"
+	got := pushRefusal(out, api.TeamRepo{Team: "infer"})
+	if strings.Contains(got, "Welcome") || strings.Contains(got, "\x1b") || strings.Contains(got, "\n") ||
+		!strings.Contains(got, "[remote rejected]") || !strings.Contains(got, "does not contain an icafe card") || !strings.Contains(got, "--commit-prefix") {
+		t.Fatalf("%q", got)
+	}
+	if got := pushRefusal(out, api.TeamRepo{Team: "infer", CommitPrefix: "x-1"}); strings.Contains(got, "--commit-prefix") {
+		t.Fatalf("hint with a prefix set: %q", got)
+	}
+	r := TeamRepoResult{PushErr: "refused"}
+	if r.Status() != "failed" || !strings.HasPrefix(r.Summary(), "review not pushed: refused") {
+		t.Fatalf("%s %s", r.Status(), r.Summary())
+	}
+}

@@ -238,7 +238,7 @@ hearth team repo unset <团队>               # 解除绑定（团队里的内�
 - 每天同步一次；维护者也可以随时点「立即同步」（Mac 小程序「团队」页，或 `hearth team repo sync`），同步机器几分钟内执行。
 - **仓库 → 团队**：仓库里新增的，或只在仓库里改过的 skill、agent，发布成团队的新版本。
 - **以 Hearth 团队为准**：内容不一致且团队里改过（或从没同步过，比如第一次同步）时，保留团队的版本并提交到仓库评审，仓库里的版本不会覆盖团队，同步结果里会注明。
-- **团队 → 仓库**：团队里新增或改过的内容，合成一个评审提交回仓库：默认推到 `refs/for/<分支>`（icode / Gerrit 的 CR，合入前一直更新同一个 Change-Id），也可以 `--push branch` 推到 `hearth/team-<团队>` 分支，或 `--push off` 不回推。新 skill 放在 `--new-dir`（默认 `skills/`）下。含疑似凭证的内容不会提交。
+- **团队 → 仓库**：团队里新增或改过的内容，合成一个评审提交回仓库：默认推到 `refs/for/<分支>`（icode / Gerrit 的 CR，合入前一直更新同一个 Change-Id），也可以 `--push branch` 推到 `hearth/team-<团队>` 分支，或 `--push off` 不回推。新 skill 放在 `--new-dir`（默认 `skills/`）下。含疑似凭证的内容不会提交。仓库要求提交信息里带卡片号时（icode 要求 iCafe 卡片），绑定时加 `--commit-prefix <卡片号>`（Mac 小程序里是「提交前缀」）；评审被仓库拒绝时，同步状态显示为失败，并附上仓库给出的原因。
 - 从仓库删掉的 skill 不会自动从团队里删除，同步结果会提示，需要时用 `hearth team unshare` 删除。
 
 ### 共享 skill 的版本与更新
