@@ -18,7 +18,7 @@ import (
 // prompt hook on stdin; that path reads only the local index.
 func recallCmd() *cobra.Command {
 	var limit int
-	var asJSON, hook bool
+	var asJSON, hook, plain bool
 	var show, cwd string
 	c := &cobra.Command{
 		Use:   "recall [words ...]",
@@ -26,7 +26,11 @@ func recallCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			home := client.Home()
 			if hook {
-				out, err := client.Hook(home, os.Stdin)
+				hookFn := client.Hook
+				if plain {
+					hookFn = client.HookPlain
+				}
+				out, err := hookFn(home, os.Stdin)
 				if err == nil && out != "" {
 					fmt.Println(out)
 				}
@@ -80,8 +84,10 @@ func recallCmd() *cobra.Command {
 	c.Flags().BoolVar(&asJSON, "json", false, "JSON")
 	c.Flags().StringVar(&show, "show", "", "print one memory in full (id from the results)")
 	c.Flags().StringVar(&cwd, "cwd", "", "rank memories of this directory higher (default: the current one)")
-	c.Flags().BoolVar(&hook, "hook", false, "answer a Codex / Claude Code prompt hook (JSON on stdin)")
+	c.Flags().BoolVar(&hook, "hook", false, "answer a Codex / Claude Code / Comate prompt hook (JSON on stdin)")
+	c.Flags().BoolVar(&plain, "plain", false, "with --hook: answer in plain text (Comate)")
 	_ = c.Flags().MarkHidden("hook")
+	_ = c.Flags().MarkHidden("plain")
 	return c
 }
 
@@ -89,7 +95,8 @@ func memoryCmd() *cobra.Command {
 	c := &cobra.Command{Use: "memory", Short: "Long-term memory shared by your agents and machines: remember, forget, list, index, hooks"}
 	var scope string
 	var here bool
-	remember := &cobra.Command{Use: "remember <text>", Short: "Remember a fact or habit for all your agents (end-to-end encrypted)", Args: cobra.MinimumNArgs(1),
+	var replaces []string
+	remember := &cobra.Command{Use: "remember <text>", Short: "Add to key memory, which all your agents get at session start (end-to-end encrypted; 6 KB in all)", Args: cobra.MinimumNArgs(1),
 		RunE: func(_ *cobra.Command, a []string) error {
 			e, err := engine()
 			if err != nil {
@@ -103,7 +110,7 @@ func memoryCmd() *cobra.Command {
 					return err
 				}
 			}
-			f, err := e.Remember(strings.Join(a, " "), scope, "user")
+			f, err := e.Remember(strings.Join(a, " "), scope, "user", replaces...)
 			if err != nil {
 				return err
 			}
@@ -112,8 +119,12 @@ func memoryCmd() *cobra.Command {
 				where = "under " + f.Scope
 			}
 			fmt.Printf("remembered (f:%s, %s); every agent gets it at session start\n", f.ID, where)
+			if len(replaces) > 0 {
+				fmt.Printf("replaced %s\n", strings.Join(replaces, ", "))
+			}
 			return nil
 		}}
+	remember.Flags().StringSliceVar(&replaces, "replace", nil, "ids (f:…) this entry corrects or merges: forgotten once it is stored")
 	remember.Flags().StringVar(&scope, "scope", "", "only for this directory tree (e.g. a repository)")
 	remember.Flags().BoolVar(&here, "here", false, "only for the current directory tree")
 	c.AddCommand(remember,
@@ -129,7 +140,7 @@ func memoryCmd() *cobra.Command {
 				fmt.Println("forgotten on all your machines")
 				return nil
 			}},
-		&cobra.Command{Use: "list", Short: "Remembered facts and habits", RunE: func(*cobra.Command, []string) error {
+		&cobra.Command{Use: "list", Short: "Key memory: what all your agents get at session start", RunE: func(*cobra.Command, []string) error {
 			e, err := engine()
 			if err != nil {
 				return err
@@ -142,6 +153,7 @@ func memoryCmd() *cobra.Command {
 				fmt.Println(`nothing remembered yet: hearth memory remember "…", or tell your agent "记住……"`)
 				return nil
 			}
+			fmt.Println(keyMemoryUsage(fs))
 			for _, f := range fs {
 				where := ""
 				if f.Scope != "" {
@@ -151,6 +163,7 @@ func memoryCmd() *cobra.Command {
 			}
 			return nil
 		}},
+		memoryTidyCmd(),
 		&cobra.Command{Use: "index", Short: "Bring the local memory index up to date now (the background sync does it every 5 min)", RunE: func(*cobra.Command, []string) error {
 			e, err := engine()
 			if err != nil {
@@ -176,6 +189,11 @@ func memoryCmd() *cobra.Command {
 				fmt.Printf("index: %d conversation(s), %d fact(s), %d note(s) · %s · updated %s\n", n["conversation"], n["fact"], n["note"],
 					humanize.IBytes(uint64(size)), humanize.Time(at))
 			}
+			if e, err := engine(); err == nil {
+				if fs, err := e.Facts(); err == nil {
+					fmt.Println(keyMemoryUsage(fs))
+				}
+			}
 			for _, r := range client.MemoryHookStatus(home) {
 				state := "on"
 				if r.Op != "installed" {
@@ -191,7 +209,7 @@ func memoryCmd() *cobra.Command {
 }
 
 func memoryHooksCmd() *cobra.Command {
-	c := &cobra.Command{Use: "hooks", Short: "Hooks that add relevant memories to every prompt of Codex and Claude Code"}
+	c := &cobra.Command{Use: "hooks", Short: "Hooks that add key memory and relevant memories to Codex, Claude Code and Comate sessions"}
 	set := func(on bool) func(*cobra.Command, []string) error {
 		return func(*cobra.Command, []string) error {
 			home := client.Home()
@@ -219,4 +237,68 @@ func printHookResults(res []client.HookResult) {
 			fmt.Println("             Codex asks once to trust new hooks: choose \"Trust all and continue\" at its next start")
 		}
 	}
+}
+
+func keyMemoryUsage(fs []client.Fact) string {
+	n := client.KeyMemorySize(fs)
+	return fmt.Sprintf("key memory: %d entr%s, %s of %s (%d%%)", len(fs), map[bool]string{true: "y", false: "ies"}[len(fs) == 1],
+		humanize.IBytes(uint64(n)), humanize.IBytes(client.KeyMemoryLimit), n*100/client.KeyMemoryLimit)
+}
+
+// memoryTidyCmd prints key memory for an agent to review with the user:
+// Hearth calls no model, so the agent that runs it checks each entry and
+// proposes the edits; nothing changes until the user agrees.
+func memoryTidyCmd() *cobra.Command {
+	var asJSON bool
+	c := &cobra.Command{Use: "tidy", Short: "Review key memory with your agent: entries to check, rewrite, merge or forget (changes nothing)",
+		Long: "Lists key memory with each entry's size and age, flags the long ones, and says how to tidy it. Ask your agent\n" +
+			"(\"整理一下 hearth 的记忆\"): it checks every entry against the conversations it came from and the current state,\n" +
+			"proposes keep / rewrite / merge / forget, and applies what you agree with hearth memory remember --replace and\n" +
+			"hearth memory forget.",
+		RunE: func(*cobra.Command, []string) error {
+			e, err := engine()
+			if err != nil {
+				return err
+			}
+			fs, err := e.Facts()
+			if err != nil {
+				return err
+			}
+			if asJSON {
+				return printJSON(map[string]any{"limit": client.KeyMemoryLimit, "entry_limit": client.FactLimit, "used": client.KeyMemorySize(fs), "entries": fs})
+			}
+			fmt.Println(keyMemoryUsage(fs))
+			if len(fs) == 0 {
+				return nil
+			}
+			fmt.Println()
+			for _, f := range fs {
+				flag := ""
+				if len(f.Text) > client.FactLimit {
+					flag = "  TOO LONG"
+				}
+				who := orDefault(f.Source, "user")
+				if f.Machine != "" {
+					who += ", " + f.Machine
+				}
+				fmt.Printf("f:%s  %s  %s  (%s)%s\n", f.ID, time.Unix(f.Created, 0).Format("2006-01-02"), humanize.IBytes(uint64(len(f.Text))), who, flag)
+				if f.Scope != "" {
+					fmt.Printf("  only under %s\n", f.Scope)
+				}
+				fmt.Printf("  %s\n\n", f.Text)
+			}
+			fmt.Print(`To tidy (the agent, with the user):
+  1. Check each entry against where it came from (hearth recall "<its words>", hearth recall --show <id>) and the
+     current state (the machine, the repository): is it still true, still needed, already said by another entry?
+  2. Propose per entry: keep, rewrite shorter, merge with others, or forget (outdated, wrong, or a detail that belongs
+     in the conversation). Keep one line each: the conclusion and where it holds; point to details ("details:
+     hearth recall --show s:…") instead of copying them.
+  3. Apply only what the user agrees to:
+       hearth memory remember --replace f:<id>[,f:<id>] "<new text>"   (rewrite or merge)
+       hearth memory forget f:<id>
+`)
+			return nil
+		}}
+	c.Flags().BoolVar(&asJSON, "json", false, "machine-readable")
+	return c
 }

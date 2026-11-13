@@ -52,7 +52,7 @@ type Service struct {
 	// PrepareCredentials writes the credential files a skill (or a named
 	// file secret) needs and reports their paths, never the values.
 	PrepareCredentials func(names []string) (string, error)
-	Remember           func(text, scope string) (string, error)
+	Remember           func(text, scope string, replaces []string) (string, error)
 	Forget             func(id string) error
 
 	mu        sync.Mutex
@@ -185,8 +185,9 @@ type recallArgs struct {
 }
 
 type rememberArgs struct {
-	Text  string `json:"text" jsonschema:"one fact, habit or decision, written so another agent understands it without this conversation"`
-	Scope string `json:"scope,omitempty" jsonschema:"a directory (e.g. the repository root) when it only holds there; empty = everywhere"`
+	Text     string   `json:"text" jsonschema:"one fact, habit or decision, written so another agent understands it without this conversation"`
+	Scope    string   `json:"scope,omitempty" jsonschema:"a directory (e.g. the repository root) when it only holds there; empty = everywhere"`
+	Replaces []string `json:"replaces,omitempty" jsonschema:"ids (f:...) of key-memory entries this one corrects or merges; they are forgotten once it is stored"`
 }
 
 type prepareArgs struct {
@@ -222,8 +223,10 @@ func (s *Service) New(version string) *mcp.Server {
 	}
 	if s.Recall != nil {
 		instr += " Long-term memory: call recall when you hit an error, start on an unfamiliar repository, or the user refers to " +
-			"earlier work (\"like last time\", \"上次\"); it searches their conversations on every machine and agent. When the user " +
-			"asks you to remember something, or agrees to your proposal, call remember."
+			"earlier work (\"like last time\", \"上次\"); it searches their conversations on every machine and agent. Key memory " +
+			"(given at session start, shared by all their agents and machines) holds only what is worth keeping: call remember when the user " +
+			"asks, or when something is clearly worth keeping for future sessions (a decision or preference of the user, a verified rule, " +
+			"a trap and how to avoid it), and tell the user in one sentence."
 	}
 	srv := mcp.NewServer(&mcp.Implementation{Name: "hearth-skills", Version: version}, &mcp.ServerOptions{Instructions: instr})
 	mcp.AddTool(srv, &mcp.Tool{
@@ -355,10 +358,14 @@ func (s *Service) New(version string) *mcp.Server {
 	if s.Remember != nil {
 		mcp.AddTool(srv, &mcp.Tool{
 			Name: "remember",
-			Description: "Remember a fact, habit or decision for all of the user's agents and machines (end-to-end encrypted). Only " +
-				"when the user asks you to remember something or agreed to your proposal; never store credentials or secrets.",
+			Description: "Add an entry to the user's key memory, which every agent on every machine of theirs gets at session start " +
+				"(end-to-end encrypted, 6 KB in all, 1000 bytes an entry). Use it when the user asks you to remember something, or when " +
+				"something is clearly worth keeping for future sessions: a decision or preference of the user, a verified rule, a trap and how " +
+				"to avoid it. Not what the repository or the machine already tells, not the progress of the current task. One line: the " +
+				"conclusion and where it holds; leave details in the conversation (recall finds it). When it corrects or merges entries, pass " +
+				"their ids in replaces. Tell the user in one sentence what you remembered. Never credentials or secrets.",
 		}, func(_ context.Context, _ *mcp.CallToolRequest, a rememberArgs) (*mcp.CallToolResult, any, error) {
-			id, err := s.Remember(a.Text, a.Scope)
+			id, err := s.Remember(a.Text, a.Scope, a.Replaces)
 			if err != nil {
 				return text("Not remembered: " + err.Error()), nil, nil
 			}

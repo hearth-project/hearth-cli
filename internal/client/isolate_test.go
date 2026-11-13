@@ -45,7 +45,7 @@ func TestIsolateCodexHome(t *testing.T) {
 	w(filepath.Join(shared, "model-catalogs/m.json"), "{}")
 	w(filepath.Join(shared, "state_5.sqlite"), "db")
 	w(filepath.Join(shared, "rules/default.rules"), "allow")
-	if _, err := editHooks(filepath.Join(shared, "hooks.json"), "hearth recall --hook", true); err != nil {
+	if _, err := editHooks(filepath.Join(shared, "hooks.json"), "hearth recall --hook", true, false); err != nil {
 		t.Fatal(err)
 	}
 	day := "sessions/2026/10/23/"

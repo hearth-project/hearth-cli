@@ -2,7 +2,7 @@
 
 [English](../en/memory-roadmap.md) · [返回 README](../../README.md)
 
-> 状态：**M1 已完成，M2 进行中**（见 [CHANGELOG](../../CHANGELOG.md) 的 Unreleased）。已经可用：会话卡片、本地 FTS5 索引、`hearth recall`、`hearth memory remember|forget|list`、MCP `recall` / `remember` / `forget`，以及 Codex 和 Claude Code 的提问前 hook。尚未完成：`hearth memory review`、提议事实的确认流程、常驻画像受管块、Comate，以及 M3 全部内容；排期见 [开发路线图](https://github.com/hearth-project/hearth-cli/issues/1)。
+> 状态：**M1 已完成，M2 进行中**（见 [CHANGELOG](../../CHANGELOG.md) 的 Unreleased）。已经可用：会话卡片、本地 FTS5 索引、`hearth recall`、`hearth memory remember|forget|list`、MCP `recall` / `remember` / `forget`，Codex、Claude Code 和 Comate 的会话开始和提问前 hook，以及 6 KB 的关键记忆和 `hearth memory tidy`。尚未完成：M3 全部内容；排期见 [开发路线图](https://github.com/hearth-project/hearth-cli/issues/1)。
 >
 > Hearth 是 agent 的**随身工作现场**（会话、skills、凭证、环境跟着你走）；这份文档描述怎么在此基础上加上**长期记忆**。
 
@@ -65,11 +65,15 @@
 
 **控制注入成本**：hook 注入有相关度阈值，低于阈值不注入；每次最多 3 条、约 600 字；画像不超过 1 KB。
 
-### 4. 记录习惯：确认后才生效
+### 4. 关键记忆：小而常驻
 
-- agent 在对话中发现值得记住的事（用户纠正了它、反复出现的做法），调用 `remember` 提议，标注范围（只对这个仓库 / 所有项目 / 某类机器）。
-- 用户在对话里确认，或在 `hearth memory review` / Hearth 小程序里批量确认、修改、删除。
-- 和现在 `propose_setup_step` 的流程一样：agent 提议、用户决定，服务器不调大模型，也看不到内容。
+关键记忆就是记下的事实，每个用户一份，端到端加密，在所有机器和 agent（Codex、Claude Code、Comate）之间共享，每次开新会话整份带上。因为每个会话都要带，所以它必须小：
+
+- **上限**：总共 6 KB（约 2000 个汉字），每条最多 1000 字节。写满后 `remember` 会拒绝，要先合并或删掉旧条目。会话记录、agent 的笔记不受这个限制，照常靠 `recall` 搜索。
+- **写什么**：用户的决定和偏好、验证过的规则、踩过的坑和避开的办法。每条一行，写结论和适用范围（全局、某个仓库），细节留在会话里，用 `hearth recall --show s:…` 指过去。不写仓库或机器上能直接看到的东西，不写当前任务的进度。
+- **谁来写**：用户说「记住……」时写；agent 判断明显值得长期保留时也可以直接写，并用一句话告诉用户。
+- **改写与合并**：`remember` 带上 `replaces`（命令行 `--replace f:…`），新条目存下后，旧条目随之删除。注入的每条都带 id，agent 可以直接改写。
+- **整理**：`hearth memory tidy` 列出所有条目、大小和来源，标出过长的。让 agent 拿每条去对照原始会话和当前状态，提出保留、改写、合并或删除，用户同意后再改。Hearth 不调用模型，服务器也看不到内容。用量超过 85% 时，会话开始的提示里会建议整理。
 
 ### 5. 团队记忆（第三阶段）
 

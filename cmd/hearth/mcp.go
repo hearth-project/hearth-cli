@@ -90,8 +90,8 @@ func mcpCmd() *cobra.Command {
 			}
 			if e, err := engine(); err == nil {
 				if client.MemoryOn(home) {
-					svc.Remember = func(t, scope string) (string, error) {
-						f, err := e.Remember(t, scope, "agent")
+					svc.Remember = func(t, scope string, replaces []string) (string, error) {
+						f, err := e.Remember(t, scope, "agent", replaces...)
 						return "f:" + f.ID, err
 					}
 					svc.Forget = e.ForgetFact

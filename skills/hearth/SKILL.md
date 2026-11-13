@@ -203,11 +203,12 @@ hearth agents pull <agent>                          # restore an agent setup ski
 
 ### Long-term memory
 
-Every conversation of the user's machines and agents has a small card (what was asked, the outcome, later requests, errors, commands, files) in a local index, with the facts they asked to remember and the agents' own notes. The `hearth` MCP server has `recall` (search, local, milliseconds), `remember` and `forget`; Codex and Claude Code also get relevant memories added to each prompt by a hook, and the remembered facts at session start.
+Every conversation of the user's machines and agents has a small card (what was asked, the outcome, later requests, errors, commands, files) in a local index, with the facts they asked to remember and the agents' own notes. The `hearth` MCP server has `recall` (search, local, milliseconds), `remember` and `forget`; Codex, Claude Code and Comate also get relevant memories added to each prompt by a hook, and the key memory (the remembered facts, 6 KB in all, each with its id) at session start.
 
 - Use `recall` when you hit an error, start on an unfamiliar repository, or the user refers to earlier work ("上次", "like last time", "那个 NCCL 的问题"). Say where a memory came from (date, machine) and verify it before relying on it.
-- When the user says "remember …" / "记住……", or agrees to a habit you noticed (they corrected you twice the same way), call `remember` with one self-contained sentence; `scope` = the repository root when it only holds there. Never store credentials.
-- CLI: `hearth recall <words>` (`--show <id>`), `hearth memory remember|forget|list|index|status`, `hearth memory hooks on|off`. Codex asks once to trust a new hook: tell the user to choose "Trust all and continue". `[memory] enabled = false` turns it all off.
+- Key memory holds only what is worth keeping: call `remember` when the user says "remember …" / "记住……", or by yourself when something is clearly worth keeping for future sessions (a decision or preference of the user, a verified rule, a trap and how to avoid it), and tell the user in one sentence. One line, at most 1000 bytes: the conclusion and where it holds; `scope` = the repository root when it only holds there; leave details in the conversation. Pass `replaces` with the ids it corrects or merges. Not what the repository or machine already tells, not task progress, never credentials.
+- "整理一下记忆" / "tidy memory", or the session note says it is nearly full: run `hearth memory tidy`, check each entry against `hearth recall` and the current state, propose keep / rewrite / merge / forget per entry, and apply only what the user agrees to (`hearth memory remember --replace f:<id>,… "<text>"`, `hearth memory forget f:<id>`).
+- CLI: `hearth recall <words>` (`--show <id>`), `hearth memory remember [--replace f:…]|forget|list|tidy|index|status`, `hearth memory hooks on|off`. Codex asks once to trust a new hook: tell the user to choose "Trust all and continue". `[memory] enabled = false` turns it all off.
 
 ### Discover and restore a newly online machine
 

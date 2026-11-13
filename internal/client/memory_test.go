@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 // Conversations of one machine (with their cards), facts and hook output
@@ -84,7 +85,7 @@ func TestMemoryHooksFiles(t *testing.T) {
 	os.WriteFile(p, []byte(other), 0o600)
 	cmd := hookCommand("", "/bin/hearth")
 	for i := 0; i < 2; i++ { // idempotent
-		if _, err := editHooks(p, cmd, true); err != nil {
+		if _, err := editHooks(p, cmd, true, false); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -103,7 +104,7 @@ func TestMemoryHooksFiles(t *testing.T) {
 	if string(withoutOwn([]byte(other2))) != string(withoutOwn(b)) {
 		t.Fatal("own hooks make the file look changed")
 	}
-	if op, err := editHooks(p, cmd, false); err != nil || op != "removed" {
+	if op, err := editHooks(p, cmd, false, false); err != nil || op != "removed" {
 		t.Fatalf("remove: %s %v", op, err)
 	}
 	b, _ = os.ReadFile(p)
@@ -163,5 +164,92 @@ func TestHookAnswersForTheSessionsWorkspace(t *testing.T) {
 	}
 	if c := hookCommand("/opt/h", "/bin/hearth"); !strings.Contains(c, "HEARTH_HOME='/opt/h'") {
 		t.Fatalf("hook drops a custom home: %s", c)
+	}
+}
+
+// Key memory: entries are capped one by one and in all, replaces rewrites
+// and merges, and session start gives every entry in force with its id,
+// even when an older one is too long (it used to empty the whole block).
+func TestKeyMemory(t *testing.T) {
+	en := newEnv(t)
+	a := en.machine("a")
+	if _, err := a.Remember(strings.Repeat("x", FactLimit+1), "", "user"); err == nil {
+		t.Fatal("over-long entry stored")
+	}
+	f1, err := a.Remember("answer in Chinese", "", "user")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f2, err := a.Remember("run  pre-commit\nbefore every push", "/ws/repo", "agent")
+	if err != nil || f2.Text != "run pre-commit before every push" {
+		t.Fatalf("%+v %v", f2, err)
+	}
+	// Merge both into one: the old ones go.
+	m, err := a.Remember("answer in Chinese; run pre-commit before every push", "", "agent", "f:"+f1.ID, f2.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fs, _ := a.Facts()
+	if len(fs) != 1 || fs[0].ID != m.ID {
+		t.Fatalf("after merge %+v", fs)
+	}
+	if _, err := a.Remember("x", "", "user", "f:nope"); err == nil {
+		t.Fatal("replaced a missing entry")
+	}
+	// Fill to the limit: the next one is refused unless it replaces.
+	for KeyMemorySize(fs)+FactLimit <= KeyMemoryLimit {
+		if _, err := a.Remember(strings.Repeat("y", FactLimit-10)+" filler", "", "user"); err != nil {
+			t.Fatal(err)
+		}
+		fs, _ = a.Facts()
+	}
+	if _, err := a.Remember(strings.Repeat("z", FactLimit), "", "user"); err == nil || !strings.Contains(err.Error(), "full") {
+		t.Fatalf("full: %v", err)
+	}
+	if _, err := a.Remember("short again", "", "user", fs[0].ID); err != nil {
+		t.Fatalf("replace when full: %v", err)
+	}
+
+	// Session start: a legacy entry longer than the limit is cut, not
+	// dropping the rest; scoped entries only under their directory.
+	docs := []memory.Doc{
+		{ID: "f:old", Kind: "fact", Body: strings.Repeat("长", 1800)},
+		{ID: "f:zh", Kind: "fact", Body: "回复用中文"},
+		{ID: "f:repo", Kind: "fact", Body: "repo rule", Cwd: "/ws/repo"},
+	}
+	s := KeyMemoryContext(docs, "/elsewhere")
+	if !strings.Contains(s, "[f:zh] 回复用中文") || !strings.Contains(s, "[f:old]") || !strings.Contains(s, "too long") || strings.Contains(s, "repo rule") || !utf8.ValidString(s) {
+		t.Fatalf("context:\n%s", s)
+	}
+	if s := KeyMemoryContext(docs, "/ws/repo/sub"); !strings.Contains(s, "repo rule") {
+		t.Fatalf("scoped:\n%s", s)
+	}
+	if s := KeyMemoryContext(docs, "/x"); !strings.Contains(s, "% full") {
+		t.Fatalf("no tidy hint at 5.4 KB:\n%s", s[len(s)-200:])
+	}
+	if KeyMemoryContext(nil, "/x") != "" {
+		t.Fatal("empty memory gave context")
+	}
+}
+
+// Comate's hook file gets a matcher and the plain-text command; the
+// plain answer is the context itself.
+func TestComateHook(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "hooks.json")
+	if _, err := editHooks(p, hookCommand("", "/bin/hearth")+" --plain", true, true); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(p)
+	if !strings.Contains(string(b), `"matcher": "*"`) || !strings.Contains(string(b), "recall --hook --plain") {
+		t.Fatalf("%s", b)
+	}
+	en := newEnv(t)
+	a := en.machine("a")
+	if _, err := a.Remember("answer in Chinese", "", "user"); err != nil {
+		t.Fatal(err)
+	}
+	out, err := HookPlain(a.Home, strings.NewReader(`{"hook_event_name":"SessionStart","cwd":"/x"}`))
+	if err != nil || !strings.HasPrefix(out, "Key memory") || strings.Contains(out, "hookSpecificOutput") {
+		t.Fatalf("%q %v", out, err)
 	}
 }

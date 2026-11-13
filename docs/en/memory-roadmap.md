@@ -2,7 +2,7 @@
 
 [中文](../zh/memory-roadmap.md) · [Back to README](../../README.en.md)
 
-> Status: **M1 shipped, M2 in progress** (see "Unreleased" in [CHANGELOG](../../CHANGELOG.md)). Available now: memory cards, the local FTS5 index, `hearth recall`, `hearth memory remember|forget|list`, MCP `recall` / `remember` / `forget`, and the Codex and Claude Code prompt hooks. Still open: `hearth memory review`, confirming proposed facts, the resident profile block, Comate, and all of M3; schedule in the [development roadmap](https://github.com/hearth-project/hearth-cli/issues/1).
+> Status: **M1 shipped, M2 in progress** (see "Unreleased" in [CHANGELOG](../../CHANGELOG.md)). Available now: memory cards, the local FTS5 index, `hearth recall`, `hearth memory remember|forget|list`, MCP `recall` / `remember` / `forget`, the session-start and prompt hooks of Codex, Claude Code and Comate, the 6 KB key memory and `hearth memory tidy`. Still open: all of M3; schedule in the [development roadmap](https://github.com/hearth-project/hearth-cli/issues/1).
 >
 > Hearth is a **portable workspace** for coding agents (conversations, skills, credentials and setup follow you). This document describes how it gains **long-term memory** on top of that.
 
@@ -66,11 +66,15 @@ All three use the same local index. ① keeps habits always in force, ② gives 
 
 **Cost control**: injection has a relevance threshold (nothing below it), at most 3 entries and ~600 characters per prompt; the profile stays under 1 KB.
 
-### 4. Recording habits: only after confirmation
+### 4. Key memory: small and always loaded
 
-- When the agent notices something worth keeping (the user corrected it, a practice keeps recurring), it calls `remember` with a scope (this repository / all projects / a kind of machine).
-- The user confirms in the conversation, or reviews, edits and deletes in `hearth memory review` or the Hearth app.
-- The same flow as `propose_setup_step` today: the agent proposes, the user decides; the server neither calls a model nor sees the content.
+Key memory is the set of remembered facts: one per user, end-to-end encrypted, shared by every machine and agent (Codex, Claude Code, Comate) and given whole at the start of every session. Because every session carries it, it stays small:
+
+- **Limit**: 6 KB in all, at most 1000 bytes an entry. When it is full `remember` refuses until entries are merged or forgotten. Conversations and the agents' own notes are not limited by it; `recall` searches them as before.
+- **What goes in**: the user's decisions and preferences, verified rules, traps and how to avoid them. One line each, the conclusion and where it holds (everywhere, a repository); details stay in the conversation, pointed to with `hearth recall --show s:…`. Not what the repository or the machine already tells, not the progress of the current task.
+- **Who writes**: when the user says "remember …"; and an agent may add an entry by itself when something is clearly worth keeping, telling the user in one sentence.
+- **Rewrite and merge**: `remember` with `replaces` (`--replace f:…` on the command line) stores the new entry and forgets the ones it supersedes. Every injected entry carries its id, so an agent can rewrite it.
+- **Tidy**: `hearth memory tidy` lists the entries with size and origin and flags the long ones. The agent checks each against the conversations it came from and the current state, proposes keep / rewrite / merge / forget, and changes only what the user agrees to. Hearth calls no model and the server sees no content. Above 85 % the session-start note suggests tidying.
 
 ### 5. Team memory (third stage)
 

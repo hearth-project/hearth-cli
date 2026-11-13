@@ -290,7 +290,7 @@ func (e *Engine) cleanSharedDefault(agent, src string, viaMixin bool, mixin stri
 	}
 	switch hooks := map[string]string{"codex": "hooks.json", "claude": "settings.json"}[agent]; {
 	case hooks != "":
-		if op, err := editHooks(filepath.Join(src, hooks), "", false); err == nil && op != "unchanged" && op != "" {
+		if op, err := editHooks(filepath.Join(src, hooks), "", false, false); err == nil && op != "unchanged" && op != "" {
 			done = append(done, "Hearth hooks removed")
 		}
 	}

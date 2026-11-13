@@ -27,6 +27,24 @@ import (
 
 const factPrefix = "memory."
 
+// Key memory is the set of facts: every agent of the user gets all of it at
+// session start, so it stays small. KeyMemoryLimit caps the total text,
+// FactLimit one entry (a conclusion and where it holds; the details stay in
+// the conversations, found by recall).
+const (
+	KeyMemoryLimit = 6 * 1024
+	FactLimit      = 1000
+)
+
+// KeyMemorySize is the total text size of facts.
+func KeyMemorySize(fs []Fact) int {
+	n := 0
+	for _, f := range fs {
+		n += len(f.Text)
+	}
+	return n
+}
+
 // Fact is one remembered fact or habit.
 type Fact struct {
 	ID      string `json:"id"`
@@ -47,16 +65,43 @@ func MemoryOn(home string) bool {
 }
 
 // Remember stores a fact (end-to-end encrypted) and indexes it here at once.
-func (e *Engine) Remember(text, scope, source string) (Fact, error) {
-	text = strings.TrimSpace(text)
+// replaces names facts the new one supersedes (a rewrite, or several
+// merged into one): they are forgotten once it is stored, and their size
+// does not count against the limit.
+func (e *Engine) Remember(text, scope, source string, replaces ...string) (Fact, error) {
+	text = strings.Join(strings.Fields(text), " ") // one line
 	if text == "" {
 		return Fact{}, errors.New("nothing to remember")
 	}
-	if len(text) > 2000 {
-		return Fact{}, errors.New("too long for a fact (2000 bytes); keep it to one habit or decision")
+	if len(text) > FactLimit {
+		return Fact{}, fmt.Errorf("too long for key memory (%d bytes, at most %d): keep the conclusion and where it holds; the details stay in the conversation (recall finds it)", len(text), FactLimit)
 	}
 	if library.SecretInText(text) {
 		return Fact{}, errors.New("this looks like it contains a credential; keep credentials in hearth secret, not in memory")
+	}
+	all, err := e.Facts()
+	if err != nil {
+		return Fact{}, err
+	}
+	gone := map[string]bool{}
+	for _, id := range replaces {
+		if id = strings.TrimPrefix(strings.TrimSpace(id), "f:"); id != "" {
+			gone[id] = true
+		}
+	}
+	var keep []Fact
+	for _, f := range all {
+		if gone[f.ID] {
+			delete(gone, f.ID)
+			continue
+		}
+		keep = append(keep, f)
+	}
+	for id := range gone {
+		return Fact{}, fmt.Errorf("no remembered fact f:%s to replace (hearth memory list)", id)
+	}
+	if used := KeyMemorySize(keep); used+len(text) > KeyMemoryLimit {
+		return Fact{}, fmt.Errorf("key memory is full (%d of %d bytes used): merge or forget entries first (hearth memory tidy), or replace the ones this supersedes", used, KeyMemoryLimit)
 	}
 	b := make([]byte, 6)
 	rand.Read(b)
@@ -70,6 +115,13 @@ func (e *Engine) Remember(text, scope, source string) (Fact, error) {
 		d := factDoc(f)
 		x.Apply([]memory.Doc{d}, map[string]string{d.ID: docHash(d)}, nil)
 		x.Close()
+	}
+	for _, id := range replaces {
+		if id = strings.TrimSpace(id); id != "" {
+			if err := e.ForgetFact(id); err != nil {
+				return f, fmt.Errorf("remembered as f:%s, but %s was not forgotten: %v", f.ID, id, err)
+			}
+		}
 	}
 	return f, nil
 }

@@ -206,12 +206,13 @@ Generated from `hearth --help` by `hearth docs cli > docs/cli.md`; every command
 | [`hearth identity status`](#hearth-identity-status) | Show whether a platform credential is available on this machine |
 | [`hearth mcp`](#hearth-mcp) | Serve skill search over MCP on stdio (search_skills, get_skill, list_skills) |
 | [`hearth memory`](#hearth-memory) | Long-term memory shared by your agents and machines: remember, forget, list, index, hooks |
-| [`hearth memory remember`](#hearth-memory-remember) | Remember a fact or habit for all your agents (end-to-end encrypted) |
+| [`hearth memory remember`](#hearth-memory-remember) | Add to key memory, which all your agents get at session start (end-to-end encrypted; 6 KB in all) |
 | [`hearth memory forget`](#hearth-memory-forget) | Forget a remembered fact (id f:… from hearth memory list) |
-| [`hearth memory list`](#hearth-memory-list) | Remembered facts and habits |
+| [`hearth memory list`](#hearth-memory-list) | Key memory: what all your agents get at session start |
+| [`hearth memory tidy`](#hearth-memory-tidy) | Review key memory with your agent: entries to check, rewrite, merge or forget (changes nothing) |
 | [`hearth memory index`](#hearth-memory-index) | Bring the local memory index up to date now (the background sync does it every 5 min) |
 | [`hearth memory status`](#hearth-memory-status) | What the memory holds here, and the agent hooks |
-| [`hearth memory hooks`](#hearth-memory-hooks) | Hooks that add relevant memories to every prompt of Codex and Claude Code |
+| [`hearth memory hooks`](#hearth-memory-hooks) | Hooks that add key memory and relevant memories to Codex, Claude Code and Comate sessions |
 | [`hearth memory hooks on`](#hearth-memory-hooks-on) | Install the hooks (default) |
 | [`hearth memory hooks off`](#hearth-memory-hooks-off) | Remove the hooks (recall stays available as a command and MCP tool) |
 | [`hearth onboard`](#hearth-onboard) | Machine setup status and next steps (used by the hearth agent skill) |
@@ -2344,13 +2345,14 @@ hearth memory
 
 ## hearth memory remember
 
-Remember a fact or habit for all your agents (end-to-end encrypted)
+Add to key memory, which all your agents get at session start (end-to-end encrypted; 6 KB in all)
 
 ```text
 hearth memory remember <text> [flags]
 
 Flags:
       --here[=true|false]   only for the current directory tree
+      --replace strings     ids (f:…) this entry corrects or merges: forgotten once it is stored
       --scope string        only for this directory tree (e.g. a repository)
 ```
 
@@ -2364,10 +2366,24 @@ hearth memory forget <id>
 
 ## hearth memory list
 
-Remembered facts and habits
+Key memory: what all your agents get at session start
 
 ```text
 hearth memory list
+```
+
+## hearth memory tidy
+
+Lists key memory with each entry's size and age, flags the long ones, and says how to tidy it. Ask your agent
+("整理一下 hearth 的记忆"): it checks every entry against the conversations it came from and the current state,
+proposes keep / rewrite / merge / forget, and applies what you agree with hearth memory remember --replace and
+hearth memory forget.
+
+```text
+hearth memory tidy [flags]
+
+Flags:
+      --json[=true|false]   machine-readable
 ```
 
 ## hearth memory index
@@ -2388,7 +2404,7 @@ hearth memory status
 
 ## hearth memory hooks
 
-Hooks that add relevant memories to every prompt of Codex and Claude Code
+Hooks that add key memory and relevant memories to Codex, Claude Code and Comate sessions
 
 ```text
 hearth memory hooks
