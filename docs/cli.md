@@ -1152,6 +1152,7 @@ hearth team repo set <team> <url> [flags]
 
 Flags:
       --commit-prefix string   start the review's commit message with this, e.g. the issue id the repository's hooks require (icode: an iCafe card such as proj-123)
+      --exclude strings        skills and agents (names, comma-separated) left alone on both sides: neither published into the team nor proposed to the repository
       --machine string         the machine that syncs (one of yours, with git access; default: this one)
       --new-dir string         where new skills from the team go in the repository (skills or a directory under it) (default "skills")
       --push string            how the team's items go back: cr (refs/for/<branch>, a review), branch (hearth/team-<team>), off (default "cr")

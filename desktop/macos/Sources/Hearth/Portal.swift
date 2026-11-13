@@ -167,6 +167,7 @@ struct TeamRepo: Decodable, Hashable {
     var push: String?
     var new_dir: String?
     var commit_prefix: String?
+    var exclude: [String]?
     var device: String
     var owner: String?
     var device_name: String?

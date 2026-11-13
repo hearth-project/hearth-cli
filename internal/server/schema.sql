@@ -267,6 +267,7 @@ CREATE TABLE IF NOT EXISTS team_repos (
   push           TEXT NOT NULL DEFAULT 'cr',
   new_dir        TEXT NOT NULL DEFAULT 'skills',
   commit_prefix  TEXT NOT NULL DEFAULT '',
+  exclude_json   TEXT NOT NULL DEFAULT '[]',
   created_at     INTEGER NOT NULL,
   requested_at   INTEGER NOT NULL DEFAULT 0,
   synced_at      INTEGER NOT NULL DEFAULT 0,
