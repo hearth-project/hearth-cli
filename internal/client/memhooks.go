@@ -10,14 +10,17 @@ import (
 	"github.com/hearth-project/hearth-cli/internal/library"
 )
 
-// Memory hooks: Codex (hooks.json in its home) and Claude Code
-// (settings.json) run a command before each prompt and at session start
-// and add what it prints to the model's context. Hearth registers
+// Memory hooks: Codex (hooks.json in its home), Claude Code
+// (settings.json) and Comate (~/.comate/hooks.json) run a command before
+// each prompt and at session start and add what it prints to the model's
+// context. Comate takes plain text (--plain), the others JSON. Hearth registers
 // `hearth recall --hook` there, so relevant memories reach the agent
 // without the model having to decide to look. Other hooks in those files
 // are left alone; Hearth's own entry is recognised by its command.
 
 const hookMarker = "recall --hook"
+
+var hookAgents = []string{"codex", "claude", "comate"}
 
 // MemoryHooksOn reports [memory] hooks (default true, needs memory on).
 func MemoryHooksOn(home string) bool {
@@ -78,6 +81,8 @@ func hookFiles(home string) map[string]string {
 			out["codex"] = filepath.Join(t.Root, "hooks.json")
 		case "claude":
 			out["claude"] = filepath.Join(t.Root, "settings.json")
+		case "comate":
+			out["comate"] = filepath.Join(t.Root, "hooks.json")
 		}
 	}
 	return out
@@ -96,7 +101,7 @@ func SyncMemoryHooks(home string, on bool) ([]HookResult, error) {
 	cmd := hookCommand(home, exe)
 	var out []HookResult
 	files := hookFiles(home)
-	for _, agent := range []string{"codex", "claude"} {
+	for _, agent := range hookAgents {
 		p, ok := files[agent]
 		if !ok {
 			continue
@@ -105,7 +110,11 @@ func SyncMemoryHooks(home string, on bool) ([]HookResult, error) {
 			out = append(out, HookResult{Agent: agent, Path: p, Op: "skipped", Detail: "agent not set up here"})
 			continue
 		}
-		op, err := editHooks(p, cmd, on)
+		c := cmd
+		if agent == "comate" {
+			c += " --plain"
+		}
+		op, err := editHooks(p, c, on, agent == "comate")
 		r := HookResult{Agent: agent, Path: p, Op: op}
 		if err != nil {
 			r.Op, r.Detail = "skipped", err.Error()
@@ -117,7 +126,7 @@ func SyncMemoryHooks(home string, on bool) ([]HookResult, error) {
 
 // editHooks rewrites the "hooks" object of a JSON settings file: Hearth's
 // SessionStart and UserPromptSubmit entries are replaced (on) or dropped.
-func editHooks(path, command string, on bool) (string, error) {
+func editHooks(path, command string, on, matcher bool) (string, error) {
 	doc := map[string]any{}
 	b, err := os.ReadFile(path)
 	switch {
@@ -147,7 +156,11 @@ func editHooks(path, command string, on bool) (string, error) {
 			}
 		}
 		if on {
-			keep = append(keep, map[string]any{"hooks": []any{map[string]any{"type": "command", "command": command, "timeout": 5}}})
+			g := map[string]any{"hooks": []any{map[string]any{"type": "command", "command": command, "timeout": 5}}}
+			if matcher {
+				g["matcher"] = "*"
+			}
+			keep = append(keep, g)
 		}
 		if len(keep) == 0 {
 			delete(hooks, event)
@@ -219,7 +232,7 @@ func SetMemoryConfig(home string, enabled, hooks *bool) error {
 func MemoryHookStatus(home string) []HookResult {
 	var out []HookResult
 	files := hookFiles(home)
-	for _, agent := range []string{"codex", "claude"} {
+	for _, agent := range hookAgents {
 		p, ok := files[agent]
 		if !ok {
 			continue

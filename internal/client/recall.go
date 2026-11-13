@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/hearth-project/hearth-cli/internal/memory"
 )
@@ -80,53 +81,108 @@ type HookInput struct {
 	SessionID string `json:"session_id"`
 }
 
+// KeyMemoryContext is the key memory an agent gets at session start: every
+// fact in force under cwd (newest first, each cut to FactLimit, all within
+// KeyMemoryLimit), with its id so the agent can rewrite or merge it.
+func KeyMemoryContext(facts []memory.Doc, cwd string) string {
+	var b strings.Builder
+	used := 0
+	for _, f := range facts {
+		used += len(f.Body)
+		if f.Cwd != "" && !strings.HasPrefix(cwd, f.Cwd) {
+			continue // scoped to another directory
+		}
+		body := strings.Join(strings.Fields(f.Body), " ")
+		if len(body) > FactLimit {
+			body = cutUTF8(body, FactLimit) + "… (too long: tidy it, hearth memory tidy)"
+		}
+		line := "- [" + f.ID + "] " + body + "\n"
+		if b.Len()+len(line) > KeyMemoryLimit+1024 {
+			continue // an older entry that no longer fits; the next may
+		}
+		b.WriteString(line)
+	}
+	if b.Len() == 0 {
+		return ""
+	}
+	s := "Key memory (Hearth: shared by all of this user's agents and machines; their decisions and verified rules, prefer it over other notes):\n" + b.String() +
+		"Keep it current with the hearth MCP tool `remember`: add an entry when something is clearly worth keeping for future sessions " +
+		"(a user decision or preference, a verified rule, a trap and how to avoid it), one line with the conclusion and where it holds; " +
+		"pass `replaces` with the ids it supersedes when it corrects or merges entries; tell the user in one sentence. " +
+		"Search earlier work of any machine or agent with `recall` (or `hearth recall <words>`)."
+	if used*100 >= KeyMemoryLimit*85 {
+		s += fmt.Sprintf(" Key memory is %d%% full: offer the user to tidy it (hearth memory tidy).", used*100/KeyMemoryLimit)
+	}
+	return s
+}
+
+func cutUTF8(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	for n > 0 && !utf8.RuneStart(s[n]) {
+		n--
+	}
+	return s[:n]
+}
+
 // Hook answers a SessionStart or UserPromptSubmit hook: the facts in
 // force here at session start, the memories relevant to the prompt on each
 // prompt. It returns "" when there is nothing worth adding. Budget: one
 // index read, a few milliseconds.
 func Hook(home string, in io.Reader) (string, error) {
+	event, text, err := hookContext(home, in)
+	if text == "" {
+		return "", err
+	}
+	var buf strings.Builder
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	enc.Encode(map[string]any{"hookSpecificOutput": map[string]string{"hookEventName": event, "additionalContext": text}})
+	return strings.TrimSpace(buf.String()), nil
+}
+
+// HookPlain answers the same hook as plain text, which Comate adds as
+// context (it does not read hookSpecificOutput).
+func HookPlain(home string, in io.Reader) (string, error) {
+	_, text, err := hookContext(home, in)
+	return text, err
+}
+
+func hookContext(home string, in io.Reader) (string, string, error) {
 	var h HookInput
 	b, _ := io.ReadAll(io.LimitReader(in, 1<<20))
 	_ = json.Unmarshal(b, &h)
+	if h.Cwd == "" {
+		h.Cwd = os.Getenv("WORKSPACE_DIR") // Comate names the workspace there
+	}
 	if h.Cwd != "" && FoundHome(home) {
 		home = HomeFor(h.Cwd) // the memories of the person working there
 	}
 	if !MemoryOn(home) {
-		return "", nil
+		return "", "", nil
 	}
 	var text string
 	switch h.Event {
 	case "SessionStart":
 		x, err := memory.OpenReadOnly(memory.Path(home))
 		if err != nil {
-			return "", nil
+			return "", "", nil
 		}
 		defer x.Close()
-		facts, _ := x.List("fact", 40)
-		var b strings.Builder
-		for _, f := range facts {
-			if f.Cwd != "" && !strings.HasPrefix(h.Cwd, f.Cwd) {
-				continue // scoped to another directory
-			}
-			line := "- " + strings.Join(strings.Fields(f.Body), " ") + "\n"
-			if b.Len()+len(line) > 1200 {
-				break
-			}
-			b.WriteString(line)
+		facts, _ := x.List("fact", 1000)
+		text = KeyMemoryContext(facts, h.Cwd)
+		if text == "" {
+			return "", "", nil
 		}
-		if b.Len() == 0 {
-			return "", nil
-		}
-		text = "What this user asked agents to remember (Hearth; confirmed by the user, prefer it over other notes):\n" + b.String() +
-			"Search earlier work of any machine or agent with the hearth MCP tool `recall` (or `hearth recall <words>`)."
 	case "UserPromptSubmit", "":
 		p := strings.TrimSpace(h.Prompt)
 		if len([]rune(p)) < 6 || strings.HasPrefix(p, "/") {
-			return "", nil
+			return "", "", nil
 		}
 		hits, err := Recall(home, p, h.Cwd, 8)
 		if err != nil || len(hits) == 0 {
-			return "", err
+			return "", "", err
 		}
 		var keep []memory.Hit
 		for _, x := range hits {
@@ -148,22 +204,18 @@ func Hook(home string, in io.Reader) (string, error) {
 			}
 		}
 		if len(keep) == 0 {
-			return "", nil
+			return "", "", nil
 		}
 		text = "Possibly relevant memories from Hearth (earlier work on this user's machines and agents; verify before relying on them, details: hearth recall --show <id>):\n" +
 			FormatHits(keep, 1500)
 	default:
-		return "", nil
+		return "", "", nil
 	}
 	event := h.Event
 	if event == "" {
 		event = "UserPromptSubmit"
 	}
-	var buf strings.Builder
-	enc := json.NewEncoder(&buf)
-	enc.SetEscapeHTML(false)
-	enc.Encode(map[string]any{"hookSpecificOutput": map[string]string{"hookEventName": event, "additionalContext": text}})
-	return strings.TrimSpace(buf.String()), nil
+	return event, text, nil
 }
 
 // MemoryIndexAge is when the index was last brought up to date.
