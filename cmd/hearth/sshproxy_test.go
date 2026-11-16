@@ -73,7 +73,7 @@ func TestSSHConfigRoutes(t *testing.T) {
 		{DeviceID: "both", Address: "127.0.0.1", Addresses: []string{"127.0.0.2", "127.0.0.1"}, Port: live.Port},
 	}
 	ids := func() ([]string, error) { return []string{"direct", "viaRelay", "self", "both"}, nil }
-	r := sshConfigRoutes(home, "self", eps, ids)
+	r := sshConfigRoutes(home, "self", eps, ids, true)
 	for i, want := range []bool{false, true, false, false, false} {
 		if got := r[i].proxy != ""; got != want {
 			t.Errorf("%s: ProxyCommand = %q, want one: %v", eps[i].DeviceID, r[i].proxy, want)
@@ -91,8 +91,15 @@ func TestSSHConfigRoutes(t *testing.T) {
 		t.Errorf("host of a machine with several addresses = %q", r[4].host)
 	}
 
+	// Not a Mac: every machine is written, as before.
+	for i, x := range sshConfigRoutes(home, "self", eps, ids, false) {
+		if x.skip || (x.proxy != "") != (eps[i].DeviceID == "viaRelay") {
+			t.Errorf("%s: off a Mac skip = %v, proxy = %q", eps[i].DeviceID, x.skip, x.proxy)
+		}
+	}
+
 	// The relay's list is unknown: nothing changes.
-	for i, x := range sshConfigRoutes(home, "self", eps, func() ([]string, error) { return nil, errors.New("down") }) {
+	for i, x := range sshConfigRoutes(home, "self", eps, func() ([]string, error) { return nil, errors.New("down") }, true) {
 		if x.proxy != "" || x.skip {
 			t.Errorf("%s: ProxyCommand or skipped with the relay list unknown", eps[i].DeviceID)
 		}
@@ -105,7 +112,7 @@ func TestSSHConfigRoutes(t *testing.T) {
 	if err := client.SaveUserConfig(home, cfg); err != nil {
 		t.Fatal(err)
 	}
-	for i, x := range sshConfigRoutes(home, "self", eps, ids) {
+	for i, x := range sshConfigRoutes(home, "self", eps, ids, true) {
 		if x.proxy != "" {
 			t.Errorf("%s: ProxyCommand with [ssh] relay = false", eps[i].DeviceID)
 		}

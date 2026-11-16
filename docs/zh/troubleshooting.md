@@ -59,7 +59,7 @@ library（skills、agents、配置）在服务器上明文保存。skill 里的�
 
 **`sshd is not running on that machine`（那台机器上 sshd 没有运行）。** daemon 已连上，但它转发的 sshd 没起来：在那台机器上看 `hearth ssh status`，`hearth ssh enable` 可以启动。
 
-**直接 `ssh <host>` 只有部分机器能用。** `~/.ssh/config` 里的 Hearth 块只会给「从本机连不通、但已连上中转」的机器写 `ProxyCommand`；既连不通也没连上中转的机器暂时不写，上线后自动加回。这个块每次同步都会重写。Linux 机器执行 `hearth ssh config` 后才有这个块。
+**直接 `ssh <host>` 只有部分机器能用。** `~/.ssh/config` 里的 Hearth 块只会给「从本机连不通、但已连上中转」的机器写 `ProxyCommand`；在 Mac 上，既连不通也没连上中转的机器暂时不写，上线后自动加回。这个块每次同步都会重写。Linux 机器执行 `hearth ssh config` 后才有这个块。
 
 ## 服务器
 

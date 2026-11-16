@@ -59,7 +59,7 @@ The library (skills, agents, settings) is stored in plaintext. Credential files 
 
 **`sshd is not running on that machine`.** The daemon is connected, but the sshd it serves is down: `hearth ssh status` on the machine; `hearth ssh enable` starts it.
 
-**Plain `ssh <host>` works for some machines only.** The Hearth block in `~/.ssh/config` gets a `ProxyCommand` line only for a machine that does not answer from this machine but is connected to the relay, and a machine that is neither reachable nor on the relay is left out until it is online again; the block is rewritten on every sync. On a Linux machine it exists after `hearth ssh config`.
+**Plain `ssh <host>` works for some machines only.** The Hearth block in `~/.ssh/config` gets a `ProxyCommand` line only for a machine that does not answer from this machine but is connected to the relay, and on a Mac a machine that is neither reachable nor on the relay is left out until it is online again; the block is rewritten on every sync. On a Linux machine it exists after `hearth ssh config`.
 
 ## Server
 

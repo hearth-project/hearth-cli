@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -361,9 +362,9 @@ func writeSSHConfig(e *client.Engine, create bool) (int, string, error) {
 
 // writeSSHConfigResult puts one Host entry per machine that can be reached
 // (not this one) into ~/.ssh/config, inside a managed block, with Hearth's
-// known_hosts so the host keys are checked. A machine neither its address
-// nor the relay reaches is left out, so ssh, Codex Desktop and VS Code do
-// not list hosts that cannot connect; the daemon rewrites the block on
+// known_hosts so the host keys are checked. On a Mac a machine neither its
+// address nor the relay reaches is left out, so ssh, Codex Desktop and VS
+// Code do not list hosts that cannot connect; the daemon rewrites the block on
 // every sync, so it comes back once it is online. create: write the block
 // even if there is none yet (hearth ssh config; on by default on a Mac,
 // [ssh] config); otherwise only an existing block is refreshed.
@@ -385,7 +386,7 @@ func writeSSHConfigResult(e *client.Engine, create bool) (sshConfigResult, error
 		return res, err
 	}
 	aliases := sshAliases(e, all)
-	routes := sshConfigRoutes(e.Home, e.Cfg.DeviceID, all, e.RelayDevices)
+	routes := sshConfigRoutes(e.Home, e.Cfg.DeviceID, all, e.RelayDevices, runtime.GOOS == "darwin")
 	var b strings.Builder
 	b.WriteString(sshBlockBegin + "\n")
 	n := 0
@@ -445,12 +446,13 @@ type sshHostRoute struct {
 // sshd answers from here gets its plain entry, as before the relay existed.
 // Only a machine that does not answer but holds a relay connection gets a
 // ProxyCommand (direct first, relay when the direct address still does not
-// answer), so existing connections and configuration stay as they are. A
-// machine that neither answers nor holds a relay connection is skipped
-// (but kept while the relay's list is unknown, so a server hiccup does not
-// empty the block). The block is rewritten on every sync, so the entry
+// answer), so existing connections and configuration stay as they are. On
+// a Mac (skipOffline) a machine that neither answers nor holds a relay
+// connection is skipped, so its apps list only hosts that connect (but
+// kept while the relay's list is unknown, so a server hiccup does not
+// empty the block); elsewhere every machine is written as before. The block is rewritten on every sync, so the entry
 // follows reachability.
-func sshConfigRoutes(home, self string, eps []client.SSHEndpoint, relayDevices func() ([]string, error)) []sshHostRoute {
+func sshConfigRoutes(home, self string, eps []client.SSHEndpoint, relayDevices func() ([]string, error), skipOffline bool) []sshHostRoute {
 	routes := make([]sshHostRoute, len(eps))
 	reachable := make([]bool, len(eps))
 	var wg sync.WaitGroup
@@ -479,7 +481,7 @@ func sshConfigRoutes(home, self string, eps []client.SSHEndpoint, relayDevices f
 			continue
 		}
 		if relayOff {
-			routes[k].skip = true
+			routes[k].skip = skipOffline
 			continue
 		}
 		if !asked {
@@ -492,7 +494,7 @@ func sshConfigRoutes(home, self string, eps []client.SSHEndpoint, relayDevices f
 		case slices.Contains(relayed, ep.DeviceID):
 			routes[k].proxy = relayProxyCommand(home, ep.DeviceID, false)
 		case known:
-			routes[k].skip = true
+			routes[k].skip = skipOffline
 		}
 	}
 	return routes
