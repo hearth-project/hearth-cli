@@ -82,14 +82,19 @@ func TestSSHConfigRoutes(t *testing.T) {
 	if !strings.Contains(r[1].proxy, "--device 'viaRelay'") {
 		t.Errorf("proxy = %q", r[1].proxy)
 	}
+	for i, want := range []bool{false, false, true, false, false} {
+		if r[i].skip != want {
+			t.Errorf("%s: skip = %v, want %v", eps[i].DeviceID, r[i].skip, want)
+		}
+	}
 	if r[4].host != "127.0.0.1" {
 		t.Errorf("host of a machine with several addresses = %q", r[4].host)
 	}
 
 	// The relay's list is unknown: nothing changes.
 	for i, x := range sshConfigRoutes(home, "self", eps, func() ([]string, error) { return nil, errors.New("down") }) {
-		if x.proxy != "" {
-			t.Errorf("%s: ProxyCommand with the relay list unknown", eps[i].DeviceID)
+		if x.proxy != "" || x.skip {
+			t.Errorf("%s: ProxyCommand or skipped with the relay list unknown", eps[i].DeviceID)
 		}
 	}
 
@@ -103,6 +108,10 @@ func TestSSHConfigRoutes(t *testing.T) {
 	for i, x := range sshConfigRoutes(home, "self", eps, ids) {
 		if x.proxy != "" {
 			t.Errorf("%s: ProxyCommand with [ssh] relay = false", eps[i].DeviceID)
+		}
+		// Without the relay only what answers directly is written.
+		if want := eps[i].DeviceID == "viaRelay" || eps[i].DeviceID == "nowhere"; x.skip != want {
+			t.Errorf("%s: skip = %v with [ssh] relay = false", eps[i].DeviceID, x.skip)
 		}
 	}
 }
