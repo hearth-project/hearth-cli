@@ -176,6 +176,38 @@ func TestTeamRepoSync(t *testing.T) {
 	if teamSum("kusheet") != kusheet || !strings.Contains(strings.Join(third.Notes, "\n"), "kusheet changed in both") {
 		t.Fatalf("kusheet replaced or not noted: %v", third.Notes)
 	}
+	// Excluded names are left alone both ways: a repository change to kudoc
+	// does not come in, the team's new skill is not proposed.
+	ex := good
+	ex.Exclude = []string{"kudoc", "../x"}
+	if _, err := alice.API.SetTeamRepo("infer", ex); StatusOf(err) != 400 {
+		t.Fatalf("bad excluded name: %v", err)
+	}
+	ex.Exclude = []string{"kudoc", "solo", "kudoc"}
+	bound, err := alice.API.SetTeamRepo("infer", ex)
+	if err != nil || strings.Join(bound.Exclude, ",") != "kudoc,solo" {
+		t.Fatalf("exclude %+v %v", bound, err)
+	}
+	write("skills/connectors/kudoc/SKILL.md", "---\nname: kudoc\ndescription: knowledge base\n---\nv3\n")
+	git(t, work, "commit", "-q", "-am", "v3")
+	git(t, work, "push", "-q", "origin", "master")
+	libWrite(t, alice, "skills/solo/SKILL.md", "---\nname: solo\ndescription: solo\n---\ns1\n")
+	if _, _, err := alice.Publish("infer", "skill", "solo", false); err != nil {
+		t.Fatal(err)
+	}
+	kudoc := teamSum("kudoc")
+	fourth, err := alice.SyncTeamRepo(bound, false)
+	if err != nil || len(fourth.Published) != 0 || teamSum("kudoc") != kudoc {
+		t.Fatalf("excluded kudoc came in: %+v %v", fourth, err)
+	}
+	for _, p := range fourth.Proposed {
+		if strings.Contains(p, "solo") {
+			t.Fatalf("excluded solo proposed: %v", fourth.Proposed)
+		}
+	}
+	if !strings.Contains(strings.Join(fourth.Notes, "\n"), "not synced (excluded): skill kudoc, skill solo") {
+		t.Fatalf("notes %v", fourth.Notes)
+	}
 	// Only the syncing device reports.
 	if err := bob.API.ReportTeamRepo("infer", jobs[0]); StatusOf(err) != 403 {
 		t.Fatalf("bob reported: %v", err)

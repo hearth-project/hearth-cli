@@ -2,14 +2,17 @@ package server
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/url"
 	"regexp"
+	"sort"
 	"strings"
 	"unicode"
 
 	"github.com/hearth-project/hearth-cli/internal/api"
+	"github.com/hearth-project/hearth-cli/internal/library"
 )
 
 // Team repositories: a team owner binds a git repository and picks one of
@@ -72,16 +75,17 @@ func (s *Server) teamOf(w http.ResponseWriter, r *http.Request, uid int64, min s
 
 func (s *Server) loadTeamRepo(teamID int64, team string) (api.TeamRepo, error) {
 	r := api.TeamRepo{Team: team}
-	var alias string
-	err := s.st.rdb.QueryRow(`SELECT r.url,r.ref,r.push,r.new_dir,r.commit_prefix,r.device_id,u.email,COALESCE(d.name,''),COALESCE(d.alias,''),r.requested_at,r.synced_at,r.status,r.detail,r.commit_id,r.review
+	var alias, exclude string
+	err := s.st.rdb.QueryRow(`SELECT r.url,r.ref,r.push,r.new_dir,r.commit_prefix,r.exclude_json,r.device_id,u.email,COALESCE(d.name,''),COALESCE(d.alias,''),r.requested_at,r.synced_at,r.status,r.detail,r.commit_id,r.review
 		FROM team_repos r JOIN users u ON u.id=r.user_id LEFT JOIN devices d ON d.id=r.device_id WHERE r.team_id=?`, teamID).
-		Scan(&r.URL, &r.Ref, &r.Push, &r.NewDir, &r.CommitPrefix, &r.Device, &r.Owner, &r.DeviceName, &alias, &r.Requested, &r.SyncedAt, &r.Status, &r.Detail, &r.Commit, &r.Review)
+		Scan(&r.URL, &r.Ref, &r.Push, &r.NewDir, &r.CommitPrefix, &exclude, &r.Device, &r.Owner, &r.DeviceName, &alias, &r.Requested, &r.SyncedAt, &r.Status, &r.Detail, &r.Commit, &r.Review)
 	if errors.Is(err, sql.ErrNoRows) {
 		return r, errNotFound
 	}
 	if alias != "" {
 		r.DeviceName = alias
 	}
+	_ = json.Unmarshal([]byte(exclude), &r.Exclude)
 	return r, err
 }
 
@@ -134,6 +138,28 @@ func (s *Server) handlePutTeamRepo(w http.ResponseWriter, r *http.Request, uid i
 	case len(req.CommitPrefix) > 100 || strings.ContainsFunc(req.CommitPrefix, unicode.IsControl):
 		writeErr(w, http.StatusBadRequest, "commit_prefix must be one line of at most 100 bytes")
 		return
+	case len(req.Exclude) > 200:
+		writeErr(w, http.StatusBadRequest, "at most 200 excluded names")
+		return
+	}
+	seen := map[string]bool{}
+	var exclude []string
+	for _, n := range req.Exclude {
+		n = strings.TrimSpace(n)
+		if n == "" || seen[n] {
+			continue
+		}
+		if !library.ValidName(n) {
+			writeErr(w, http.StatusBadRequest, "invalid name to exclude: "+n)
+			return
+		}
+		seen[n] = true
+		exclude = append(exclude, n)
+	}
+	sort.Strings(exclude)
+	excludeJSON, _ := json.Marshal(exclude)
+	if exclude == nil {
+		excludeJSON = []byte("[]")
 	}
 	var n int
 	if err := s.st.rdb.QueryRow(`SELECT COUNT(*) FROM devices WHERE id=? AND user_id=? AND status='active'`, req.Device, uid).Scan(&n); err != nil {
@@ -145,10 +171,10 @@ func (s *Server) handlePutTeamRepo(w http.ResponseWriter, r *http.Request, uid i
 		return
 	}
 	now := s.now()
-	if _, err := s.st.db.Exec(`INSERT INTO team_repos(team_id,user_id,device_id,url,ref,push,new_dir,commit_prefix,created_at,requested_at) VALUES(?,?,?,?,?,?,?,?,?,?)
+	if _, err := s.st.db.Exec(`INSERT INTO team_repos(team_id,user_id,device_id,url,ref,push,new_dir,commit_prefix,exclude_json,created_at,requested_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)
 		ON CONFLICT(team_id) DO UPDATE SET user_id=excluded.user_id, device_id=excluded.device_id, url=excluded.url, ref=excluded.ref,
-		push=excluded.push, new_dir=excluded.new_dir, commit_prefix=excluded.commit_prefix, requested_at=excluded.requested_at`,
-		o.ID, uid, req.Device, req.URL, req.Ref, req.Push, req.NewDir, req.CommitPrefix, now, now); err != nil {
+		push=excluded.push, new_dir=excluded.new_dir, commit_prefix=excluded.commit_prefix, exclude_json=excluded.exclude_json, requested_at=excluded.requested_at`,
+		o.ID, uid, req.Device, req.URL, req.Ref, req.Push, req.NewDir, req.CommitPrefix, string(excludeJSON), now, now); err != nil {
 		s.writeStoreErr(w, err)
 		return
 	}

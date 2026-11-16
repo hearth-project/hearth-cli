@@ -30,7 +30,8 @@ import (
 // synced, as on the first sync) keeps the team's version, which is proposed
 // to the repository; the repository's copy never replaces it.
 //
-// Only skills/ and agents/ are read or written. An item removed from the
+// Only skills/ and agents/ are read or written; names in the binding's
+// exclude list are left alone on both sides. An item removed from the
 // repository stays in the team (the sync says so). State in
 // <home>/team-repos/<team>/state.json remembers what each side had at the
 // last sync, which tells a change on one side from a change on the other.
@@ -237,9 +238,18 @@ func (e *Engine) SyncTeamRepo(rep api.TeamRepo, dryRun bool) (TeamRepoResult, er
 	// team wins).
 	inRepo := map[string]repoItem{}
 	var propose []string // keys whose team copy goes to the repository
+	excluded := map[string]bool{}
+	for _, n := range rep.Exclude {
+		excluded[n] = true
+	}
+	var skippedNames []string
 	for _, it := range items {
 		k := it.key()
 		inRepo[k] = it
+		if excluded[it.Name] {
+			skippedNames = append(skippedNames, it.Type+" "+it.Name)
+			continue // neither way
+		}
 		if it.err != nil {
 			res.Notes = append(res.Notes, fmt.Sprintf("%s %s not published: %s", it.Type, it.Name, firstLine(it.err.Error())))
 			continue
@@ -279,6 +289,10 @@ func (e *Engine) SyncTeamRepo(rep api.TeamRepo, dryRun bool) (TeamRepoResult, er
 		if _, ok := inRepo[k]; ok {
 			continue
 		}
+		if excluded[t.Name] {
+			skippedNames = append(skippedNames, t.Type+" "+t.Name)
+			continue
+		}
 		if st.Repo[k] != "" {
 			// It was in the repository and was removed there.
 			if t.SHA256 == st.Team[k] {
@@ -289,6 +303,10 @@ func (e *Engine) SyncTeamRepo(rep api.TeamRepo, dryRun bool) (TeamRepoResult, er
 		propose = append(propose, k) // new in the team
 	}
 	sort.Strings(propose)
+	if len(skippedNames) > 0 {
+		sort.Strings(skippedNames)
+		res.Notes = append(res.Notes, "not synced (excluded): "+strings.Join(skippedNames, ", "))
+	}
 
 	// 2. Team → repository, as one review.
 	want := map[string]string{}

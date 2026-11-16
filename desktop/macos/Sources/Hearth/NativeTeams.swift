@@ -260,6 +260,7 @@ struct RepoSheet: View {
     @State private var device = ""
     @State private var push = "cr"
     @State private var commitPrefix = ""
+    @State private var exclude = ""
     @State private var saving = false
 
     private var machines: [Device] { portal.devices.filter { ($0.status ?? "active") == "active" } }
@@ -280,6 +281,7 @@ struct RepoSheet: View {
                     Text("不回推").tag("off")
                 }
                 TextField("提交前缀", text: $commitPrefix, prompt: Text("可选，如 iCafe 卡片号 proj-123（仓库要求时填）"))
+                TextField("不同步", text: $exclude, prompt: Text("可选，skill / agent 名字，逗号分隔：两边都不动"))
             }
             Text("同步机器用它自己的 git 凭证 clone 和提交，服务器不保存任何凭证。选一台常在线、能访问这个仓库的机器。")
                 .font(.system(size: 11)).foregroundStyle(.secondary)
@@ -291,7 +293,8 @@ struct RepoSheet: View {
                     Task {
                         let ok = await portal.call("PUT", "/v1/me/teams/\(adminPath(team.name))/repo",
                                                    ["url": url, "ref": ref, "device": device, "push": push,
-                                                    "new_dir": team.repo?.new_dir ?? "skills", "commit_prefix": commitPrefix],
+                                                    "new_dir": team.repo?.new_dir ?? "skills", "commit_prefix": commitPrefix,
+                                                    "exclude": exclude.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }],
                                                    done: "已绑定，\(team.name) 会在几分钟内第一次同步") != nil
                         saving = false
                         if ok { close() }
@@ -308,6 +311,7 @@ struct RepoSheet: View {
             ref = team.repo?.ref ?? ""
             push = team.repo?.push ?? "cr"
             commitPrefix = team.repo?.commit_prefix ?? ""
+            exclude = (team.repo?.exclude ?? []).joined(separator: ", ")
             device = team.repo?.device ?? (machines.first { $0.online ?? false }?.id ?? machines.first?.id ?? "")
         }
     }
