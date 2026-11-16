@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -202,19 +203,26 @@ func sshCmd() *cobra.Command {
 			if _, err := e.PublishDeviceKey(); err != nil {
 				return err
 			}
-			n, path, err := writeSSHConfig(e, true)
+			r, err := writeSSHConfigResult(e, true)
 			if err != nil {
 				return err
 			}
-			if n == 0 {
-				fmt.Println("no other machine accepts SSH yet")
+			if len(r.Written) == 0 {
+				if len(r.Skipped) > 0 {
+					fmt.Printf("no other machine can be reached now (%d offline); the daemon adds them once they are online\n", len(r.Skipped))
+				} else {
+					fmt.Println("no other machine accepts SSH yet")
+				}
 				return nil
 			}
-			fmt.Printf("%d machine(s) in %s (kept up to date by the daemon):\n", n, path)
-			eps, _ := e.SSHEndpoints()
-			for i, a := range sshAliases(e, eps) {
-				if eps[i].DeviceID != e.Cfg.DeviceID {
-					fmt.Printf("  %-40s %s\n", a, eps[i].Name)
+			fmt.Printf("%d machine(s) in %s (kept up to date by the daemon):\n", len(r.Written), r.Path)
+			for _, m := range r.Written {
+				fmt.Printf("  %-40s %s\n", m[0], m[1])
+			}
+			if len(r.Skipped) > 0 {
+				fmt.Printf("left out, nothing reaches them now (added back once they are online): %d\n", len(r.Skipped))
+				for _, m := range r.Skipped {
+					fmt.Printf("  %-40s %s\n", m[0], m[1])
 				}
 			}
 			fmt.Println("connect: ssh <host>; in Codex Desktop add them once under Connections > SSH (VS Code / Cursor: Remote-SSH lists them)")
@@ -340,29 +348,45 @@ func findSSHTarget(e *client.Engine, eps []client.SSHEndpoint, ref string) (clie
 	return e.FindSSHEndpoint(ref)
 }
 
-// writeSSHConfig puts one Host entry per machine (not this one) into
-// ~/.ssh/config, inside a managed block, with Hearth's known_hosts so the
-// host keys are checked. create: write the block even if there is none
-// yet (hearth ssh config; on by default on a Mac, [ssh] config); otherwise
-// only an existing block is refreshed.
+// sshConfigResult is what writeSSHConfigResult wrote: the machines in the
+// block (alias, name) and the ones left out because nothing reaches them.
+type sshConfigResult struct {
+	Path             string
+	Written, Skipped [][2]string
+}
+
 func writeSSHConfig(e *client.Engine, create bool) (int, string, error) {
+	r, err := writeSSHConfigResult(e, create)
+	return len(r.Written), r.Path, err
+}
+
+// writeSSHConfigResult puts one Host entry per machine that can be reached
+// (not this one) into ~/.ssh/config, inside a managed block, with Hearth's
+// known_hosts so the host keys are checked. On a Mac a machine neither its
+// address nor the relay reaches is left out, so ssh, Codex Desktop and VS
+// Code do not list hosts that cannot connect; the daemon rewrites the block on
+// every sync, so it comes back once it is online. create: write the block
+// even if there is none yet (hearth ssh config; on by default on a Mac,
+// [ssh] config); otherwise only an existing block is refreshed.
+func writeSSHConfigResult(e *client.Engine, create bool) (sshConfigResult, error) {
 	h, _ := os.UserHomeDir()
 	path := filepath.Join(h, ".ssh", "config")
+	res := sshConfigResult{Path: path}
 	cur, _ := os.ReadFile(path)
 	text := string(cur)
 	i, j := strings.Index(text, sshBlockBegin), strings.Index(text, sshBlockEnd)
 	if !create && (i < 0 || j < i) && !client.SSHClientConfigOn(e.Home) {
-		return 0, path, nil
+		return res, nil
 	}
 	all, err := e.SSHEndpoints()
 	if err != nil {
-		return 0, path, err
+		return res, err
 	}
 	if err := e.WriteKnownHosts(all); err != nil {
-		return 0, path, err
+		return res, err
 	}
 	aliases := sshAliases(e, all)
-	routes := sshConfigRoutes(e.Home, e.Cfg.DeviceID, all, e.RelayDevices)
+	routes := sshConfigRoutes(e.Home, e.Cfg.DeviceID, all, e.RelayDevices, runtime.GOOS == "darwin")
 	var b strings.Builder
 	b.WriteString(sshBlockBegin + "\n")
 	n := 0
@@ -370,7 +394,12 @@ func writeSSHConfig(e *client.Engine, create bool) (int, string, error) {
 		if ep.DeviceID == e.Cfg.DeviceID {
 			continue // this machine
 		}
+		if routes[k].skip {
+			res.Skipped = append(res.Skipped, [2]string{aliases[k], ep.Name})
+			continue
+		}
 		n++
+		res.Written = append(res.Written, [2]string{aliases[k], ep.Name})
 		host := routes[k].host
 		fmt.Fprintf(&b, "Host %s\n  HostName %s\n  Port %d\n  User %s\n  IdentityFile %s\n  IdentitiesOnly yes\n  UserKnownHostsFile %s\n  StrictHostKeyChecking yes\n",
 			aliases[k], host, ep.Port, ep.User, client.SSHKeyPath(e.Home), client.SSHKnownHosts(e.Home))
@@ -382,7 +411,7 @@ func writeSSHConfig(e *client.Engine, create bool) (int, string, error) {
 		}
 	}
 	if n == 0 && (i < 0 || j < i) {
-		return 0, path, nil // nothing to add, no block to refresh
+		return res, nil // nothing to add, no block to refresh
 	}
 	b.WriteString(sshBlockEnd + "\n")
 	if i >= 0 && j > i {
@@ -394,12 +423,15 @@ func writeSSHConfig(e *client.Engine, create bool) (int, string, error) {
 		text += b.String()
 	}
 	if text == string(cur) {
-		return n, path, nil
+		return res, nil
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return 0, path, err
+		return sshConfigResult{Path: path}, err
 	}
-	return n, path, os.WriteFile(path, []byte(text), 0o600)
+	if err := os.WriteFile(path, []byte(text), 0o600); err != nil {
+		return sshConfigResult{Path: path}, err
+	}
+	return res, nil
 }
 
 // sshHostRoute is what a machine's Host entry gets: the address, and a
@@ -407,15 +439,20 @@ func writeSSHConfig(e *client.Engine, create bool) (int, string, error) {
 type sshHostRoute struct {
 	host  string
 	proxy string
+	skip  bool // nothing reaches it: not written
 }
 
 // sshConfigRoutes decides the entries of the managed block. A machine whose
 // sshd answers from here gets its plain entry, as before the relay existed.
 // Only a machine that does not answer but holds a relay connection gets a
 // ProxyCommand (direct first, relay when the direct address still does not
-// answer), so existing connections and configuration stay as they are. The
-// block is rewritten on every sync, so the entry follows reachability.
-func sshConfigRoutes(home, self string, eps []client.SSHEndpoint, relayDevices func() ([]string, error)) []sshHostRoute {
+// answer), so existing connections and configuration stay as they are. On
+// a Mac (skipOffline) a machine that neither answers nor holds a relay
+// connection is skipped, so its apps list only hosts that connect (but
+// kept while the relay's list is unknown, so a server hiccup does not
+// empty the block); elsewhere every machine is written as before. The block is rewritten on every sync, so the entry
+// follows reachability.
+func sshConfigRoutes(home, self string, eps []client.SSHEndpoint, relayDevices func() ([]string, error), skipOffline bool) []sshHostRoute {
 	routes := make([]sshHostRoute, len(eps))
 	reachable := make([]bool, len(eps))
 	var wg sync.WaitGroup
@@ -436,21 +473,28 @@ func sshConfigRoutes(home, self string, eps []client.SSHEndpoint, relayDevices f
 		}()
 	}
 	wg.Wait()
-	if client.RelayDisabled(home) {
-		return routes
-	}
+	relayOff := client.RelayDisabled(home)
 	var relayed []string
-	var asked bool
+	var asked, known bool
 	for k, ep := range eps {
 		if reachable[k] {
 			continue
 		}
+		if relayOff {
+			routes[k].skip = skipOffline
+			continue
+		}
 		if !asked {
 			asked = true
-			relayed, _ = relayDevices() // unknown: no machine is changed
+			var err error
+			relayed, err = relayDevices()
+			known = err == nil // unknown: no machine is changed
 		}
-		if slices.Contains(relayed, ep.DeviceID) {
+		switch {
+		case slices.Contains(relayed, ep.DeviceID):
 			routes[k].proxy = relayProxyCommand(home, ep.DeviceID, false)
+		case known:
+			routes[k].skip = skipOffline
 		}
 	}
 	return routes
