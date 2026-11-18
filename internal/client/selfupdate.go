@@ -46,7 +46,7 @@ type UpdateOptions struct {
 	Current string
 }
 
-// releaseRE: the versions the release scripts stamp (0.1.1, 0.1.1-20261107.2022).
+// releaseRE: the versions the release scripts stamp (0.1.2, 0.1.2-20261118.1200).
 var releaseRE = regexp.MustCompile(`^v?(\d+)\.(\d+)\.(\d+)(?:-(\d{8})\.(\d{4}))?$`)
 
 func releaseParts(v string) ([]int, bool) {
