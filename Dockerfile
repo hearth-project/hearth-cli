@@ -6,7 +6,7 @@ WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-ARG VERSION=0.1.1-dev
+ARG VERSION=0.1.2-dev
 ARG TARGETOS
 ARG TARGETARCH
 # The server binary plus client builds for every platform /install.sh serves.
