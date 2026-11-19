@@ -72,6 +72,7 @@ func (s *Server) portalRoutes(m *http.ServeMux) {
 	u("POST /v1/me/intents", s.apiAddIntent)
 	u("GET /v1/me/library/{type}/{name}", s.apiMyItem)
 	u("GET /v1/me/teams/{team}/packages/{type}/{name}", s.apiTeamItem)
+	u("GET /v1/me/teams/{team}/packages/{type}/{name}/usage", s.apiTeamPackageUsage)
 	u("GET /v1/me/settings", s.apiMySettings)
 	u("GET /v1/me/intents", s.apiMyIntents)
 	u("DELETE /v1/me/intents/{id}", s.apiCancelIntent)
@@ -439,6 +440,56 @@ type teamPkg struct {
 	packageRow
 	Uses  int64 `json:"uses"`
 	Users int64 `json:"users"`
+}
+
+type teamMemberUsage struct {
+	Email string `json:"email"`
+	Count int64  `json:"count"`
+}
+
+// apiTeamPackageUsage returns the last 30 days of calls for one shared
+// package, grouped by team member and sorted from most to least used.
+func (s *Server) apiTeamPackageUsage(w http.ResponseWriter, r *http.Request, c userCtx) {
+	o, err := s.st.membership(c.uid, r.PathValue("team"), "member")
+	if err != nil {
+		s.writeStoreErr(w, err)
+		return
+	}
+	typ, name := r.PathValue("type"), r.PathValue("name")
+	if (typ != "skill" && typ != "agent") || !validPkgName(name) {
+		writeErr(w, http.StatusBadRequest, "invalid package type or name")
+		return
+	}
+	if _, err := s.st.getPackage(o.ID, typ, name, 0); err != nil {
+		s.writeStoreErr(w, err)
+		return
+	}
+	since := s.cfg.Now().UTC().AddDate(0, 0, -29).Format(time.DateOnly)
+	rows, err := s.st.rdb.Query(`SELECT u.email, CAST(SUM(k.count) AS BIGINT)
+		FROM user_usage_daily k
+		JOIN team_members m ON m.team_id=? AND m.user_id=k.user_id
+		JOIN users u ON u.id=k.user_id
+		WHERE k.type=? AND k.name=? AND k.day>=?
+		GROUP BY u.id, u.email ORDER BY SUM(k.count) DESC, u.email`, o.ID, typ, name, since)
+	if err != nil {
+		s.writeStoreErr(w, err)
+		return
+	}
+	defer rows.Close()
+	out := []teamMemberUsage{}
+	for rows.Next() {
+		var u teamMemberUsage
+		if err := rows.Scan(&u.Email, &u.Count); err != nil {
+			s.writeStoreErr(w, err)
+			return
+		}
+		out = append(out, u)
+	}
+	if err := rows.Err(); err != nil {
+		s.writeStoreErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 // teamHeat ranks a team's packages by how much its members use them.

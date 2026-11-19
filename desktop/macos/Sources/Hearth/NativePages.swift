@@ -100,6 +100,8 @@ struct LibraryPage: View {
     @State private var kind = "skill"
     @State private var query = ""
     @State private var open: LibraryItem?
+    @State private var selectedIDs: Set<String> = []
+    @State private var sharing = false
 
     var body: some View {
         PageScroll(title: "技能与 Agent", trailing: portal.library.map { "资源库 v\($0.version)" }) {
@@ -113,6 +115,17 @@ struct LibraryPage: View {
                     }
                     .pickerStyle(.segmented).labelsHidden().frame(width: 220)
                     TextField("搜索", text: $query).textFieldStyle(.roundedBorder).frame(maxWidth: 260)
+                    if !selectedIDs.isEmpty {
+                        Text("已选 \(selectedIDs.count) 项").font(.system(size: 11)).foregroundStyle(.secondary)
+                        if portal.teams.contains(where: \.canPublish) {
+                            Button("共享到团队…") {
+                                sharing = true
+                            }
+                            .buttonStyle(.borderedProminent)
+                        }
+                        Button("清除") { selectedIDs.removeAll() }
+                            .buttonStyle(.borderless)
+                    }
                     Spacer()
                 }
                 let q = query.lowercased()
@@ -124,20 +137,37 @@ struct LibraryPage: View {
                         VStack(spacing: 0) {
                             ForEach(Array(items.enumerated()), id: \.element.id) { i, x in
                                 if i > 0 { Divider().opacity(0.5) }
-                                Button { open = x } label: { itemRow(x) }
-                                    .buttonStyle(ListRowStyle())
-                                    .help("查看 \(x.name)")
+                                HStack(spacing: 8) {
+                                    Toggle("", isOn: Binding(
+                                        get: { selectedIDs.contains(x.id) },
+                                        set: { on in
+                                            if on { selectedIDs.insert(x.id) } else { selectedIDs.remove(x.id) }
+                                        }))
+                                    .labelsHidden()
+                                    .toggleStyle(.checkbox)
+                                    Button { open = x } label: { itemRow(x) }
+                                        .buttonStyle(ListRowStyle())
+                                        .help("查看 \(x.name)")
+                                }
                             }
                         }
                     }
                 }
-                Text("按最近 30 天的使用次数排序（所有机器）。点一项查看内容、设为常驻或共享到团队。常驻的 skill 会加载进每个 agent，其余的在需要时由 skill 搜索找到。")
+                Text("按最近 30 天的使用次数排序（所有机器）。可勾选多个 skill 或 agent 一次共享到团队，点一项查看内容、设为常驻或查看团队调用统计。常驻的 skill 会加载进每个 agent，其余的在需要时由 skill 搜索找到。")
                     .font(.system(size: 11)).foregroundStyle(.tertiary)
             } else if portal.error == nil {
                 HStack { Spacer(); ProgressView(); Spacer() }.padding(.top, 60)
             }
         }
         .sheet(item: $open) { x in LibraryDetailSheet(portal: portal, item: x) { open = nil }.toastHost() }
+        .sheet(isPresented: $sharing) {
+            let selected = portal.library?.items.filter { selectedIDs.contains($0.id) } ?? []
+            ShareSheet(portal: portal, items: selected) {
+                sharing = false
+                selectedIDs.removeAll()
+            }
+            .toastHost()
+        }
     }
 
     private func itemRow(_ x: LibraryItem) -> some View {

@@ -92,7 +92,7 @@ struct LibraryDetailSheet: View {
         .padding(18)
         .frame(width: 620, height: 560)
         .task { await load() }
-        .sheet(isPresented: $sharing) { ShareSheet(portal: portal, item: item) { sharing = false }.toastHost() }
+        .sheet(isPresented: $sharing) { ShareSheet(portal: portal, items: [item]) { sharing = false }.toastHost() }
     }
 
     private func load() async {
@@ -102,31 +102,47 @@ struct LibraryDetailSheet: View {
     }
 }
 
-struct ShareResult: Decodable { var team: String; var version: Int?; var created: Bool?; var error: String? }
+struct ShareResult: Decodable {
+    var team: String
+    var version: Int?
+    var created: Bool?
+    var error: String?
+    var item: String?
+    var id: String { (item ?? "") + "/" + team }
+}
 
 /// Publish a skill or agent to teams where the user can publish.
 struct ShareSheet: View {
     @ObservedObject var portal: PortalStore
-    var item: LibraryItem
+    var items: [LibraryItem]
     var close: () -> Void
     @State private var picked: Set<String> = []
     @State private var busy = false
     @State private var results: [ShareResult] = []
 
     private var teams: [Team] { portal.teams.filter(\.canPublish) }
+    private var title: String {
+        items.count == 1 ? "共享 \(items[0].name)" : "共享 \(items.count) 个项目"
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            SheetHeader(icon: "square.and.arrow.up", title: "共享 \(item.name)", subtitle: "选择要发布到的团队，成员的机器会收到这个版本。", close: close)
+            SheetHeader(icon: "square.and.arrow.up", title: title, subtitle: "选择要发布到的团队，成员的机器会收到这些版本。", close: close)
             VStack(alignment: .leading, spacing: 6) {
                 ForEach(teams) { t in
-                    let shared = t.packages.contains { $0.type == item.type && $0.name == item.name }
+                    let shared = items.filter { item in
+                        t.packages.contains { $0.type == item.type && $0.name == item.name }
+                    }.count
                     Toggle(isOn: Binding(get: { picked.contains(t.name) }, set: { on in
                         if on { picked.insert(t.name) } else { picked.remove(t.name) }
                     })) {
                         HStack(spacing: 6) {
                             Text(t.name).font(.system(size: 13))
-                            if shared { Badge(text: "已共享", color: Theme.blue) }
+                            if shared == items.count {
+                                Badge(text: "已共享", color: Theme.blue)
+                            } else if shared > 0 {
+                                Badge(text: "已共享 \(shared)/\(items.count)", color: Theme.blue)
+                            }
                         }
                     }
                     .toggleStyle(.checkbox)
@@ -134,9 +150,10 @@ struct ShareSheet: View {
             }
             .padding(10).frame(maxWidth: .infinity, alignment: .leading)
             .background(Theme.card, in: RoundedRectangle(cornerRadius: 10))
-            ForEach(results, id: \.team) { r in
-                Text(r.error.map { "\(r.team)：失败，\($0)" }
-                     ?? "\(r.team)：" + ((r.created ?? false) ? "已发布为 v\(r.version ?? 0)" : "内容没有变化（v\(r.version ?? 0)）"))
+            ForEach(results, id: \.id) { r in
+                let item = r.item.map { "\($0)：" } ?? ""
+                Text(item + (r.error.map { "\(r.team)：失败，\($0)" }
+                     ?? "\(r.team)：" + ((r.created ?? false) ? "已发布为 v\(r.version ?? 0)" : "内容没有变化（v\(r.version ?? 0)）")))
                     .font(.system(size: 12)).foregroundStyle(r.error == nil ? Theme.ok : Theme.bad)
             }
             HStack {
@@ -148,15 +165,35 @@ struct ShareSheet: View {
         }
         .padding(18).frame(width: 420)
         .onAppear {
-            picked = Set(teams.filter { t in !t.packages.contains { $0.type == item.type && $0.name == item.name } }.map(\.name))
+            picked = Set(teams.filter { t in
+                items.contains { item in !t.packages.contains { $0.type == item.type && $0.name == item.name } }
+            }.map(\.name))
         }
     }
 
     private func share() async {
         busy = true; defer { busy = false }
-        let body: [String: Any] = ["type": item.type, "name": item.name, "teams": Array(picked).sorted()]
-        guard let d = await portal.call("POST", "/v1/me/share", body, reload: true) else { return }
-        results = (try? JSONDecoder().decode([ShareResult].self, from: d)) ?? []
+        var all: [ShareResult] = []
+        for item in items {
+            let itemLabel = "\(item.type)/\(item.name)"
+            let body: [String: Any] = ["type": item.type, "name": item.name, "teams": Array(picked).sorted()]
+            guard let d = await portal.call("POST", "/v1/me/share", body, reload: false) else {
+                let error = portal.notice ?? "共享失败"
+                all.append(contentsOf: picked.sorted().map {
+                    ShareResult(team: $0, version: nil, created: false, error: error, item: itemLabel)
+                })
+                portal.notice = nil
+                continue
+            }
+            let one = (try? JSONDecoder().decode([ShareResult].self, from: d)) ?? []
+            all.append(contentsOf: one.map { r in
+                var result = r
+                result.item = itemLabel
+                return result
+            })
+        }
+        results = all
+        await portal.refresh()
         if results.isEmpty { close() }
     }
 }

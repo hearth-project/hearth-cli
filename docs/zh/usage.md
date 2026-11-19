@@ -219,6 +219,8 @@ hearth lib find <关键词>; hearth lib link <skill>
 
 macOS 菜单栏 App 的团队页面里点“邀请成员”可以输入邮箱前缀查找已注册的 Hearth 用户。选中后会直接加入团队，不需要对方确认；搜索不到时说明账号还没有注册，请先提醒对方注册，再使用邀请码流程。
 
+资源库页面支持同时勾选多个个人 skill 和 agent，一次选择目标团队共享。团队页面会按最近 30 天的调用次数给共享内容排序并显示调用总数，点开某个 skill 或 agent 可以查看每位成员的调用次数排名。
+
 library 在服务器上明文保存（仅本人可见，团队共享的内容团队成员和被授权的团队可见），因此不能包含凭证。setup 时如果你还没有团队，会问一次邀请码或新团队名，回车跳过。默认会把你自己 library 里使用最多的 5 个 skills 和 5 个 agents（所有机器、最近 30 天）共享给你能发布的团队（maintainer / owner），内容变了自动发新版本；会先做凭证扫描，命中的不共享。`config.toml` 里 `[teams] share_top = 0` 关闭，`share_exclude` 排除个别。agent 用量来自按类型启动子 agent 的记录（Codex `spawn_agent`、Claude Code `Task`），内置角色（explorer、worker 等）不计。
 
 团队共享的内容怎么被调用：每个团队里成员用得最多的 20 个 skills 和 20 个 agents 会自动链接到你每台机器的所有 agent 目录，和自己的 skill / agent 一样出现在 agent 的列表里、被自动调用（`[teams] use_top`，`use_exclude` 排除；在小程序里或用 `hearth lib unlink` 取消某个后不会再自动加回）。同名时你自己的版本优先。其余团队 skill 通过 `hearth mcp` 的 `search_skills` / `list_skills` 检索、`get_skill` 按需下载，用到的次数也计入团队排行，用得多了就会进入常驻。

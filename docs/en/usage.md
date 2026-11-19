@@ -219,6 +219,8 @@ hearth lib find <words>; hearth lib link <skill>
 
 In the macOS menu bar app, choose **Invite members** on a team and enter an email prefix to find registered Hearth users. Selecting one adds the account immediately without a confirmation step. If no account is found, ask the person to register Hearth first and use the invite-code flow afterwards.
 
+The library page supports selecting multiple personal skills and agents and sharing them to one or more teams in one action. Team packages show total calls and the number of members who used them, ranked by the last 30 days; open a skill or agent to see each member's call count.
+
 The library is stored in plaintext on the server (visible to you only; team publications to the team), so it must not contain credentials.
 
 How team items get invoked: each team's 20 most used skills and 20 most used agents (by its members, last 30 days) are linked into every agent on all your machines, so the agents list and invoke them like your own (`[teams] use_top`, `use_exclude`; unlinking one keeps it out). Your own item of the same name wins. The other team skills are found through `hearth mcp` (`search_skills`, `list_skills`) and loaded by `get_skill`; that use counts toward the team ranking, so a skill that gets used becomes resident.
