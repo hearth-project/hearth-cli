@@ -16,6 +16,7 @@ struct TeamsPage: View {
     @State private var open: OpenPackage?
     @State private var leaving: Team?
     @State private var invite: (team: String, code: String)?
+    @State private var memberInvite: Team?
     @State private var binding: Team?
 
     var body: some View {
@@ -28,6 +29,12 @@ struct TeamsPage: View {
             ForEach(portal.teams) { t in teamCard(t) }
         }
         .sheet(item: $open) { o in PackageSheet(portal: portal, team: o.team, pkg: o.pkg) { open = nil }.toastHost() }
+        .sheet(item: $memberInvite) { t in
+            MemberInviteSheet(portal: portal, team: t, close: { memberInvite = nil }, showInviteCode: {
+                memberInvite = nil
+                Task { await makeInvite(t.name) }
+            }).toastHost()
+        }
         .sheet(item: $binding) { t in RepoSheet(portal: portal, team: t) { binding = nil }.toastHost() }
         .confirmationDialog(leaving.map { "退出团队 \($0.name)？" } ?? "", isPresented: Binding(get: { leaving != nil }, set: { if !$0 { leaving = nil } })) {
             Button("退出团队", role: .destructive) {
@@ -52,7 +59,7 @@ struct TeamsPage: View {
                 }
                 Spacer()
                 if t.canPublish {
-                    Button { Task { await makeInvite(t.name) } } label: { Label("邀请成员", systemImage: "person.badge.plus") }
+                    Button { memberInvite = t } label: { Label("邀请成员", systemImage: "person.badge.plus") }
                 }
                 if t.role != "reader" && t.via == nil {
                     Menu {
@@ -166,6 +173,143 @@ struct TeamsPage: View {
         case "member": return "成员"
         default: return r
         }
+    }
+}
+
+/// Search active Hearth accounts by email prefix and add one directly to a
+/// team. The invite-code flow remains available as a fallback for accounts
+/// that have not registered yet.
+struct MemberInviteSheet: View {
+    @ObservedObject var portal: PortalStore
+    var team: Team
+    var close: () -> Void
+    var showInviteCode: () -> Void
+    @State private var query = ""
+    @State private var users: [TeamMemberSearchResult] = []
+    @State private var selected: TeamMemberSearchResult?
+    @State private var role = "member"
+    @State private var searching = false
+    @State private var hasSearched = false
+    @State private var adding = false
+
+    private var roles: [String] {
+        team.role == "owner" ? ["member", "maintainer", "owner"] : ["member", "maintainer"]
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            SheetHeader(icon: "person.badge.plus", title: "邀请成员",
+                        subtitle: "\(team.name) 的已注册 Hearth 用户可以直接加入团队。", close: close)
+            TextField("搜索邮箱或邮箱前缀", text: $query, prompt: Text("例如 zhengshifeng 或 zhengshifeng@baidu.com"))
+                .textFieldStyle(.roundedBorder)
+            if query.trimmingCharacters(in: .whitespacesAndNewlines).count < 2 {
+                Text("输入至少 2 个字符开始搜索。未注册用户无法直接加入，请先提醒对方注册 Hearth。")
+                    .font(.system(size: 11)).foregroundStyle(.secondary)
+            } else if searching {
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text("查找已注册用户…").font(.system(size: 11)).foregroundStyle(.secondary)
+                }
+            } else if !hasSearched {
+                Text("正在准备搜索…").font(.system(size: 11)).foregroundStyle(.secondary)
+            } else if users.isEmpty && hasSearched {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("未找到已注册的 Hearth 用户").font(.system(size: 12, weight: .medium))
+                    Text("请提醒对方先注册 Hearth，注册完成后再邀请。")
+                        .font(.system(size: 11)).foregroundStyle(.secondary)
+                }
+                .padding(10).frame(maxWidth: .infinity, alignment: .leading)
+                .background(Theme.card, in: RoundedRectangle(cornerRadius: 8))
+            } else {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(users) { user in
+                        Button {
+                            selected = user
+                            if let r = user.role, roles.contains(r) {
+                                role = r
+                            } else {
+                                role = "member"
+                            }
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: user.in_team ? "checkmark.circle.fill" : "person.circle")
+                                    .foregroundStyle(user.in_team ? Theme.ok : Theme.accent)
+                                Text(user.email).font(.system(size: 12))
+                                Spacer()
+                                if user.in_team {
+                                    Badge(text: "已在团队", color: Theme.ok)
+                                }
+                            }
+                            .padding(.horizontal, 8).padding(.vertical, 6)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(user.in_team)
+                    }
+                }
+                .padding(6).frame(maxWidth: .infinity, alignment: .leading)
+                .background(Theme.card, in: RoundedRectangle(cornerRadius: 8))
+            }
+            if selected != nil {
+                Picker("加入后角色", selection: $role) {
+                    ForEach(roles, id: \.self) { Text(TeamsPage.role($0)).tag($0) }
+                }
+                .pickerStyle(.menu)
+            }
+            HStack {
+                Button("生成邀请码…", action: showInviteCode)
+                    .buttonStyle(.link)
+                Spacer()
+                Button("取消", action: close)
+                Button(adding ? "加入中…" : "直接加入") {
+                    Task { await addSelected() }
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(selected == nil || adding)
+            }
+        }
+        .padding(20)
+        .frame(width: 500, height: 330)
+        .onChange(of: query) { _ in
+            selected = nil
+            users = []
+            hasSearched = false
+        }
+        .task(id: query) {
+            let text = query.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard text.count >= 2 else { return }
+            try? await Task.sleep(nanoseconds: 250_000_000)
+            guard !Task.isCancelled else { return }
+            await search(text)
+        }
+    }
+
+    private func search(_ text: String) async {
+        searching = true
+        defer {
+            searching = false
+            hasSearched = true
+        }
+        var components = URLComponents()
+        components.queryItems = [URLQueryItem(name: "q", value: text)]
+        let suffix = components.percentEncodedQuery.map { "?\($0)" } ?? ""
+        let path = "/v1/me/teams/\(adminPath(team.name))/members/search\(suffix)"
+        guard let data = await portal.call("GET", path, reload: false) else {
+            users = []
+            return
+        }
+        guard text == query.trimmingCharacters(in: .whitespacesAndNewlines) else { return }
+        users = (try? JSONDecoder().decode([TeamMemberSearchResult].self, from: data)) ?? []
+    }
+
+    private func addSelected() async {
+        guard let selected else { return }
+        adding = true
+        defer { adding = false }
+        let path = "/v1/me/teams/\(adminPath(team.name))/members"
+        guard await portal.call("POST", path, ["email": selected.email, "role": role],
+                                done: "\(selected.email) 已加入 \(team.name)") != nil else { return }
+        close()
     }
 }
 

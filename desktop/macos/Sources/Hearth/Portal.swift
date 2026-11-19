@@ -135,6 +135,13 @@ struct Library: Decodable {
 
 struct TeamMember: Decodable, Hashable { var email: String; var role: String }
 
+struct TeamMemberSearchResult: Decodable, Hashable, Identifiable {
+    var email: String
+    var role: String?
+    var in_team: Bool
+    var id: String { email }
+}
+
 struct TeamPackage: Decodable, Identifiable, Hashable {
     var type: String
     var name: String

@@ -65,6 +65,8 @@ func (s *Server) portalRoutes(m *http.ServeMux) {
 	u("GET /v1/me/teams", s.apiMyTeams)
 	s.teamRepoPortal(u)
 	u("POST /v1/me/teams/{team}/invite", s.apiMyTeamInvite)
+	u("GET /v1/me/teams/{team}/members/search", s.apiMyTeamMemberSearch)
+	u("POST /v1/me/teams/{team}/members", s.apiMyTeamMemberAdd)
 	u("DELETE /v1/me/teams/{team}", s.apiLeaveTeam)
 	u("POST /v1/me/share", s.apiShareItem)
 	u("POST /v1/me/intents", s.apiAddIntent)
@@ -356,6 +358,67 @@ func (s *Server) apiMyTeamInvite(w http.ResponseWriter, r *http.Request, c userC
 		return
 	}
 	writeJSON(w, http.StatusCreated, map[string]any{"code": code, "expires_at": exp})
+}
+
+// apiMyTeamMemberSearch looks up active Hearth accounts for the direct-add
+// dialog. Only maintainers and owners can query the account directory.
+func (s *Server) apiMyTeamMemberSearch(w http.ResponseWriter, r *http.Request, c userCtx) {
+	o, err := s.st.membership(c.uid, r.PathValue("team"), "maintainer")
+	if err != nil {
+		s.writeStoreErr(w, err)
+		return
+	}
+	q := strings.TrimSpace(r.URL.Query().Get("q"))
+	if len(q) > 254 {
+		writeErr(w, http.StatusBadRequest, "search query is too long")
+		return
+	}
+	ms, err := s.st.searchRegisteredMembers(o.ID, q)
+	if err != nil {
+		s.writeStoreErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, ms)
+}
+
+// apiMyTeamMemberAdd adds an existing active account immediately. There is no
+// confirmation step for the account being added. A maintainer can add members
+// or other maintainers, while only an owner can add another owner.
+func (s *Server) apiMyTeamMemberAdd(w http.ResponseWriter, r *http.Request, c userCtx) {
+	o, err := s.st.membership(c.uid, r.PathValue("team"), "maintainer")
+	if err != nil {
+		s.writeStoreErr(w, err)
+		return
+	}
+	var req struct {
+		Email string `json:"email"`
+		Role  string `json:"role"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	email := normEmail(req.Email)
+	if !strings.Contains(email, "@") || len(email) > 254 {
+		writeErr(w, http.StatusBadRequest, "invalid email")
+		return
+	}
+	if req.Role == "" {
+		req.Role = "member"
+	}
+	if req.Role == "reader" || roleRank[req.Role] == 0 {
+		writeErr(w, http.StatusBadRequest, "role must be member, maintainer or owner")
+		return
+	}
+	if roleRank[req.Role] > roleRank[o.Role] {
+		s.writeStoreErr(w, errForbidden)
+		return
+	}
+	if err := s.st.setMember(o.ID, email, req.Role, s.now()); err != nil {
+		s.writeStoreErr(w, err)
+		return
+	}
+	s.Audit(c.email, "add-team-member", r.PathValue("team"), email+" "+req.Role)
+	writeJSON(w, http.StatusOK, memberRow{Email: email, Role: req.Role})
 }
 
 func (s *Server) apiLeaveTeam(w http.ResponseWriter, r *http.Request, c userCtx) {
