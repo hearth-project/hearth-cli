@@ -112,6 +112,14 @@ type memberRow struct {
 	Role  string `json:"role"`
 }
 
+// memberSearchRow is the small public result returned by the team member
+// search. The role is empty when the account is not in this team.
+type memberSearchRow struct {
+	Email  string `json:"email"`
+	Role   string `json:"role,omitempty"`
+	InTeam bool   `json:"in_team"`
+}
+
 func (s *store) listMembers(teamID int64) ([]memberRow, error) {
 	rows, err := s.rdb.Query(`SELECT u.email, m.role FROM team_members m JOIN users u ON u.id=m.user_id WHERE m.team_id=? ORDER BY u.email`, teamID)
 	if err != nil {
@@ -129,6 +137,50 @@ func (s *store) listMembers(teamID int64) ([]memberRow, error) {
 	return out, rows.Err()
 }
 
+// searchRegisteredMembers finds active Hearth accounts by email prefix. A
+// prefix without an @ matches the local part, while a complete email prefix
+// also matches the domain. Empty queries return no results to avoid listing
+// the account directory.
+func (s *store) searchRegisteredMembers(teamID int64, query string) ([]memberSearchRow, error) {
+	query = normEmail(query)
+	if query == "" {
+		return []memberSearchRow{}, nil
+	}
+	prefix := escapeLike(query) + "%"
+	local := escapeLike(query) + "@%"
+	rows, err := s.rdb.Query(`SELECT u.email, COALESCE(m.role,''), CASE WHEN m.user_id IS NULL THEN 0 ELSE 1 END
+		FROM users u LEFT JOIN team_members m ON m.team_id=? AND m.user_id=u.id
+		WHERE u.status='active' AND (u.email LIKE ? ESCAPE '\' OR u.email LIKE ? ESCAPE '\')
+		ORDER BY u.email LIMIT 20`, teamID, prefix, local)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]memberSearchRow, 0, 20)
+	for rows.Next() {
+		var m memberSearchRow
+		var inTeam int
+		if err := rows.Scan(&m.Email, &m.Role, &inTeam); err != nil {
+			return nil, err
+		}
+		m.InTeam = inTeam != 0
+		out = append(out, m)
+	}
+	return out, rows.Err()
+}
+
+func escapeLike(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		if r == '\\' || r == '%' || r == '_' {
+			b.WriteByte('\\')
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
+}
+
 // setMember adds a member or changes their role, keeping at least one owner.
 func (s *store) setMember(teamID int64, email, role string, now int64) error {
 	if _, ok := roleRank[role]; !ok || role == "reader" {
@@ -140,7 +192,7 @@ func (s *store) setMember(teamID int64, email, role string, now int64) error {
 	}
 	defer tx.Rollback()
 	var uid int64
-	if err := tx.QueryRow(`SELECT id FROM users WHERE email=?`, email).Scan(&uid); errors.Is(err, sql.ErrNoRows) {
+	if err := tx.QueryRow(`SELECT id FROM users WHERE email=? AND status='active'`, email).Scan(&uid); errors.Is(err, sql.ErrNoRows) {
 		return fmt.Errorf("%w: no registered user %s", errBadRequest, email)
 	} else if err != nil {
 		return err

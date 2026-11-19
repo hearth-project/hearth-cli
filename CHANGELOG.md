@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Team owners and maintainers can invite registered Hearth users directly from
+  the macOS Teams page. The dialog searches by email prefix, adds the selected
+  account immediately without a confirmation step, and keeps the existing
+  invite-code flow for people who have not registered yet.
 - Users can opt into administrator-assisted password resets. Anyone with the target email and its one-time reset code can set a new password on any machine while preserving the original vault, backups and team memberships.
 
 ## 0.1.2 — 2026-11-18
