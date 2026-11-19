@@ -409,7 +409,7 @@ hearth flush                 # upload everything now (k8s preStop hook)
 - Plain HTTP is refused except to loopback; use `server gencert`, `--tls-cert/--tls-key` or a reverse proxy. `--ca-cert` on `login`/`register`/`setup` trusts a private CA. All session and device endpoints require a bearer token; auth endpoints are rate limited per IP.
 - Tokens expire after 30 days without use (sliding).
 - The vault key is cached in `vault.key` so the daemon runs unattended. Root on that machine can read it; this matches the design's threat model (a compromised machine is not defended against).
-- By design any device that logs in with the master password can download and decrypt every secret; there is no approval step by an existing device. The master password is therefore the only protection of the secrets: use a strong one, and after a suspected leak run `device revoke`, `passwd` and rotate the secrets. MFA for login is not implemented yet.
+- By design any device that logs in with the master password can download and decrypt every secret; there is no approval step by an existing device. Use a strong master password, and after a suspected leak run `device revoke`, `passwd` and rotate the secrets. MFA for login is not implemented yet.
 - Email addresses are not verified: an invite holder can register any address. Planned options: bind invites to an email, restrict allowed domains, or email verification codes.
 
 ## Known gaps

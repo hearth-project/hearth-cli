@@ -296,3 +296,18 @@ ALTER TABLE devices ADD COLUMN IF NOT EXISTS health_at BIGINT NOT NULL DEFAULT 0
 ALTER TABLE devices ADD COLUMN IF NOT EXISTS alias TEXT NOT NULL DEFAULT '';
 ALTER TABLE team_repos ADD COLUMN IF NOT EXISTS commit_prefix TEXT NOT NULL DEFAULT '';
 ALTER TABLE team_repos ADD COLUMN IF NOT EXISTS exclude_json TEXT NOT NULL DEFAULT '[]';
+
+-- Encrypted to an operator key the account owner explicitly chose.
+CREATE TABLE IF NOT EXISTS recovery_delegations (
+  user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  envelope BYTEA NOT NULL
+);
+-- Ephemeral grants are deliberately omitted from backup/migrate.
+CREATE TABLE IF NOT EXISTS password_reset_codes (
+  user_id BIGINT PRIMARY KEY REFERENCES recovery_delegations(user_id) ON DELETE CASCADE,
+  proof_hash BYTEA NOT NULL,
+  claim_hash BYTEA,
+  envelope BYTEA NOT NULL,
+  issued_auth_hash BYTEA NOT NULL,
+  expires_at BIGINT NOT NULL
+);

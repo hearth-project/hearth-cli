@@ -14,6 +14,8 @@ Hearth keeps this user's agent conversations, memory, skills, credentials and se
 - Show commands from the user's synced recipes before running them and get a yes; installs and logins follow **D. Restore this machine's environment**.
 - Only restore or change what the user asked for; ask before bulk actions (`--all`, turning categories off).
 
+For a forgotten password, give the user `hearth recover --server <URL> --email <email>` to run in their terminal. If the Recovery Key was also lost and the account previously delegated recovery, add `--reset-code` and direct them to the operator for a code. Treat reset codes and operator private keys like passwords.
+
 ## 0. Check the state first (always)
 
 ```bash

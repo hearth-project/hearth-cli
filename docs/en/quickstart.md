@@ -87,7 +87,7 @@ The installer:
 
 The installer installs no other software. On later machines the software is set up by your agent, preferably from another machine (Step 3): it follows your recorded restore flow (`hearth recipe plan`) and the [client software setup guide](client-env.md) to install Node, Codex CLI, Claude Code, codex-mixin and so on.
 
-> The recovery key is shown once: store it in a password manager. It is the only way back if you forget the master password. Never send the password or the key to anyone, or to an agent.
+> The recovery key is shown once: store it in a password manager. Use it if you forget the master password. Never send the password or the key to anyone, or to an agent.
 
 After the login setup asks for your working directory on this machine (your home on the first machine; later machines get the one your machines of the same kind use). Several people on one Unix account: type your own directory there (or `mkdir -p ~/work/<you> && cd ~/work/<you> && hearth init .` before installing).
 

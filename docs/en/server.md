@@ -181,5 +181,16 @@ Search and restore speed come first: sessions are indexed by last activity and p
 
 - Invite-only by default; only the SHA-256 of an invite code is stored.
 - Every session and device endpoint needs a token; auth endpoints are rate limited per IP; tokens expire after 30 days without use.
-- A new device that logs in with the master password can decrypt every credential (no approval by an existing device). The master password is the only protection of the credentials; MFA and email verification are not implemented yet.
+- A new device that logs in with the master password can decrypt every credential (no approval by an existing device). Use a strong master password. MFA and email verification are not implemented yet.
 - Admins see account emails, usage and metadata sizes, not session content, titles or credentials. The library is stored in plaintext (visible to its owner; team publications to the team); clients scan it and block likely secrets before upload.
+
+## Administrator-assisted password reset
+
+Accounts can opt into recovery even if every device, the password and the Recovery Key are later lost. Upgrade both the client and the server first.
+
+1. The operator generates a private key in separate, protected storage and distributes the **public** key printed by `hearth server admin recovery-keygen /secure/operator.key`. Keep the private key apart from the server database and its backups.
+2. While the account owner still knows their password, they verify the public key with the operator and run `hearth recovery-key delegate --to <public-key>` on a logged-in device. This grants the private key holder with access to the encrypted delegation the ability to unlock this account’s backups. The owner can withdraw the live delegation and pending codes with `hearth recovery-key delegate --disable`.
+3. On a reset request, the operator verifies the requester through a trusted channel and runs `hearth server admin reset-password <email> --data <server-data> --key-file /secure/operator.key`. Deliver the code privately. It is valid for 30 minutes. Reissuing replaces the previous code, including an interrupted claim.
+4. On **any** machine, the recipient runs `hearth recover --reset-code --server <URL> --email <email>` and enters the code and their new password at the prompts. Anyone with both the email and the code can redeem it. The account keeps its backups, credentials, team roles, devices and Recovery Key. Run `hearth login` separately to sign in on a new machine.
+
+The operator can issue a code with all user devices offline. An account that never delegated recovery still has the usual Recovery Key path. Keep any surviving signed-in device if both credentials have already been lost. Server backups include encrypted delegations and omit short-lived codes.

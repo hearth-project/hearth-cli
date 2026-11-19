@@ -284,3 +284,18 @@ CREATE INDEX IF NOT EXISTS devices_by_user ON devices(user_id, created_at);
 CREATE INDEX IF NOT EXISTS tokens_by_user ON tokens(user_id);
 CREATE INDEX IF NOT EXISTS team_members_by_user ON team_members(user_id);
 CREATE INDEX IF NOT EXISTS tombstones_by_time ON session_tombstones(deleted_at);
+
+-- Encrypted to an operator key the account owner explicitly chose.
+CREATE TABLE IF NOT EXISTS recovery_delegations (
+  user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  envelope BLOB NOT NULL
+);
+-- Ephemeral grants are deliberately omitted from backup/migrate.
+CREATE TABLE IF NOT EXISTS password_reset_codes (
+  user_id INTEGER PRIMARY KEY REFERENCES recovery_delegations(user_id) ON DELETE CASCADE,
+  proof_hash BLOB NOT NULL,
+  claim_hash BLOB,
+  envelope BLOB NOT NULL,
+  issued_auth_hash BLOB NOT NULL,
+  expires_at INTEGER NOT NULL
+);

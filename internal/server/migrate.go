@@ -47,7 +47,7 @@ var migrateTables = []struct {
 	{"package_versions", "object"}, {"secrets", ""}, {"usage_daily", ""},
 	{"user_usage_daily", ""}, {"team_invites", ""}, {"team_shares", ""},
 	{"admins", ""}, {"admin_audit", ""}, {"activity_daily", ""}, {"user_intents", ""},
-	{"team_repos", ""},
+	{"team_repos", ""}, {"recovery_delegations", ""},
 }
 
 // MigrateStats summarises a copy.
