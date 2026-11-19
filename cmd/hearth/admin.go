@@ -178,6 +178,7 @@ func adminCmd() *cobra.Command {
 				return report(err, fmt.Sprintf("revoked %d device(s) of %s; the user logs in again with the master password", n, a[0]))
 			})},
 		deleteUserCmd(with),
+		resetOperatorKeyCmd(), issueResetCodeCmd(with),
 		&cobra.Command{Use: "grant <email>", Short: "Make an account an admin of this server (it gets the administration pages in the Hearth app and can use hearth app admin-call)", Args: cobra.ExactArgs(1),
 			RunE: with(func(_ *cobra.Command, srv *server.Server, a []string) error {
 				err := srv.SetAdmin(a[0], true)

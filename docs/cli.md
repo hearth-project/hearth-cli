@@ -150,8 +150,9 @@ Generated from `hearth --help` by `hearth docs cli > docs/cli.md`; every command
 | [`hearth device rename`](#hearth-device-rename) | Name a machine (shown as name (host), its SSH host name; an offline machine's name continues that machine); one argument: this machine; "" clears it |
 | [`hearth device revoke`](#hearth-device-revoke) | Revoke a device's access (rotate any credentials it had) |
 | [`hearth passwd`](#hearth-passwd) | Change the master password (other devices keep working) |
-| [`hearth recover`](#hearth-recover) | Forgot the password: set a new one with the recovery key (signs out all devices) |
+| [`hearth recover`](#hearth-recover) | Reset a forgotten password with a Recovery Key (signs out devices) or an administrator reset code |
 | [`hearth recovery-key`](#hearth-recovery-key) | Manage the account recovery key |
+| [`hearth recovery-key delegate`](#hearth-recovery-key-delegate) | Allow an operator to recover this vault with their public key, or withdraw that access |
 | [`hearth recovery-key rotate`](#hearth-recovery-key-rotate) | Issue a new recovery key and invalidate the old one (e.g. it was shown to someone) |
 | [`hearth server`](#hearth-server) | Run the sync server (SQLite + local directory by default; PostgreSQL and S3 optional) |
 | [`hearth server invite`](#hearth-server-invite) | Create single-use registration invite codes (run on the server host) |
@@ -167,6 +168,8 @@ Generated from `hearth --help` by `hearth docs cli > docs/cli.md`; every command
 | [`hearth server admin quota`](#hearth-server-admin-quota) | Set an account's storage quota (e.g. 20GiB) |
 | [`hearth server admin revoke-devices`](#hearth-server-admin-revoke-devices) | Log out every device of an account (e.g. after a leaked password) |
 | [`hearth server admin delete-user`](#hearth-server-admin-delete-user) | Delete an account and all its sessions, library and secrets |
+| [`hearth server admin recovery-keygen`](#hearth-server-admin-recovery-keygen) | Create an offline operator recovery key and print the public key for users |
+| [`hearth server admin reset-password`](#hearth-server-admin-reset-password) | Issue a 30-minute bearer reset code for an enrolled account |
 | [`hearth server admin grant`](#hearth-server-admin-grant) | Make an account an admin of this server (it gets the administration pages in the Hearth app and can use hearth app admin-call) |
 | [`hearth server admin ungrant`](#hearth-server-admin-ungrant) | Remove an admin (not the last one) |
 | [`hearth server admin admins`](#hearth-server-admin-admins) | List admins |
@@ -1768,17 +1771,18 @@ hearth passwd
 
 ## hearth recover
 
-Forgot the password: set a new one with the recovery key (signs out all devices)
+Reset a forgotten password with a Recovery Key (signs out devices) or an administrator reset code
 
 ```text
 hearth recover [flags]
 
 Flags:
-      --ca-cert string          PEM certificate to trust for a self-signed server
-      --device string           device name (default: hostname)
-      --email string            account email
-      --insecure[=true|false]   allow plain HTTP to a non-loopback server
-      --server string           server URL
+      --ca-cert string            PEM certificate to trust for a self-signed server
+      --device string             device name (default: hostname)
+      --email string              account email
+      --insecure[=true|false]     allow plain HTTP to a non-loopback server
+      --reset-code[=true|false]   use an operator-issued code instead of a Recovery Key; only changes the password
+      --server string             server URL
 ```
 
 ## hearth recovery-key
@@ -1787,6 +1791,18 @@ Manage the account recovery key
 
 ```text
 hearth recovery-key
+```
+
+## hearth recovery-key delegate
+
+Allow an operator to recover this vault with their public key, or withdraw that access
+
+```text
+hearth recovery-key delegate [flags]
+
+Flags:
+      --disable[=true|false]   withdraw delegation and outstanding codes
+      --to string              operator's X25519 public key
 ```
 
 ## hearth recovery-key rotate
@@ -1969,6 +1985,25 @@ hearth server admin delete-user <email> [flags]
 
 Flags:
       --yes[=true|false]   confirm
+```
+
+## hearth server admin recovery-keygen
+
+Create an offline operator recovery key and print the public key for users
+
+```text
+hearth server admin recovery-keygen <new-private-key-file>
+```
+
+## hearth server admin reset-password
+
+Issue a 30-minute bearer reset code for an enrolled account
+
+```text
+hearth server admin reset-password <email> [flags]
+
+Flags:
+      --key-file string   offline private key file from recovery-keygen
 ```
 
 ## hearth server admin grant

@@ -264,7 +264,7 @@ func registerCmd() *cobra.Command {
 				return err
 			}
 			fmt.Println("Account created.")
-			fmt.Println("Recovery key (shown once, store it offline; it is the only way to recover data if you forget the password):")
+			fmt.Println("Recovery key (shown once, store it offline; use it to recover data if you forget the password):")
 			fmt.Println("  " + rk)
 			fmt.Println("Next: hearth login --server", server, "--email", email)
 			return nil

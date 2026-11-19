@@ -70,6 +70,24 @@ type RotateRecoveryRequest struct {
 	RecoveryAuth        []byte `json:"recovery_auth"`
 }
 
+// RecoveryDelegationRequest authorizes an offline operator key with the current password.
+// An absent envelope withdraws the delegation and any pending reset code.
+type RecoveryDelegationRequest struct {
+	AuthKey  []byte `json:"auth_key"`
+	Envelope []byte `json:"envelope,omitempty"`
+}
+
+type ResetCodeRequest struct {
+	Email string          `json:"email"`
+	Proof []byte          `json:"proof"`
+	Claim []byte          `json:"claim"`
+	New   *NewCredentials `json:"new,omitempty"`
+}
+
+type ResetCodeResponse struct {
+	Envelope []byte `json:"envelope"`
+}
+
 type RecoveryRequest struct {
 	Email        string          `json:"email"`
 	RecoveryAuth []byte          `json:"recovery_auth"`

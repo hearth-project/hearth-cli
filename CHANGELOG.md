@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Users can opt into administrator-assisted password resets. Anyone with the target email and its one-time reset code can set a new password on any machine while preserving the original vault, backups and team memberships.
+
 ## 0.1.2 — 2026-11-18
 
 Upgrade the server first: the relay and the other new server routes are not on an older server.

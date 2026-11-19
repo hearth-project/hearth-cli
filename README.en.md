@@ -161,7 +161,7 @@ The working directory proposed is the one your machines of the same kind use (sa
 
 The new machine has your files; its software (Node, Codex CLI, gateways, …) is set up by your agent. On **any other machine with Hearth**, tell its agent the sentence setup printed, e.g. *"restore the Codex environment of h800-gpu-node-13"*. It looks at the new machine (`hearth machine list`), picks the restore flow for that kind of machine, and installs and checks each step there over `hearth ssh`; steps that need you (a QR-code login) it hands to you with `hearth ssh -t`. No other machine at hand: say *"use hearth to restore this machine's environment"* on the new machine itself. The Hearth app's Machines page (and `hearth machine list`) shows each machine's environment check.
 
-A new account prints a **recovery key** once. Keep it offline; it is the only way back if you forget the password. Never paste the password or the key into a chat.
+A new account prints a **recovery key** once. Keep it offline; it lets you recover if you forget the password. Never paste the password or the key into a chat.
 
 ### 4. Use it
 

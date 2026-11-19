@@ -24,7 +24,7 @@ Builds exist for linux / darwin x amd64 / arm64; on Windows use WSL. Other platf
 
 **`403 account disabled`.** An admin disabled the account.
 
-**Forgot the master password.** `hearth recover` resets it with the recovery key; every device has to log in again. Without the recovery key the existing data cannot be decrypted.
+**Forgot the master password.** `hearth recover` resets it with the recovery key; every device has to log in again. If you also lost the key and previously enabled administrator recovery, ask your operator for a private reset code. On any machine run `hearth recover --reset-code --server <URL> --email <account-email>`. Enter the code and your new password in your terminal. Your backups stay readable and your devices stay signed in. See [enabling administrator recovery](server.md#administrator-assisted-password-reset).
 
 **Someone saw the recovery key.** `hearth recovery-key rotate`; the old key stops working at once.
 

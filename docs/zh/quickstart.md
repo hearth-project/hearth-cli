@@ -87,7 +87,7 @@ curl -fsSL -k https://<server-host>:8787/install.sh | sh
 
 安装脚本不装其他软件。之后的新机器上，软件环境由 agent 来装，推荐在另一台机器上发起（见第三步）：agent 按你记录的恢复流程（`hearth recipe plan`）和 [客户端软件环境安装指南](client-env.md) 装 Node、Codex CLI、Claude Code、codex-mixin 等。
 
-> 恢复密钥只显示一次，请保存到密码管理器。忘记主密码时只能靠它找回。不要把主密码或恢复密钥发给任何人或 agent。
+> 恢复密钥只显示一次，请保存到密码管理器。忘记主密码时可用它找回。不要把主密码或恢复密钥发给任何人或 agent。
 
 登录后 setup 会询问这台机器的工作目录（第一台机器推荐用户目录；之后的机器推荐你同类型机器用的目录）。多人共用同一个 Linux 账号时，在这里输入你自己的目录（也可以在安装前 `mkdir -p ~/work/<名字> && cd ~/work/<名字> && hearth init .`）。
 

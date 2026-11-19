@@ -280,7 +280,7 @@ hearth recover                         # forgot it: reset with the recovery key 
 hearth recovery-key rotate             # the recovery key was exposed
 ```
 
-Any device that logs in with the master password can decrypt every credential (no approval by an existing device), so the master password is their only protection: use a strong one, and after a suspected leak run `device revoke`, `passwd` and rotate the affected credentials.
+Any device that logs in with the master password can decrypt every credential (no approval by an existing device). Use a strong password, and after a suspected leak run `device revoke`, `passwd` and rotate the affected credentials.
 
 ### A name stands for a machine
 

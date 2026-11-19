@@ -214,6 +214,7 @@ func passwdCmd() *cobra.Command {
 
 func recoveryKeyCmd() *cobra.Command {
 	c := &cobra.Command{Use: "recovery-key", Short: "Manage the account recovery key"}
+	c.AddCommand(recoveryDelegateCmd())
 	c.AddCommand(&cobra.Command{
 		Use:   "rotate",
 		Short: "Issue a new recovery key and invalidate the old one (e.g. it was shown to someone)",
@@ -241,13 +242,16 @@ func recoveryKeyCmd() *cobra.Command {
 
 func recoverCmd() *cobra.Command {
 	var server, email, device, caCert string
-	var insecure bool
+	var insecure, adminCode bool
 	c := &cobra.Command{
 		Use:   "recover",
-		Short: "Forgot the password: set a new one with the recovery key (signs out all devices)",
+		Short: "Reset a forgotten password with a Recovery Key (signs out devices) or an administrator reset code",
 		RunE: func(*cobra.Command, []string) error {
 			if err := prepareServer(server, caCert, insecure); err != nil {
 				return err
+			}
+			if adminCode {
+				return resetWithCode(server, email)
 			}
 			rk, err := readPasswordVar("HEARTH_RECOVERY_KEY", "Recovery key: ", false)
 			if err != nil {
@@ -268,6 +272,7 @@ func recoverCmd() *cobra.Command {
 			return nil
 		},
 	}
+	c.Flags().BoolVar(&adminCode, "reset-code", false, "use an operator-issued code instead of a Recovery Key; only changes the password")
 	c.Flags().StringVar(&server, "server", "", "server URL")
 	c.Flags().StringVar(&email, "email", "", "account email")
 	c.Flags().StringVar(&device, "device", "", "device name (default: hostname)")
