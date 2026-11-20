@@ -6,7 +6,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 OUT=${1:-dist}
-VERSION=${2:-$(git describe --tags --always 2>/dev/null || echo 0.1.2-dev)}
+VERSION=${2:-$(git describe --tags --always 2>/dev/null || echo 0.1.3-dev)}
 mkdir -p "$OUT"
 for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64; do
   os=${target%/*} arch=${target#*/}
