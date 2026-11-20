@@ -1824,6 +1824,7 @@ hearth server [flags]
 Flags:
       --addr string                          listen address [$HEARTH_ADDR] (default "127.0.0.1:8787")
       --blobs string                         blob store: empty = <data>/objects, file:///path, or s3://bucket/prefix?endpoint=host:9000 [$HEARTH_BLOBS]
+      --bootstrap-addr string                optional HTTP listen address for verified offline install bundles, on the public URL host (e.g. 10.0.0.5:8788) [$HEARTH_BOOTSTRAP_ADDR]
       --data string                          data directory (default database, blobs, TLS files) [$HEARTH_DATA] (default "./hearth-data")
       --db string                            metadata database: empty = SQLite in --data, sqlite:///path, or postgres://user:pass@host/db [$HEARTH_DB]
       --device-days int                      forget machines not seen for N days (offline, reclaimed or revoked: their entry, health report and login; 0 = keep) [$HEARTH_DEVICE_DAYS] (default 7)

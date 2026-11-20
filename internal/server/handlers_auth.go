@@ -42,6 +42,7 @@ func (s *Server) routes() {
 	m.HandleFunc("GET /install.sh", s.handleInstall)
 	m.HandleFunc("GET /ca.pem", s.handleCA)
 	m.HandleFunc("GET /download/{name}", s.handleDownload)
+	m.HandleFunc("GET /bootstrap/{name}", s.handleBundle)
 	m.HandleFunc("GET /v1/dist", s.handleDistManifest)
 	m.HandleFunc("GET /v1/info", s.handleInfo)
 	m.HandleFunc("GET /onboard/SKILL.md", s.handleOnboardSkill)

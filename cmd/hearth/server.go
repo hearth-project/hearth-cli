@@ -8,6 +8,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -54,7 +55,7 @@ func envOr(k, def string) string {
 func serverCmd() *cobra.Command {
 	var sto storage
 	var addr, tlsCert, tlsKey, registration, publicURL, distDir, quota, siteDir string
-	var identityBroker, identityBrokerKey string
+	var identityBroker, identityBrokerKey, bootstrapAddr string
 	var siteAuth, noAutoUpdate, pinInstall, noVersionCheck bool
 	var expireDays, graceDays, deviceDays int
 	var gcInterval time.Duration
@@ -83,6 +84,21 @@ func serverCmd() *cobra.Command {
 					}
 				}
 				dist = &server.Distribution{PublicURL: publicURL, BinaryPath: exe, Dir: distDir, CertPEM: selfSigned, PinInstall: pinInstall, NoAutoUpdate: noAutoUpdate, Version: version}
+			}
+			if bootstrapAddr != "" {
+				origin, err := url.Parse(publicURL)
+				if dist == nil || err != nil || origin.Scheme != "https" || origin.Hostname() == "" {
+					return errors.New("--bootstrap-addr requires an HTTPS --public-url")
+				}
+				_, port, err := net.SplitHostPort(bootstrapAddr)
+				if err != nil {
+					return fmt.Errorf("--bootstrap-addr: %w", err)
+				}
+				n, err := strconv.Atoi(port)
+				if err != nil || n < 1 || n > 65535 {
+					return errors.New("--bootstrap-addr needs a fixed TCP port")
+				}
+				dist.BootstrapURL = "http://" + net.JoinHostPort(origin.Hostname(), port)
 			}
 			cfg := sto.config()
 			cfg.Registration = registration
@@ -137,6 +153,22 @@ func serverCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			defer ln.Close()
+			if bootstrapAddr != "" {
+				bl, err := net.Listen("tcp", bootstrapAddr)
+				if err != nil {
+					return fmt.Errorf("offline bootstrap: %w", err)
+				}
+				bs := &http.Server{Handler: srv.BootstrapHandler(), ReadHeaderTimeout: 10 * time.Second, IdleTimeout: time.Minute, WriteTimeout: 10 * time.Minute, ErrorLog: hs.ErrorLog}
+				defer bs.Close()
+				go func() {
+					if err := bs.Serve(bl); err != nil && !errors.Is(err, http.ErrServerClosed) {
+						log.Printf("offline bootstrap stopped: %v", err)
+						stop()
+					}
+				}()
+				log.Printf("public offline bundles available at %s/bootstrap/ (one-time install commands include checksums)", dist.BootstrapURL)
+			}
 			scheme := "http"
 			if tlsCert != "" {
 				scheme = "https"
@@ -173,6 +205,7 @@ func serverCmd() *cobra.Command {
 	c.Flags().BoolVar(&siteAuth, "site-auth", os.Getenv("HEARTH_SITE_AUTH") == "1", "serve the site defaults only to logged-in users (default: anyone who can reach the server, so the installer gets them before login) [$HEARTH_SITE_AUTH=1]")
 	c.Flags().BoolVar(&pinInstall, "pin-install", os.Getenv("HEARTH_PIN_INSTALL") == "1", "self-signed certificate: put --pinnedpubkey in the install one-liner, so even the first download is verified (default: plain -k; the installer then pins the certificate) [$HEARTH_PIN_INSTALL=1]")
 	c.Flags().BoolVar(&noAutoUpdate, "no-client-auto-update", os.Getenv("HEARTH_NO_CLIENT_AUTO_UPDATE") == "1", "client daemons do not install new builds by themselves (hearth self-update still works) [$HEARTH_NO_CLIENT_AUTO_UPDATE=1]")
+	c.Flags().StringVar(&bootstrapAddr, "bootstrap-addr", os.Getenv("HEARTH_BOOTSTRAP_ADDR"), "optional HTTP listen address for verified offline install bundles, on the public URL host (e.g. 10.0.0.5:8788) [$HEARTH_BOOTSTRAP_ADDR]")
 	c.Flags().StringVar(&distDir, "dist-dir", os.Getenv("HEARTH_DIST_DIR"), "directory with client builds hearth-<os>-<arch> for other platforms (scripts/build-dist.sh; default <data>/dist) [$HEARTH_DIST_DIR]")
 	c.Flags().StringVar(&publicURL, "public-url", os.Getenv("HEARTH_PUBLIC_URL"), "URL clients use to reach this server; enables /install.sh [$HEARTH_PUBLIC_URL]")
 	c.Flags().StringVar(&quota, "quota", envOr("HEARTH_QUOTA", "unlimited"), "default storage quota per user, e.g. 10GiB (per-user: hearth server admin quota) [$HEARTH_QUOTA]")
