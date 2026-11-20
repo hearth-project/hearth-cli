@@ -34,6 +34,12 @@ curl -fsSL https://<server>/install.sh | sh -s -- --email you@example.com --toke
 
 and logs the new machine in without the master password. It works once and for 30 minutes; make a new one for each machine. Your vault key is wrapped with a key derived from a random secret that only the command holds, so the server still sees ciphertext only. Treat the command like a password until it has been used: it stays in the new machine's shell history, but it no longer works after its first use. `hearth setup --token <id>.<secret>` (or `HEARTH_INSTALL_TOKEN`) does the same without the installer.
 
+### Older machines with wget or an old TLS library
+
+When an old `curl` reports error 35, the operator can enable offline bundles by adding `--bootstrap-addr <internal-ip>:8788` to `hearth server` alongside its HTTPS `--public-url`. Allow the target machines to reach that TCP port on the public URL's hostname. The additional listener serves only public install archives.
+
+On a signed-in machine, choose **Add machine** in the Mac app or run `hearth machine install-command`. Paste the resulting command into the target user's shell. It selects the archive for the OS and CPU and tries HTTPS with `wget` or `curl`, then the bundle port. The command carries the expected SHA-256 from the signed-in machine and verifies the entire archive before unpacking it. The included client uses the normal HTTPS server for one-time login. The target needs `tar`, `sha256sum` or `shasum`, a supported OS (Linux kernel 3.2+), and network access to the HTTPS server for login and sync. The port is disabled by default.
+
 ### Self-signed servers
 
 Internal servers often use a self-signed certificate; the install command then carries a key pin:

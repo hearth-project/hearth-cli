@@ -528,6 +528,9 @@ func (s *Server) installForConsole() string {
 	if s.dist == nil {
 		return ""
 	}
+	if len(s.dist.bundles) > 0 {
+		return s.dist.bundleCommand(s.siteProxies())
+	}
 	return s.InstallCommand()
 }
 

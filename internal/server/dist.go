@@ -21,8 +21,9 @@ import (
 // Distribution lets the server hand out client binaries and a one-line
 // installer, so a new machine needs nothing but curl.
 type Distribution struct {
-	PublicURL  string // e.g. https://hearth.example.com:8787 (what clients use)
-	BinaryPath string // client binary for the server's own platform (usually os.Executable())
+	BootstrapURL string // optional HTTP origin serving only verified offline bundles
+	PublicURL    string // e.g. https://hearth.example.com:8787 (what clients use)
+	BinaryPath   string // client binary for the server's own platform (usually os.Executable())
 	// Dir optionally holds binaries for other platforms, named
 	// hearth-<os>-<arch> (scripts/build-dist.sh); they override BinaryPath.
 	Dir     string
@@ -47,9 +48,10 @@ type distBinary struct {
 
 type distState struct {
 	Distribution
-	bins map[string]distBinary // hearth-<os>-<arch>
-	apps map[string]distBinary // desktop apps, e.g. hearth-menubar-darwin.zip (hearth app install)
-	pin  string
+	bins    map[string]distBinary // hearth-<os>-<arch>
+	apps    map[string]distBinary // desktop apps, e.g. hearth-menubar-darwin.zip (hearth app install)
+	bundles map[string]offlineBundle
+	pin     string
 }
 
 // distNameRE limits served names to the platforms the client supports.
@@ -126,6 +128,11 @@ func newDist(d *Distribution) (*distState, error) {
 	ds.PublicURL = strings.TrimRight(ds.PublicURL, "/")
 	if len(d.CertPEM) > 0 {
 		if ds.pin, err = SPKIPin(d.CertPEM); err != nil {
+			return nil, err
+		}
+	}
+	if ds.BootstrapURL != "" {
+		if err := ds.prepareBundles(); err != nil {
 			return nil, err
 		}
 	}
@@ -223,7 +230,7 @@ fi
 tmp=$(mktemp)
 trap 'rm -f "$tmp"' EXIT
 printf 'Downloading hearth for %s-%s ...' "$os" "$arch"
-$CURL -o "$tmp" "$URL/download/$BIN" || { echo; exit 1; }
+@FETCH@ || { echo; exit 1; }
 if command -v sha256sum >/dev/null 2>&1; then got=$(sha256sum "$tmp" | cut -d' ' -f1); else got=$(shasum -a 256 "$tmp" | cut -d' ' -f1); fi
 if [ "$got" != "$SHA256" ]; then
   echo; echo "hearth: checksum mismatch for downloaded binary" >&2
@@ -286,7 +293,7 @@ if [ "${1:-}" = "--install-only" ]; then
 fi
 
 # stdin is this script when piped from curl; read the password from the tty.
-if [ -r /dev/tty ] && [ -z "${HEARTH_PASSWORD:-}" ]; then
+if [ -z "${HEARTH_PASSWORD:-}" ] && ( : </dev/tty ) 2>/dev/null; then
   exec "$BIN_DIR/hearth" setup --server "$URL" "$@" </dev/tty
 fi
 exec "$BIN_DIR/hearth" setup --server "$URL" "$@"
@@ -298,6 +305,11 @@ func (s *Server) handleInstall(w http.ResponseWriter, _ *http.Request) {
 		writeErr(w, http.StatusNotFound, "installer not enabled (start the server with --public-url)")
 		return
 	}
+	w.Header().Set("Content-Type", "text/x-shellscript; charset=utf-8")
+	io.WriteString(w, d.installer(s.siteProxies(), `$CURL -o "$tmp" "$URL/download/$BIN"`))
+}
+
+func (d *distState) installer(proxies []string, fetch string) string {
 	caBlock := ""
 	if len(d.CertPEM) > 0 {
 		caBlock = "umask 077\ncat > \"$AS_HOME/ca.pem\" <<'HEARTH_CA'\n" + strings.TrimSpace(string(d.CertPEM)) +
@@ -307,10 +319,8 @@ func (s *Server) handleInstall(w http.ResponseWriter, _ *http.Request) {
 	for _, n := range d.names() {
 		fmt.Fprintf(&cases, "  %s) SHA256='%s' ;;\n", n, d.bins[n].sha256)
 	}
-	script := strings.NewReplacer("@URL@", d.PublicURL, "@CASES@", strings.TrimRight(cases.String(), "\n"),
-		"@NAMES@", strings.Join(d.names(), " "), "@CA_BLOCK@", caBlock, "@PROXIES@", strings.Join(s.siteProxies(), " ")).Replace(installTemplate)
-	w.Header().Set("Content-Type", "text/x-shellscript; charset=utf-8")
-	io.WriteString(w, script)
+	return strings.NewReplacer("@URL@", d.PublicURL, "@CASES@", strings.TrimRight(cases.String(), "\n"),
+		"@NAMES@", strings.Join(d.names(), " "), "@CA_BLOCK@", caBlock, "@PROXIES@", strings.Join(proxies, " "), "@FETCH@", fetch).Replace(installTemplate)
 }
 
 func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {

@@ -34,6 +34,12 @@ curl -fsSL https://<server>/install.sh | sh -s -- --email you@example.com --toke
 
 新机器用它登录，不用输主密码。命令只能用一次，30 分钟内有效；每台机器各生成一条。你的 vault key 用一个随机密钥加密，这个密钥只在命令里，所以服务器看到的仍然只有密文。命令用掉之前请当作密码对待：它会留在新机器的 shell history 里，但用过一次就失效了。不走安装脚本时，`hearth setup --token <id>.<secret>`（或环境变量 `HEARTH_INSTALL_TOKEN`）效果相同。
 
+### 只有 wget 或 TLS 库过旧的机器
+
+旧版 `curl` 报错 35 时，管理员可以在 `hearth server` 已配置 HTTPS `--public-url` 的基础上加上 `--bootstrap-addr <内网IP>:8788`。目标机需要能访问 `--public-url` 主机名的这个 TCP 端口。此端口只提供公开安装包，默认关闭。
+
+在自己已登录的 Mac 上点 **新增开发机**，也可以在已登录的机器上执行 `hearth machine install-command`。把复制的命令粘贴到目标机的普通用户终端即可。命令按系统和架构选包，先用 `wget` 或 `curl` 尝试 HTTPS，失败后从兼容端口下载。命令中带有来自已登录设备的 SHA-256，整包校验通过后才会解包。包内客户端通过正常的 HTTPS 服务兑换一次性登录凭证。目标机需要 `tar`、`sha256sum` 或 `shasum`，Linux 内核需为 3.2 或更新版本，登录和同步需要能访问 HTTPS 主端口。
+
 ### 自签证书的服务器
 
 内网服务器常用自签证书，安装命令带公钥 pin：
