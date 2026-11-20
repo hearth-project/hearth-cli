@@ -5,11 +5,13 @@ import SwiftUI
 /// what can be done about them.
 struct MenuView: View {
     @ObservedObject var store: MachineStore
+    @ObservedObject var updates: AppUpdateStore
     var openConsole: () -> Void
     var snapshot = false
     @State var expanded: String? = nil
     @State var note: String? = nil
     @State private var copying = false
+    @State private var confirmUpdate = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// Height of the machine list. A MenuBarExtra window sizes itself to its
     /// content's ideal size and a ScrollView has none, so the list gets this
@@ -26,6 +28,12 @@ struct MenuView: View {
         .frame(width: 360)
         .background(snapshot ? AnyView(Color(nsColor: .windowBackgroundColor)) : AnyView(Color.clear))
         .background(snapshot ? nil : MenuWindowAnchor())
+        .alert("发现 Hearth 新版本", isPresented: $confirmUpdate) {
+            Button("更新") { Task { await updates.install() } }
+            Button("稍后", role: .cancel) {}
+        } message: {
+            Text("将下载 \(updates.latestVersion)，校验后替换当前 App 并重新打开。")
+        }
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in
             // Opening the menu after logging in elsewhere: pick the login up now.
             if store.loginExpired { Task { await store.refresh() } }
@@ -194,6 +202,24 @@ struct MenuView: View {
             }
             .disabled(copying || store.loginExpired)
             .help("复制一条一次性命令，在新机器上运行即安装 Hearth 并登录")
+            MenuRow(icon: updates.info?.available == true ? "arrow.down.circle.fill" : "arrow.clockwise",
+                    title: updates.info?.available == true ? "更新 Hearth \(updates.latestVersion)" : "检查更新",
+                    action: {
+                        if updates.info?.available == true {
+                            confirmUpdate = true
+                        } else {
+                            Task { await updates.check() }
+                        }
+                    }) {
+                if updates.updating || updates.checking {
+                    ProgressView().controlSize(.small).scaleEffect(0.7)
+                } else if let error = updates.error {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 10)).foregroundStyle(Theme.warn).help(error)
+                } else if updates.info?.available == true {
+                    Text("可用").font(.system(size: 11, weight: .medium)).foregroundStyle(Theme.accent)
+                }
+            }
             MenuRow(icon: "arrow.clockwise", title: "刷新", action: { Task { await store.refresh() } }) {
                 if let err = store.error, store.list != nil {
                     Label("刷新失败", systemImage: "exclamationmark.triangle.fill")

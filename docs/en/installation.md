@@ -140,6 +140,8 @@ hearth self-update --auto off      # turn automatic updates off on this machine 
 
 `hearth server --no-client-auto-update` stops every client from updating by itself (manual `self-update` still works).
 
+The Mac menu bar app checks the served version every 30 minutes after launch and shows *Update Hearth* in its menu. After confirmation it downloads, verifies and restarts the app. You can also run `hearth app update --check` or `hearth app update --yes`.
+
 ## Uninstalling
 
 ```bash

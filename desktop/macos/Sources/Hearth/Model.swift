@@ -51,6 +51,14 @@ struct InstallCommand: Decodable {
     var one_time: Bool
 }
 
+struct AppUpdateInfo: Decodable {
+    var installed: Bool
+    var current_version: String?
+    var latest_version: String?
+    var available: Bool
+    var sha256: String?
+}
+
 /// The CLI the app talks to. A Finder-started app has a minimal PATH, so the
 /// usual install locations are tried first.
 enum HearthCLI {
@@ -115,6 +123,68 @@ enum HearthCLI {
                     cont.resume(returning: data)
                 }
             }
+        }
+    }
+}
+
+@MainActor
+final class AppUpdateStore: ObservableObject {
+    @Published var info: AppUpdateInfo?
+    @Published var error: String?
+    @Published var checking = false
+    @Published var updating = false
+    private var timer: Timer?
+
+    init(start: Bool = true) {
+        if start {
+            Task { await check() }
+            timer = Timer.scheduledTimer(withTimeInterval: 30 * 60, repeats: true) { [weak self] _ in
+                Task { await self?.check() }
+            }
+        }
+    }
+
+    var currentVersion: String {
+        (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? ""
+    }
+
+    var latestVersion: String {
+        info?.latest_version ?? ""
+    }
+
+    func check() async {
+        if checking || updating { return }
+        checking = true
+        defer { checking = false }
+        do {
+            let data = try await HearthCLI.run([
+                "app", "update", "--check", "--json",
+                "--current-version", currentVersion
+            ], timeout: 30)
+            info = try JSONDecoder().decode(AppUpdateInfo.self, from: data)
+            error = nil
+        } catch let failure {
+            error = failure.localizedDescription
+        }
+    }
+
+    func install() async {
+        if info?.available != true {
+            await check()
+        }
+        guard info?.available == true else { return }
+        updating = true
+        defer { updating = false }
+        do {
+            _ = try await HearthCLI.run([
+                "app", "update", "--yes",
+                "--current-version", currentVersion
+            ], timeout: 10 * 60)
+            error = nil
+        } catch let failure {
+            // The updater terminates this app after the new bundle is ready.
+            // If it returns, surface the failure and keep the old app running.
+            error = failure.localizedDescription
         }
     }
 }

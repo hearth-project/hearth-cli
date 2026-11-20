@@ -23,10 +23,11 @@ enum Entry {
 
 struct HearthApp: App {
     @StateObject private var store = MachineStore()
+    @StateObject private var updates = AppUpdateStore()
 
     var body: some Scene {
         MenuBarExtra {
-            MenuView(store: store, openConsole: { NativeController.shared.show(machines: store) })
+            MenuView(store: store, updates: updates, openConsole: { NativeController.shared.show(machines: store) })
         } label: {
             MenuBarLabel(store: store)
         }

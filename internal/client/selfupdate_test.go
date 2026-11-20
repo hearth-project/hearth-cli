@@ -131,6 +131,25 @@ func TestAutoUpdateSkip(t *testing.T) {
 	}
 }
 
+func TestVersionNewer(t *testing.T) {
+	for _, c := range []struct {
+		current, served string
+		want            bool
+	}{
+		{"0.1.0", "0.2.0", true},
+		{"0.1.0-20261118.1200", "0.1.0-20261118.1300", true},
+		{"0.1.0-20261118.1300", "0.1.0-20261118.1200", false},
+		{"0.1.0", "0.1.0", false},
+		{"0.1.0-dev", "0.1.0-20261118.1200", true},
+		{"", "0.1.0", false},
+		{"0.1.0", "", false},
+	} {
+		if got := VersionNewer(c.current, c.served); got != c.want {
+			t.Errorf("VersionNewer(%q, %q) = %v, want %v", c.current, c.served, got, c.want)
+		}
+	}
+}
+
 // The daemon keeps a branch build that has the release's version (the
 // release would rewrite config it does not know); hearth self-update still
 // replaces it.

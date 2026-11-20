@@ -191,6 +191,7 @@ Generated from `hearth --help` by `hearth docs cli > docs/cli.md`; every command
 | [`hearth app admin-data`](#hearth-app-admin-data) | Print the administration pages' documents as JSON (admin accounts only; the macOS app reads it) |
 | [`hearth app admin-call`](#hearth-app-admin-call) | Send one request to /v1/admin/... as the signed-in admin and print the JSON reply (the macOS app's admin actions use it) |
 | [`hearth app call`](#hearth-app-call) | Send one request to /v1/me... or /v1/admin/... as the signed-in user and print the JSON reply (the macOS app's actions use it) |
+| [`hearth app update`](#hearth-app-update) | Check for a newer macOS menu bar app and install it after confirmation |
 | [`hearth app install`](#hearth-app-install) | Install (or update) the menu bar app from your server into ~/Applications and start it |
 | [`hearth app open`](#hearth-app-open) | Start the menu bar app |
 | [`hearth app uninstall`](#hearth-app-uninstall) | Quit and remove the menu bar app |
@@ -2202,6 +2203,20 @@ Send one request to /v1/me... or /v1/admin/... as the signed-in user and print t
 
 ```text
 hearth app call METHOD PATH [JSON-BODY]
+```
+
+## hearth app update
+
+Check for a newer macOS menu bar app and install it after confirmation
+
+```text
+hearth app update [flags]
+
+Flags:
+      --check[=true|false]       only check whether an update is available
+      --current-version string   version currently running in the app bundle
+      --json[=true|false]        print the result as JSON
+      --yes[=true|false]         download, replace and restart the app
 ```
 
 ## hearth app install
