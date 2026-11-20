@@ -5,6 +5,8 @@ import AppKit
 /// sentence is on the clipboard as well, for when Codex is not installed or
 /// the link does not open it.
 enum Actions {
+    static let githubURL = URL(string: "https://github.com/hearth-project/hearth-cli")!
+
     static func askCodex(_ prompt: String) -> String {
         copy(prompt)
         var c = URLComponents()
@@ -46,6 +48,34 @@ enum Actions {
         }
         NSWorkspace.shared.open(url)
         return "已在终端打开 hearth login"
+    }
+
+    /// Shows a short overview of Hearth's capabilities without opening the
+    /// web console or asking the user to run a command.
+    static func showAbout() {
+        let version = (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "未知版本"
+        let alert = NSAlert()
+        alert.messageText = "关于 Hearth"
+        alert.informativeText = """
+        Hearth \(version)
+
+        让你的 coding agents 在多台机器之间保持连续工作。
+
+        • 查看所有机器的在线状态、环境和 SSH 连接
+        • 恢复 Codex、Claude Code 和 Comate 的会话与记忆
+        • 管理个人和团队共享的 Skills、Agents 与凭证
+        • 远程恢复机器环境，直接连接其他机器
+        • 在机器之间高速传输文件和文件夹
+        • 在菜单栏快速打开控制台和团队功能
+        """
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "好")
+        alert.runModal()
+    }
+
+    /// Opens the public Hearth source repository in the user's default browser.
+    static func openGitHub() {
+        NSWorkspace.shared.open(githubURL)
     }
 
     static func copy(_ s: String) {

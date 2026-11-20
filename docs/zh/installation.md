@@ -140,6 +140,8 @@ hearth self-update --auto off      # 本机关闭自动更新（on 重新打开�
 
 服务器端用 `hearth server --no-client-auto-update` 可以让所有客户端都不自动更新（手动 `self-update` 仍可用）。
 
+Mac 菜单栏小程序会在启动后每 30 分钟检查一次服务端版本，在菜单里显示「更新 Hearth」；确认后下载、校验并重启小程序。也可以直接执行 `hearth app update --check` 或 `hearth app update --yes`。
+
 ## 卸载
 
 ```bash

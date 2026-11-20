@@ -96,6 +96,33 @@ func AutoUpdateSkip(current, served string) string {
 	return "the server's build has the same version " + served + " (this one is another build of it; hearth self-update replaces it)"
 }
 
+// VersionNewer reports whether served is newer than current. Release builds
+// use the same version format as the daemon, while development builds may
+// carry a suffix that is intentionally not part of the release ordering.
+// Unknown versions are treated as different so a caller that has an app
+// bundle without a stamped version can still offer the server's build.
+func VersionNewer(current, served string) bool {
+	current = strings.TrimSpace(current)
+	served = strings.TrimSpace(served)
+	if current == "" || served == "" || current == served {
+		return false
+	}
+	cv, cok := releaseParts(current)
+	sv, sok := releaseParts(served)
+	if !cok || !sok {
+		return true
+	}
+	for i := range sv {
+		switch {
+		case sv[i] > cv[i]:
+			return true
+		case sv[i] < cv[i]:
+			return false
+		}
+	}
+	return false
+}
+
 // SelfUpdate replaces the binary at exe with the server's build for this
 // platform when their checksums differ. The download is verified against
 // the manifest and swapped in atomically (rename in the same directory).

@@ -153,7 +153,7 @@ scripts/build-dist.sh $D/dist <version>
 hearth server restart --data $D
 ```
 
-Online clients' daemons then update themselves within 30 minutes (refreshing the `hearth` skill in their agents too); `hearth self-update` updates right away. Start the server with `--no-client-auto-update` to stop clients from updating by themselves.
+Online clients' daemons then update themselves within 30 minutes (refreshing the `hearth` skill in their agents too); `hearth self-update` updates right away. Start the server with `--no-client-auto-update` to stop clients from updating by themselves. The Mac menu bar app checks the same served version in the background, shows *Update Hearth* in its menu when one is available, and replaces and reopens itself after the user confirms.
 
 To offer the Mac menu bar app (`hearth app install`), build it on a Mac and put the zip next to the binaries; the server picks it up at its next restart:
 

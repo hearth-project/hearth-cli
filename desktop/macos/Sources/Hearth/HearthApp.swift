@@ -4,6 +4,11 @@ import SwiftUI
 @main
 enum Entry {
     @MainActor static func main() {
+        // The menu no longer manages a login item. Remove registrations
+        // created by older versions so upgrading does not keep Hearth in the
+        // user's login items unexpectedly.
+        try? SMAppService.mainApp.unregister()
+
         // `Hearth --snapshot <machines.json> <dir>` renders the menu to PNG
         // files and exits (CI checks the layout without a menu bar).
         let args = CommandLine.arguments
@@ -23,10 +28,11 @@ enum Entry {
 
 struct HearthApp: App {
     @StateObject private var store = MachineStore()
+    @StateObject private var updates = AppUpdateStore()
 
     var body: some Scene {
         MenuBarExtra {
-            MenuView(store: store, openConsole: { NativeController.shared.show(machines: store) })
+            MenuView(store: store, updates: updates, openConsole: { NativeController.shared.show(machines: store) })
         } label: {
             MenuBarLabel(store: store)
         }
@@ -39,29 +45,5 @@ struct MenuBarLabel: View {
     @ObservedObject var store: MachineStore
     var body: some View {
         Image(systemName: store.hasError ? "flame.fill" : "flame")
-    }
-}
-
-/// Start Hearth when the user logs in (macOS 13 login items), as a row of
-/// the dropdown's bottom menu with a switch at the end.
-struct LoginItemRow: View {
-    @State private var on = SMAppService.mainApp.status == .enabled
-    @State private var hover = false
-    var body: some View {
-        Button { set(!on) } label: {
-            MenuRowLabel(icon: "sunrise", title: "登录时启动", hover: hover) {
-                Toggle("", isOn: Binding(get: { on }, set: set))
-                    .toggleStyle(.switch).controlSize(.mini).labelsHidden()
-            }
-        }
-        .buttonStyle(RowPressStyle())
-        .onHover { hover = $0 }
-    }
-
-    private func set(_ v: Bool) {
-        do {
-            if v { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
-        } catch {}
-        on = SMAppService.mainApp.status == .enabled
     }
 }

@@ -28,7 +28,7 @@ enum Snapshot {
         }
         for (name, scheme) in [("light", ColorScheme.light), ("dark", ColorScheme.dark)] {
             for (suffix, open, s) in [("", nil as String?, store), ("-open", first, store), ("-expired", nil as String?, expired)] {
-                let view = MenuView(store: s, openConsole: {}, snapshot: true, expanded: open)
+                let view = MenuView(store: s, updates: AppUpdateStore(start: false), openConsole: {}, snapshot: true, expanded: open)
                     .environment(\.colorScheme, scheme)
                 let host = NSHostingView(rootView: view)
                 host.appearance = NSAppearance(named: scheme == .dark ? .darkAqua : .aqua)
