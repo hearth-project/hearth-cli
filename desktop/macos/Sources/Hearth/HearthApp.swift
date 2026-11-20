@@ -1,8 +1,14 @@
+import ServiceManagement
 import SwiftUI
 
 @main
 enum Entry {
     @MainActor static func main() {
+        // The menu no longer manages a login item. Remove registrations
+        // created by older versions so upgrading does not keep Hearth in the
+        // user's login items unexpectedly.
+        try? SMAppService.mainApp.unregister()
+
         // `Hearth --snapshot <machines.json> <dir>` renders the menu to PNG
         // files and exits (CI checks the layout without a menu bar).
         let args = CommandLine.arguments
