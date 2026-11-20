@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.1.3 — 2026-11-20
+
+- The macOS menu bar app checks its Hearth server for updates. Choose **Update
+  Hearth** to confirm, download and verify the new app, then reopen it. The
+  **About** menu offers a manual update check. The app removes the login item
+  registered by older versions when it launches.
 - The macOS library page supports selecting multiple personal skills and agents
   and sharing them to one or more teams in one action. Team packages now show
   total calls and the number of members who used them, ordered by recent
