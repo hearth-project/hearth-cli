@@ -150,7 +150,14 @@ struct TeamPackage: Decodable, Identifiable, Hashable {
     var published_by: String
     var published_at: Int64
     var uses: Int64?
+    var users: Int64?
     var id: String { type + "/" + name }
+}
+
+struct TeamMemberUsage: Decodable, Hashable, Identifiable {
+    var email: String
+    var count: Int64
+    var id: String { email }
 }
 
 struct Team: Decodable, Identifiable, Hashable {

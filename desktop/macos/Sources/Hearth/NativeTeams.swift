@@ -139,7 +139,10 @@ struct TeamsPage: View {
                 if let d = p.description, !d.isEmpty { Text(d).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(2) }
             }
             Spacer()
-            Text("\(p.published_by) · \(Fmt.ago(p.published_at))").font(.system(size: 10)).foregroundStyle(.tertiary)
+            VStack(alignment: .trailing, spacing: 2) {
+                Text("\((p.uses ?? 0)) 次调用 · \((p.users ?? 0)) 人").font(.system(size: 10, weight: .medium)).foregroundStyle(Theme.blue)
+                Text("\(p.published_by) · \(Fmt.ago(p.published_at))").font(.system(size: 10)).foregroundStyle(.tertiary)
+            }
             Image(systemName: "chevron.right").font(.system(size: 10, weight: .semibold)).foregroundStyle(.quaternary).padding(.top, 2)
         }
         .padding(.vertical, 5)
@@ -334,6 +337,7 @@ struct PackageSheet: View {
     var pkg: TeamPackage
     var close: () -> Void
     @State private var detail: PackageDetail?
+    @State private var usage: [TeamMemberUsage]?
     @State private var failed: String?
 
     private var linked: Bool { portal.settings?.links?.contains { $0.type == pkg.type && $0.name == pkg.name } ?? (detail?.linked ?? false) }
@@ -354,9 +358,10 @@ struct PackageSheet: View {
                     .help("等同于 hearth lib link \(pkg.type == "agent" ? "--agent " : "")\(team):\(pkg.name)")
             }
             Divider()
-            Group {
-                if let d = detail {
-                    ScrollView {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 10) {
+                    usageView
+                    if let d = detail {
                         VStack(alignment: .leading, spacing: 10) {
                             if let vs = d.versions, !vs.isEmpty {
                                 VStack(alignment: .leading, spacing: 3) {
@@ -374,11 +379,11 @@ struct PackageSheet: View {
                             Text(d.item?.content ?? "").font(.system(size: 11.5, design: .monospaced))
                                 .textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
                         }
+                    } else if let f = failed {
+                        Text(f).font(.system(size: 12)).foregroundStyle(Theme.bad)
+                    } else {
+                        HStack { Spacer(); ProgressView(); Spacer() }.padding(.top, 40)
                     }
-                } else if let f = failed {
-                    Text(f).font(.system(size: 12)).foregroundStyle(Theme.bad)
-                } else {
-                    HStack { Spacer(); ProgressView(); Spacer() }.padding(.top, 40)
                 }
             }
             .frame(maxHeight: .infinity, alignment: .top)
@@ -387,9 +392,47 @@ struct PackageSheet: View {
         .frame(width: 620, height: 560)
         .task {
             let path = "/v1/me/teams/\(adminPath(team))/packages/\(adminPath(pkg.type))/\(adminPath(pkg.name))"
-            guard let d = await portal.call("GET", path, reload: false) else { failed = portal.notice ?? "读取失败"; portal.notice = nil; return }
-            do { detail = try JSONDecoder().decode(PackageDetail.self, from: d) } catch { failed = "读取失败：\(error.localizedDescription)" }
+            if let d = await portal.call("GET", path, reload: false) {
+                do { detail = try JSONDecoder().decode(PackageDetail.self, from: d) }
+                catch { failed = "读取失败：\(error.localizedDescription)" }
+            } else {
+                failed = portal.notice ?? "读取失败"
+                portal.notice = nil
+            }
+            let usagePath = path + "/usage"
+            if let d = await portal.call("GET", usagePath, reload: false) {
+                usage = try? JSONDecoder().decode([TeamMemberUsage].self, from: d)
+            }
         }
+    }
+
+    @ViewBuilder
+    private var usageView: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("最近 30 天调用").font(.system(size: 12, weight: .semibold)).foregroundStyle(.secondary)
+            if let usage {
+                if usage.isEmpty {
+                    Text("暂无调用记录").font(.system(size: 11)).foregroundStyle(.tertiary)
+                } else {
+                    ForEach(Array(usage.enumerated()), id: \.element.id) { i, row in
+                        HStack(spacing: 8) {
+                            Text("\(i + 1)").font(.system(size: 10, design: .monospaced)).foregroundStyle(.tertiary).frame(width: 18, alignment: .trailing)
+                            Text(row.email).font(.system(size: 11.5))
+                            Spacer()
+                            Text("\(row.count) 次").font(.system(size: 11, weight: .medium)).foregroundStyle(Theme.blue)
+                        }
+                    }
+                }
+            } else {
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.small)
+                    Text("加载调用统计…").font(.system(size: 11)).foregroundStyle(.tertiary)
+                }
+            }
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.card, in: RoundedRectangle(cornerRadius: 8))
     }
 }
 

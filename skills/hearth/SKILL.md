@@ -182,6 +182,11 @@ hearth team leave <name>
   the search returns nothing, the person has not registered yet; ask them to
   register Hearth and use the invite-code flow.
 
+- The macOS library page can select several personal skills or agents and share
+  them to one or more teams at once. Team packages show recent call totals and
+  member counts, and opening one shows the per-member ranking for the last 30
+  days.
+
 - Automatic sharing: the user's 5 most used skills and 5 most used agents of their own library (all machines, last 30 days) are shared with every team where they are maintainer or owner, and republished when they change (the daemon, every 20 min; `hearth team share-top [--dry-run]` now). Tell the user when they join or create a team; `[teams] share_top = 0` turns it off, `share_exclude` keeps items private. Items blocked by the secret scan are not shared.
 - Team items get invoked: each team's 20 most used skills and 20 most used agents (by its members, last 30 days) are linked automatically on every machine of a member, so they sit in the agents' own skill and agent lists like the user's own (`[teams] use_top`, `use_exclude`; unlinking one keeps it out). The user's own copy of the same name wins. The other team skills are found by the `hearth` MCP tools `search_skills` / `list_skills` and loaded by `get_skill`, and their use counts toward the team ranking. If the user asks why a team skill was not used: check `hearth team use-top --dry-run` and that skill search is registered (`hearth status`, "skill search on").
 - Invite codes default to `maintainer` (can share); use `--role member` for use-only. Ask before sharing private skills; the secret scan blocks obvious credentials (`--allow-secrets` only after the user checked).

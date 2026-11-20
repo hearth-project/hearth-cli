@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- The macOS library page supports selecting multiple personal skills and agents
+  and sharing them to one or more teams in one action. Team packages now show
+  total calls and the number of members who used them, ordered by recent
+  usage; opening a package shows each member's last-30-day count.
 - Team owners and maintainers can invite registered Hearth users directly from
   the macOS Teams page. The dialog searches by email prefix, adds the selected
   account immediately without a confirmation step, and keeps the existing
