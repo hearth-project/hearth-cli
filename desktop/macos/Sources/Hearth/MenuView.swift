@@ -12,6 +12,7 @@ struct MenuView: View {
     @State var note: String? = nil
     @State private var copying = false
     @State private var confirmUpdate = false
+    @State private var aboutHover = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// Height of the machine list. A MenuBarExtra window sizes itself to its
     /// content's ideal size and a ScrollView has none, so the list gets this
@@ -202,24 +203,6 @@ struct MenuView: View {
             }
             .disabled(copying || store.loginExpired)
             .help("复制一条一次性命令，在新机器上运行即安装 Hearth 并登录")
-            MenuRow(icon: updates.info?.available == true ? "arrow.down.circle.fill" : "arrow.clockwise",
-                    title: updates.info?.available == true ? "更新 Hearth \(updates.latestVersion)" : "检查更新",
-                    action: {
-                        if updates.info?.available == true {
-                            confirmUpdate = true
-                        } else {
-                            Task { await updates.check() }
-                        }
-                    }) {
-                if updates.updating || updates.checking {
-                    ProgressView().controlSize(.small).scaleEffect(0.7)
-                } else if let error = updates.error {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.system(size: 10)).foregroundStyle(Theme.warn).help(error)
-                } else if updates.info?.available == true {
-                    Text("可用").font(.system(size: 11, weight: .medium)).foregroundStyle(Theme.accent)
-                }
-            }
             MenuRow(icon: "arrow.clockwise", title: "刷新", action: { Task { await store.refresh() } }) {
                 if let err = store.error, store.list != nil {
                     Label("刷新失败", systemImage: "exclamationmark.triangle.fill")
@@ -229,7 +212,7 @@ struct MenuView: View {
                         .font(.system(size: 11)).foregroundStyle(.tertiary)
                 }
             }
-            LoginItemRow()
+            aboutMenu
             Divider().opacity(0.5).padding(.horizontal, 8).padding(.vertical, 4)
             MenuRow(icon: "power", title: "退出 Hearth", action: { NSApp.terminate(nil) })
         }
@@ -241,6 +224,42 @@ struct MenuView: View {
                 withAnimation(Theme.motion(Theme.spring, reduce: reduceMotion)) { note = nil }
             }
         }
+    }
+
+    private var aboutMenu: some View {
+        Menu {
+            Button {
+                Task {
+                    await updates.check()
+                    if updates.info?.available == true {
+                        confirmUpdate = true
+                    }
+                }
+            } label: {
+                Label("检查更新", systemImage: "arrow.clockwise")
+            }
+            Button(action: Actions.showAbout) {
+                Label("关于 Hearth", systemImage: "info.circle")
+            }
+            Divider()
+            Button(action: Actions.openGitHub) {
+                Label("GitHub 开源", systemImage: "chevron.left.forwardslash.chevron.right")
+            }
+        } label: {
+            MenuRowLabel(icon: "info.circle", title: "关于", hover: aboutHover) {
+                if updates.info?.available == true {
+                    Text("有更新")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(Theme.accent)
+                }
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .menuStyle(.borderlessButton)
+        .buttonStyle(RowPressStyle())
+        .onHover { aboutHover = $0 }
     }
 }
 
