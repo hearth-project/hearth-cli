@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- macOS app: **About** opens a submenu beside the menu, like other macOS
+  submenus, instead of a pop-up button that dropped below it. **Check for
+  updates** reports its result: it asks to update when a newer app is served,
+  and otherwise says the app is up to date, that the server has no app, or why
+  the check failed.
+
 ## 0.1.3 — 2026-11-20
 
 - The macOS menu bar app checks its Hearth server for updates. Choose **Update
