@@ -74,6 +74,46 @@ enum Snapshot {
                 print(path)
             }
         }
+        renderSheets(portal: portal, outDir: outDir)
+    }
+
+    /// The invite sheet in each of its states, from sample accounts (no
+    /// network), and the repository sheet opened to set a commit prefix.
+    @MainActor static func renderSheets(portal: PortalStore, outDir: String) {
+        let team = portal.teams.first { $0.canPublish } ?? Team(name: "demo", role: "owner", members: [], packages: [])
+        let people = [
+            TeamMemberSearchResult(email: "zhangsan@example.com", role: nil, in_team: false),
+            TeamMemberSearchResult(email: "zhangwei@example.com", role: "maintainer", in_team: true),
+            TeamMemberSearchResult(email: "zhangxiaoming.with.a.long.name@example.com", role: nil, in_team: false),
+        ]
+        let code = TeamInviteCode(code: "team-7k2mq9xw4hb3ncfd", expires_at: Int64(Date().timeIntervalSince1970) + 7 * 86400,
+                              role: "member", max_uses: 1)
+        let states: [(String, InvitePreview)] = [
+            ("search", InvitePreview(mode: .account, query: "zhang", users: people, selected: people[0].email)),
+            ("none", InvitePreview(mode: .account, query: "lisi")),
+            ("code-new", InvitePreview(mode: .code)),
+            ("code", InvitePreview(mode: .code, code: code)),
+        ]
+        var sheets: [(String, AnyView)] = states.map { s in
+            ("invite-" + s.0, AnyView(MemberInviteSheet(portal: portal, team: team, close: {}, preview: s.1)))
+        }
+        if team.role == "owner" {
+            sheets.append(("repo-prefix", AnyView(RepoSheet(portal: portal, team: team, focusPrefix: true) {})))
+        }
+        for (name, scheme) in [("light", ColorScheme.light), ("dark", ColorScheme.dark)] {
+            for (sheet, v) in sheets {
+                let view = v.background(Color(nsColor: .windowBackgroundColor)).environment(\.colorScheme, scheme)
+                let host = NSHostingView(rootView: view)
+                host.appearance = NSAppearance(named: scheme == .dark ? .darkAqua : .aqua)
+                host.frame.size = host.fittingSize
+                host.layoutSubtreeIfNeeded()
+                guard let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) else { continue }
+                host.cacheDisplay(in: host.bounds, to: rep)
+                let path = (outDir as NSString).appendingPathComponent("sheet-\(sheet)-\(name).png")
+                try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path))
+                print(path)
+            }
+        }
     }
 
     /// The admin pages (HEARTH_ADMIN_FIXTURE = `hearth app admin-data --json` output).
