@@ -167,7 +167,7 @@ func serverCmd() *cobra.Command {
 						stop()
 					}
 				}()
-				log.Printf("public offline bundles available at %s/bootstrap/ (one-time install commands include checksums)", dist.BootstrapURL)
+				log.Printf("public offline bundles available at %s/bootstrap/ (checksums in the HTTPS /v1/dist manifest)", dist.BootstrapURL)
 			}
 			scheme := "http"
 			if tlsCert != "" {

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Add machine** copies a short curl command. The installer reports the detected OS version and minimum requirement in English before downloading the client.
+
 ## 0.1.3 — 2026-11-20
 
 - The macOS menu bar app checks its Hearth server for updates. Choose **Update
