@@ -8,6 +8,19 @@
   updates** reports its result: it asks to update when a newer app is served,
   and otherwise says the app is up to date, that the server has no app, or why
   the check failed.
+- The macOS app's **Invite members** sheet was redesigned. Pick the new
+  member's role, then add a registered Hearth user directly or make an invite
+  code for one person or any number of people (valid for 7 days). With a code
+  the sheet shows `hearth team join <code>` and copies the server's install
+  command with `--team <code>` for people who do not use Hearth yet. Team
+  members are shown as compact chips sorted by role.
+- The macOS app's Teams page explains a refused repository sync in Chinese.
+  When the repository's hooks want an issue id (icode's HCK_F508), an owner can
+  choose **设置提交前缀…** right there; the sync's notes are listed one by one,
+  and **详情** shows the syncing machine's report.
+- `POST /v1/me/teams/{team}/invite` accepts the CLI's optional invite body
+  (`role`, `ttl_hours`, `max_uses`). Without a body it still makes a maintainer
+  code for 7 days and any number of uses, so older apps keep working.
 
 ## 0.1.3 — 2026-11-20
 

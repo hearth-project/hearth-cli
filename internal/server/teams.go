@@ -244,6 +244,13 @@ func (s *Server) handleCreateTeamInvite(w http.ResponseWriter, r *http.Request) 
 	if !readJSON(w, r, &req) {
 		return
 	}
+	s.createInvite(w, o, userOf(r), req)
+}
+
+// createInvite makes an invite code for team o: maintainer, a week and
+// unlimited uses unless the request says otherwise, never a role above the
+// inviter's. Both the CLI's and the app's invite endpoints use it.
+func (s *Server) createInvite(w http.ResponseWriter, o teamRow, uid int64, req api.CreateInviteRequest) {
 	if req.Role == "" {
 		req.Role = "maintainer"
 	}
@@ -263,7 +270,7 @@ func (s *Server) handleCreateTeamInvite(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	exp := s.now() + int64(req.TTLHours)*3600
-	code, err := s.st.createTeamInvite(o.ID, userOf(r), req.Role, s.now(), exp, req.MaxUses)
+	code, err := s.st.createTeamInvite(o.ID, uid, req.Role, s.now(), exp, req.MaxUses)
 	if err != nil {
 		s.writeStoreErr(w, err)
 		return

@@ -116,6 +116,10 @@ struct Me: Decodable {
     var top_agents: [NameCount]
     var feed: [FeedItem]
     var pending_changes: Int?
+    /// The server's install one-liner, and how new accounts sign up
+    /// (open, approval, invite or closed).
+    var install: String?
+    var registration: String?
 }
 
 struct LibraryItem: Decodable, Identifiable, Hashable {

@@ -345,20 +345,20 @@ func (s *Server) apiMyTeams(w http.ResponseWriter, _ *http.Request, c userCtx) {
 	writeJSON(w, http.StatusOK, out)
 }
 
-// apiMyTeamInvite: maintainers and owners make an invite code (7 days).
+// apiMyTeamInvite: maintainers and owners make an invite code. The body is
+// optional and the same as the CLI's (role, ttl_hours, max_uses); without
+// one the code is a maintainer's, for 7 days and any number of uses.
 func (s *Server) apiMyTeamInvite(w http.ResponseWriter, r *http.Request, c userCtx) {
 	o, err := s.st.membership(c.uid, r.PathValue("team"), "maintainer")
 	if err != nil {
 		s.writeStoreErr(w, err)
 		return
 	}
-	exp := s.now() + 7*86400
-	code, err := s.st.createTeamInvite(o.ID, c.uid, "maintainer", s.now(), exp, 0)
-	if err != nil {
-		s.writeStoreErr(w, err)
+	var req api.CreateInviteRequest
+	if !readOptionalJSON(w, r, &req) {
 		return
 	}
-	writeJSON(w, http.StatusCreated, map[string]any{"code": code, "expires_at": exp})
+	s.createInvite(w, o, c.uid, req)
 }
 
 // apiMyTeamMemberSearch looks up active Hearth accounts for the direct-add
