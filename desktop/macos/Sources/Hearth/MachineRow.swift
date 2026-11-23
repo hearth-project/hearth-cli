@@ -27,7 +27,7 @@ struct MachineRow: View {
                     MachineIcon(m: m)
                     HStack(spacing: 6) {
                         Text(m.title)
-                            .font(.system(size: 13, weight: m.env == "error" ? .semibold : .regular))
+                            .font(.system(size: 13, weight: m.failing ? .semibold : .regular))
                             .lineLimit(1)
                             .truncationMode(.middle)
                         if m.isThis { Badge(text: "本机", color: .secondary) }
@@ -106,7 +106,7 @@ struct MachineRow: View {
                         HStack(alignment: .firstTextBaseline, spacing: 7) {
                             Image(systemName: p.level == "error" ? "xmark.circle.fill" : "exclamationmark.circle.fill")
                                 .font(.system(size: 10))
-                                .foregroundStyle(p.level == "error" ? Theme.bad : Theme.warn)
+                                .foregroundStyle(!m.online ? Theme.idle : p.level == "error" ? Theme.bad : Theme.warn)
                             Text(Words.problem(p)).font(.system(size: 12)).fixedSize(horizontal: false, vertical: true)
                         }
                     }
@@ -205,7 +205,8 @@ struct MachineIcon: View {
 }
 
 /// The environment state at the end of a row: a check when all is well, a
-/// coloured count of problems otherwise.
+/// coloured count of problems otherwise, gray while the machine is offline
+/// (its last report cannot be acted on until it is back).
 struct EnvGlyph: View {
     var m: Machine
     var body: some View {
@@ -214,7 +215,7 @@ struct EnvGlyph: View {
             case "ok":
                 Image(systemName: "checkmark.circle.fill").foregroundStyle(Theme.ok.opacity(0.85))
             case "error", "warn":
-                let c = Theme.envColor(m.env)
+                let c = m.online ? Theme.envColor(m.env) : Theme.idle
                 HStack(spacing: 3) {
                     Image(systemName: m.env == "error" ? "xmark.circle.fill" : "exclamationmark.circle.fill")
                     if !m.problems.isEmpty { Text("\(m.problems.count)").monospacedDigit() }

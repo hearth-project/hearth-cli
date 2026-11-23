@@ -86,7 +86,7 @@ struct MenuView: View {
         guard store.list != nil else { return store.error == nil ? "正在读取机器…" : "读取失败" }
         if store.machines.isEmpty { return "没有在线的机器" }
         var s = "\(store.onlineCount) 台在线"
-        let bad = store.machines.filter { $0.env == "error" }.count
+        let bad = store.machines.filter(\.failing).count
         if bad > 0 { s += " · \(bad) 台有问题" } else if store.attentionCount == 0 { s += " · 环境都正常" }
         return s
     }
@@ -179,7 +179,7 @@ struct MenuView: View {
                 Text(title).font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
                 Text("\(ms.count)").font(.system(size: 11)).foregroundStyle(.tertiary)
                 Spacer()
-                let bad = ms.filter { $0.env == "error" }.count
+                let bad = ms.filter(\.failing).count
                 if bad > 0 {
                     Text("\(bad) 台需要处理").font(.system(size: 11, weight: .medium)).foregroundStyle(Theme.bad)
                 }

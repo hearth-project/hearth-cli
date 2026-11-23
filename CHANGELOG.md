@@ -32,6 +32,10 @@
 - The macOS app reports a `hearth` command that ran past its time limit as a
   timeout instead of "hearth 退出码 15", and opening the menu after a failed
   refresh tries again.
+- The macOS menu draws an offline machine's environment problems in gray and
+  leaves them out of 「需要处理」, the header's 「台有问题」 count and the
+  filled menu bar flame. Its last report cannot be acted on until the machine
+  is back online; the problems stay listed in its details.
 
 ## 0.1.3 — 2026-11-20
 
