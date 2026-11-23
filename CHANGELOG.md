@@ -21,6 +21,13 @@
 - `POST /v1/me/teams/{team}/invite` accepts the CLI's optional invite body
   (`role`, `ttl_hours`, `max_uses`). Without a body it still makes a maintainer
   code for 7 days and any number of uses, so older apps keep working.
+- The macOS menu bar dropdown trims its window back to the menu when the
+  window is left taller than the menu, which showed as an empty band of glass
+  above it. Each trim is logged under the subsystem
+  `io.github.hearth-project.menubar`.
+- The macOS app reports a `hearth` command that ran past its time limit as a
+  timeout instead of "hearth 退出码 15", and opening the menu after a failed
+  refresh tries again.
 
 ## 0.1.3 — 2026-11-20
 

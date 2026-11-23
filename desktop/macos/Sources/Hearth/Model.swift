@@ -75,12 +75,14 @@ enum HearthCLI {
         case notInstalled
         case tooOld
         case loginExpired
+        case timedOut(Int)
         case failed(String)
         var errorDescription: String? {
             switch self {
             case .notInstalled: return "没有找到 hearth 命令。先在终端安装并登录 Hearth。"
             case .tooOld: return "hearth 命令版本太旧。在终端运行 hearth self-update 后再刷新。"
             case .loginExpired: return "登录已过期或还没有登录，重新登录后才能查看机器。"
+            case .timedOut(let s): return "hearth 命令超过 \(s) 秒没有返回，已停止。"
             case .failed(let s): return s
             }
         }
@@ -107,6 +109,11 @@ enum HearthCLI {
                 let data = out.fileHandleForReading.readDataToEndOfFile()
                 let errData = err.fileHandleForReading.readDataToEndOfFile()
                 p.waitUntilExit()
+                if p.terminationReason == .uncaughtSignal, DispatchTime.now() >= deadline {
+                    // Stopped by the timer above, not a failure of its own.
+                    cont.resume(throwing: Failure.timedOut(Int(timeout)))
+                    return
+                }
                 if p.terminationStatus != 0 {
                     var msg = String(data: errData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                     if msg.hasPrefix("error: ") { msg = String(msg.dropFirst(7)) }
