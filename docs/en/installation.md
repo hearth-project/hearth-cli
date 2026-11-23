@@ -26,17 +26,17 @@ curl -fsSL https://<server>/install.sh | sh -s -- --install-only
 
 ### One-time install command (no password on the new machine)
 
-In the Hearth app on a Mac (`hearth app install`) choose **Add machine**, or run `hearth machine install-command` on any logged-in machine. The command downloads the script before passing the one-time login arguments, equivalent on success to
+In the Hearth app on a Mac (`hearth app install`) choose **Add machine**, or run `hearth machine install-command` on any logged-in machine. For an HTTPS server with a publicly trusted certificate, the copied command looks like this
 
 ```bash
-curl -fsSL https://<server>/install.sh | sh -s -- --email you@example.com --token <id>.<secret>
+setup=$(curl -fsSL https://<server>/install.sh) && sh -c "$setup" sh --email you@example.com --token <id>.<secret>
 ```
 
 and logs the new machine in without the master password. It works once and for 30 minutes; make a new one for each machine. Your vault key is wrapped with a key derived from a random secret that only the command holds, so the server still sees ciphertext only. Treat the command like a password until it has been used: it stays in the new machine's shell history, but it no longer works after its first use. `hearth setup --token <id>.<secret>` (or `HEARTH_INSTALL_TOKEN`) does the same without the installer.
 
 ### System requirements and manual offline installs
 
-**Add machine** fetches the installer from the main HTTPS server. Use curl with TLS 1.2 or newer. The installer checks the OS and CPU before it writes files or runs setup. The CLI requires Linux kernel 3.2+ or macOS 12+, on x86_64 or ARM64.
+**Add machine** fetches the installer from the main HTTPS server. A failed first download returns curl’s error directly. Use curl with TLS 1.2 or newer. The installer checks the OS and CPU before it writes files or runs setup. The CLI requires Linux kernel 3.2+ or macOS 12+, on x86_64 or ARM64.
 
 For a supported machine with an older TLS library, an operator can enable `--bootstrap-addr <internal-ip>:8788` and manually transfer a matching archive from `/bootstrap/hearth-<os>-<arch>.tar`. Obtain its SHA-256 from the `bundles` field of `/v1/dist` over trusted HTTPS on a signed-in machine. Verify the entire archive before extracting it and running `sh install.sh`. Login and sync use the main HTTPS server.
 

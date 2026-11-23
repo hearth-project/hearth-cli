@@ -31,8 +31,8 @@ func TestOfflineBundlesAndPairing(t *testing.T) {
 	}
 	defer s.Close()
 	cmdline := s.installForConsole()
-	if !strings.HasSuffix(cmdline, " | sh") {
-		t.Fatalf("missing standard install pipeline: %s", cmdline)
+	if want := `setup=$(curl -fsSL ` + d.PublicURL + `/install.sh) && sh -c "$setup" sh`; cmdline != want {
+		t.Fatalf("copied command: got %q, want %q", cmdline, want)
 	}
 	if !strings.Contains(cmdline, d.PublicURL+"/install.sh") || strings.Contains(cmdline, d.BootstrapURL) || strings.Contains(cmdline, ".tar") {
 		t.Fatalf("unexpected pairing command: %s", cmdline)
@@ -75,23 +75,33 @@ func TestOfflineBundlesAndPairing(t *testing.T) {
 	// bytes. Do not execute a partial script or silently return success.
 	shim := t.TempDir()
 	curl := filepath.Join(shim, "curl")
-	if err := os.WriteFile(curl, []byte("#!/bin/sh\necho 'touch ran-partial-script'\nexit 35\n"), 0755); err != nil {
+	if err := os.WriteFile(curl, []byte("#!/bin/sh\necho 'touch ran-partial-script'\necho 'curl: (35) TLS handshake failed' >&2\nexit 35\n"), 0755); err != nil {
 		t.Fatal(err)
 	}
 	dir := t.TempDir()
 	run := func() (string, error) {
-		c := exec.Command("sh", "-c", cmdline+" -s -- --email 'me@example.org' --token TOKEN")
+		c := exec.Command("sh", "-c", cmdline+" --email 'me@example.org' --token TOKEN")
 		c.Dir = dir
 		c.Env = []string{"PATH=" + shim + ":" + os.Getenv("PATH")}
 		b, err := c.CombinedOutput()
 		return string(b), err
 	}
 	out, err := run()
-	if err == nil || !strings.Contains(out, "TLS 1.2") {
+	if code, ok := err.(*exec.ExitError); !ok || code.ExitCode() != 35 || !strings.Contains(out, "TLS handshake failed") {
 		t.Fatalf("TLS failure: %v %s", err, out)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "ran-partial-script")); !os.IsNotExist(err) {
 		t.Fatal("ran incomplete download")
+	}
+	// Once the installer has been fetched it can give a Hearth-specific hint.
+	r = httptest.NewRecorder()
+	s.handleInstall(r, httptest.NewRequest("GET", "/install.sh", nil))
+	homeDir := t.TempDir()
+	install := exec.Command("sh", "-s", "--", "--install-only")
+	install.Env = []string{"PATH=" + shim + ":" + os.Getenv("PATH"), "HOME=" + homeDir}
+	install.Stdin = strings.NewReader(r.Body.String())
+	if out, err := install.CombinedOutput(); err == nil || !strings.Contains(string(out), "TLS 1.2 or newer") {
+		t.Fatalf("installer download diagnostic: %v %s", err, out)
 	}
 	if err := os.WriteFile(curl, []byte("#!/bin/sh\ncat <<'SCRIPT'\nprintf '%s\\n' \"$@\"\nSCRIPT\n"), 0755); err != nil {
 		t.Fatal(err)
