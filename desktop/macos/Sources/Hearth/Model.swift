@@ -43,6 +43,12 @@ struct Machine: Decodable, Identifiable, Hashable {
     var title: String { (alias?.isEmpty == false ? alias! : name) }
     var subtitleHost: String? { alias?.isEmpty == false ? name : nil }
     var sshUsable: Bool { !isThis && (ssh == "ok" || ssh == "blocked") }
+    /// An online machine whose environment check failed. An offline
+    /// machine's last report cannot be acted on until it is back, so the
+    /// menu draws it gray and leaves it out of the counts.
+    var failing: Bool { online && env == "error" }
+    /// An online machine with something to fix or finish.
+    var needsAttention: Bool { online && (env == "error" || env == "warn") }
 }
 
 /// What `hearth machine install-command --json` prints.
@@ -254,8 +260,8 @@ final class MachineStore: ObservableObject {
     /// How many machines are left out for being offline too long.
     var hiddenCount: Int { (list?.machines.count ?? 0) - machines.count }
     var onlineCount: Int { machines.filter(\.online).count }
-    var attentionCount: Int { machines.filter { $0.env == "error" || $0.env == "warn" }.count }
-    var hasError: Bool { machines.contains { $0.env == "error" } }
+    var attentionCount: Int { machines.filter(\.needsAttention).count }
+    var hasError: Bool { machines.contains(where: \.failing) }
 
     func refresh() async {
         if loading { return }
