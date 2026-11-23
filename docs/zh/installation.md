@@ -26,19 +26,19 @@ curl -fsSL https://<server>/install.sh | sh -s -- --install-only
 
 ### 一次性安装命令（新机器上不用输密码）
 
-在 Mac 上的 Hearth 小程序（`hearth app install`）里选 **新增开发机**，或在任意已登录的机器上运行 `hearth machine install-command`。命令形如
+在 Mac 上的 Hearth 小程序（`hearth app install`）里选 **新增开发机**，或在任意已登录的机器上运行 `hearth machine install-command`。使用受信任证书的 HTTPS 服务器时，复制的命令形如
 
 ```bash
-curl -fsSL https://<server>/install.sh | sh -s -- --email you@example.com --token <id>.<secret>
+setup=$(curl -fsSL https://<server>/install.sh) && sh -c "$setup" sh --email you@example.com --token <id>.<secret>
 ```
 
 新机器用它登录，不用输主密码。命令只能用一次，30 分钟内有效；每台机器各生成一条。你的 vault key 用一个随机密钥加密，这个密钥只在命令里，所以服务器看到的仍然只有密文。命令用掉之前请当作密码对待：它会留在新机器的 shell history 里，但用过一次就失效了。不走安装脚本时，`hearth setup --token <id>.<secret>`（或环境变量 `HEARTH_INSTALL_TOKEN`）效果相同。
 
-### 只有 wget 或 TLS 库过旧的机器
+### 系统要求与手动离线安装
 
-旧版 `curl` 报错 35 时，管理员可以在 `hearth server` 已配置 HTTPS `--public-url` 的基础上加上 `--bootstrap-addr <内网IP>:8788`。目标机需要能访问 `--public-url` 主机名的这个 TCP 端口。此端口只提供公开安装包，默认关闭。
+**新增开发机**通过主服务的 HTTPS 地址下载安装脚本。首次下载失败时终端直接显示 curl 的错误。下载需要支持 TLS 1.2 或以上的 curl。安装器先检查系统版本和 CPU 架构，通过后才写文件和运行 setup。CLI 支持 x86_64 和 ARM64，最低系统版本为 Linux 内核 3.2 或 macOS 12。
 
-在自己已登录的 Mac 上点 **新增开发机**，也可以在已登录的机器上执行 `hearth machine install-command`。把复制的命令粘贴到目标机的普通用户终端即可。命令按系统和架构选包，先用 `wget` 或 `curl` 尝试 HTTPS，失败后从兼容端口下载。命令中带有来自已登录设备的 SHA-256，整包校验通过后才会解包。包内客户端通过正常的 HTTPS 服务兑换一次性登录凭证。目标机需要 `tar`、`sha256sum` 或 `shasum`，Linux 内核需为 3.2 或更新版本，登录和同步需要能访问 HTTPS 主端口。
+系统版本达标但 TLS 库过旧时，管理员可启用 `--bootstrap-addr <内网IP>:8788`，从 `/bootstrap/hearth-<os>-<arch>.tar` 获取对应的离线包。在可信机器上通过已验证的 HTTPS 读取 `/v1/dist` 的 `bundles` 字段，核对整个归档的 SHA-256 后再解包并运行 `sh install.sh`。登录和同步使用主服务的 HTTPS 端口。
 
 ### 自签证书的服务器
 
