@@ -531,14 +531,14 @@ func (s *Server) installForConsole() string {
 	if !strings.HasPrefix(s.dist.PublicURL, "https://") {
 		return s.InstallCommand()
 	}
-	// TLS can fail before install.sh reaches the shell. Buffer each attempt
-	// separately so an empty or partial download never starts setup.
+	// An old CLI appends setup arguments directly to a command that does not
+	// end in "| sh". The final "sh" supplies $0 so all of them reach $@.
+	// Only invoke the installer after one complete, successful transfer.
 	gets := s.installerDownloads(len(s.dist.bundles) != 0)
 	for i, get := range gets {
-		gets[i] = "installer=$(" + get + ")"
+		gets[i] = "setup=$(" + get + ")"
 	}
-	// The client appends setup arguments (including the token) after "sh".
-	return "( " + strings.Join(gets, " || ") + ` && printf '%s\n' "$installer" || echo 'echo "Check server access and curl support for TLS 1.2 or newer." >&2; exit 1' ) | sh`
+	return strings.Join(gets, " || ") + ` && sh -c "$setup" sh`
 }
 
 type feedItem struct {

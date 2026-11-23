@@ -246,7 +246,14 @@ fi
 tmp=$(mktemp)
 trap 'rm -f "$tmp"' EXIT
 printf 'Downloading hearth for %s-%s ...' "$os" "$arch"
-@FETCH@ || { echo; exit 1; }
+@FETCH@ || {
+  rc=$?
+  echo >&2
+  if [ "$rc" -eq 35 ]; then
+    echo "Hearth could not download $BIN. Check server access and curl support for TLS 1.2 or newer." >&2
+  fi
+  exit "$rc"
+}
 if command -v sha256sum >/dev/null 2>&1; then got=$(sha256sum "$tmp" | cut -d' ' -f1); else got=$(shasum -a 256 "$tmp" | cut -d' ' -f1); fi
 if [ "$got" != "$SHA256" ]; then
   echo; echo "hearth: checksum mismatch for downloaded binary" >&2
