@@ -528,10 +528,17 @@ func (s *Server) installForConsole() string {
 	if s.dist == nil {
 		return ""
 	}
-	if len(s.dist.bundles) > 0 {
-		return s.dist.bundleCommand(s.siteProxies())
+	if !strings.HasPrefix(s.dist.PublicURL, "https://") {
+		return s.InstallCommand()
 	}
-	return s.InstallCommand()
+	// An old CLI appends setup arguments directly to a command that does not
+	// end in "| sh". The final "sh" supplies $0 so all of them reach $@.
+	// Only invoke the installer after one complete, successful transfer.
+	gets := s.installerDownloads(len(s.dist.bundles) != 0)
+	for i, get := range gets {
+		gets[i] = "setup=$(" + get + ")"
+	}
+	return strings.Join(gets, " || ") + ` && sh -c "$setup" sh`
 }
 
 type feedItem struct {

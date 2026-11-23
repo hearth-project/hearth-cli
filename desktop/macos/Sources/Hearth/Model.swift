@@ -138,9 +138,11 @@ enum HearthCLI {
 final class AppUpdateStore: ObservableObject {
     @Published var info: AppUpdateInfo?
     @Published var error: String?
-    @Published var checking = false
     @Published var updating = false
     private var timer: Timer?
+    /// The check in flight: another caller (检查更新 while the periodic check
+    /// runs) waits for its answer instead of returning without one.
+    private var running: Task<Void, Never>?
 
     init(start: Bool = true) {
         if start {
@@ -160,9 +162,18 @@ final class AppUpdateStore: ObservableObject {
     }
 
     func check() async {
-        if checking || updating { return }
-        checking = true
-        defer { checking = false }
+        if updating { return }
+        if let running {
+            await running.value
+            return
+        }
+        let t = Task { await ask() }
+        running = t
+        await t.value
+        running = nil
+    }
+
+    private func ask() async {
         do {
             let data = try await HearthCLI.run([
                 "app", "update", "--check", "--json",

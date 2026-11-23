@@ -166,32 +166,34 @@ func (s *Server) siteProxies() []string {
 // proxies it falls back to the first one when the server does not answer
 // directly within a few seconds.
 func (s *Server) InstallCommand() string {
-	cmd := s.installCommand()
-	if ps := s.siteProxies(); cmd != "" && len(ps) > 0 {
-		get, _, _ := strings.Cut(cmd, " | sh")
-		retry := strings.Replace(get, "curl -fsSL", "curl -fsSL -x "+ps[0], 1)
-		get = strings.Replace(get, "curl -fsSL", "curl -fsSL --connect-timeout 5", 1)
-		return "{ " + get + " || " + retry + "; } | sh"
+	gets := s.installerDownloads(false)
+	switch len(gets) {
+	case 0:
+		return ""
+	case 1:
+		return gets[0] + " | sh"
+	default:
+		return "{ " + strings.Join(gets, " || ") + "; } | sh"
 	}
-	return cmd
 }
 
-func (s *Server) installCommand() string {
+func (s *Server) installerDownloads(pin bool) []string {
 	d := s.dist
 	if d == nil {
-		return ""
+		return nil
 	}
-	if d.pin != "" && !d.PinInstall {
-		// Self-signed: -k for the first download only; the installer then
-		// trusts exactly the embedded certificate.
-		return fmt.Sprintf("curl -fsSL -k %s/install.sh | sh", d.PublicURL)
-	}
+	flags := ""
 	if d.pin != "" {
-		// -k only skips CA verification; --pinnedpubkey still aborts unless
-		// the server presents exactly this key.
-		return fmt.Sprintf("curl -fsSL -k --pinnedpubkey '%s' %s/install.sh | sh", d.pin, d.PublicURL)
+		flags = " -k"
+		if pin || d.PinInstall {
+			flags += " --pinnedpubkey '" + d.pin + "'"
+		}
 	}
-	return fmt.Sprintf("curl -fsSL %s/install.sh | sh", d.PublicURL)
+	suffix := flags + " " + d.PublicURL + "/install.sh"
+	if ps := s.siteProxies(); len(ps) > 0 {
+		return []string{"curl -fsSL --connect-timeout 5" + suffix, "curl -fsSL -x " + ps[0] + suffix}
+	}
+	return []string{"curl -fsSL" + suffix}
 }
 
 const installTemplate = `#!/bin/sh
@@ -207,6 +209,20 @@ case "$BIN" in
 @CASES@
   *) echo "hearth: no build for $os-$arch on this server (available: @NAMES@)" >&2; exit 1 ;;
 esac
+
+# Minimum OS versions for the Go 1.26 CLI distributions.
+case "$os" in
+  linux) platform="Linux kernel"; minimum=3.2; release=$(uname -r) ;;
+  darwin) platform=macOS; minimum=12; release=$(SYSTEM_VERSION_COMPAT=0 sw_vers -productVersion) ;;
+esac
+if ! LC_ALL=C awk -v release="$release" -v minimum="$minimum" 'BEGIN {
+  if (release !~ /^[0-9]+[.][0-9]+([.-]|$)/ && release !~ /^[0-9]+$/) exit 1
+  split(release, v, /[.]/); split(minimum, m, /[.]/)
+  exit !(v[1]+0 > m[1]+0 || (v[1]+0 == m[1]+0 && v[2]+0 >= m[2]+0))
+}'; then
+  echo "Hearth cannot run on $platform $release. $platform $minimum or newer is required." >&2
+  exit 1
+fi
 
 BIN_DIR="${HEARTH_BIN_DIR:-$HOME/.local/bin}"
 AS_HOME="${HEARTH_HOME:-$HOME/.hearth}"
@@ -230,7 +246,14 @@ fi
 tmp=$(mktemp)
 trap 'rm -f "$tmp"' EXIT
 printf 'Downloading hearth for %s-%s ...' "$os" "$arch"
-@FETCH@ || { echo; exit 1; }
+@FETCH@ || {
+  rc=$?
+  echo >&2
+  if [ "$rc" -eq 35 ]; then
+    echo "Hearth could not download $BIN. Check server access and curl support for TLS 1.2 or newer." >&2
+  fi
+  exit "$rc"
+}
 if command -v sha256sum >/dev/null 2>&1; then got=$(sha256sum "$tmp" | cut -d' ' -f1); else got=$(shasum -a 256 "$tmp" | cut -d' ' -f1); fi
 if [ "$got" != "$SHA256" ]; then
   echo; echo "hearth: checksum mismatch for downloaded binary" >&2
@@ -373,7 +396,15 @@ func (s *Server) handleDistManifest(w http.ResponseWriter, _ *http.Request) {
 	for n, b := range d.apps {
 		apps[n] = b.sha256
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"binaries": out, "apps": apps, "version": d.Version, "auto_update": s.Settings().ClientAutoUpdate})
+	manifest := map[string]any{"binaries": out, "apps": apps, "version": d.Version, "auto_update": s.Settings().ClientAutoUpdate}
+	if len(d.bundles) != 0 {
+		sums := make(map[string]string, len(d.bundles))
+		for name, b := range d.bundles {
+			sums[name] = b.digest
+		}
+		manifest["bundles"] = sums
+	}
+	writeJSON(w, http.StatusOK, manifest)
 }
 
 // DistPlatforms lists the client builds served by /install.sh.

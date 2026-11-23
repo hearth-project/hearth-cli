@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **Add machine** copies one download followed by the installer invocation. The installer reports the detected OS version and minimum requirement in English before downloading the client.
+- macOS app: **About** opens a submenu beside the menu, like other macOS
+  submenus, instead of a pop-up button that dropped below it. **Check for
+  updates** reports its result: it asks to update when a newer app is served,
+  and otherwise says the app is up to date, that the server has no app, or why
+  the check failed.
 - The macOS menu bar dropdown trims its window back to the menu when the
   window is left taller than the menu, which showed as an empty band of glass
   above it. Each trim is logged under the subsystem
