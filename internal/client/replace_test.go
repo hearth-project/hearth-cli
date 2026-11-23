@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/hearth-project/hearth-cli/internal/api"
 )
 
 // A reinstalled machine (same host name, new device) takes the place of its
@@ -155,5 +157,41 @@ func TestMoveHomeOver(t *testing.T) {
 	}
 	if _, err := os.Stat(from); !os.IsNotExist(err) {
 		t.Fatalf("old home left behind: %v", err)
+	}
+}
+
+// Accepting an installer-suggested alternative must not inherit another
+// machine's backups, even if that machine takes the name and signs off after
+// the installer fetched its device list. Explicit naming still can continue it.
+func TestUnusedAliasNeverInheritsOfflineDevice(t *testing.T) {
+	en := newEnv(t)
+	old, nu := en.machine("node-a"), en.machine("node-b")
+	if err := old.API.SetDeviceAlias("self", "gpu-2"); err != nil {
+		t.Fatal(err)
+	}
+	if err := old.API.SignOff(); err != nil {
+		t.Fatal(err)
+	}
+	if err := nu.API.SetUnusedDeviceAlias("self", "gpu-2"); StatusOf(err) != 409 {
+		t.Fatalf("took offline name: %v", err)
+	}
+	if err := nu.API.SetUnusedDeviceAlias("self", "gpu-3"); err != nil {
+		t.Fatal(err)
+	}
+	ds, err := old.API.Devices()
+	if err != nil {
+		t.Fatalf("prior login lost: %v", err)
+	}
+	d, err := FindDevice(ds, "gpu-3")
+	if err != nil || d.ID != nu.Cfg.DeviceID {
+		t.Fatalf("suggested name: %+v %v", d, err)
+	}
+}
+
+func TestDeviceNamedProtectsOnlineGeneratedName(t *testing.T) {
+	ds := []api.Device{{ID: "offline", Name: "worker.x"}, {ID: "online", Name: "worker.y", Online: true}}
+	d, ok := DeviceNamed(ds, "self", "cpu-worker")
+	if !ok || d.ID != "online" {
+		t.Fatalf("an offline match hid the online machine: %+v", d)
 	}
 }

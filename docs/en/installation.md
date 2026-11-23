@@ -34,6 +34,8 @@ setup=$(curl -fsSL https://<server>/install.sh) && sh -c "$setup" sh --email you
 
 and logs the new machine in without the master password. It works once and for 30 minutes; make a new one for each machine. Your vault key is wrapped with a key derived from a random secret that only the command holds, so the server still sees ciphertext only. Treat the command like a password until it has been used: it stays in the new machine's shell history, but it no longer works after its first use. `hearth setup --token <id>.<secret>` (or `HEARTH_INSTALL_TOKEN`) does the same without the installer.
 
+Reinstalling from outside your workspace? If setup finds one local login for this host, server and account, **Add machine** validates it and uses the one-time command without creating another device. The workspace, name and daemon are reused. If there are multiple matching logins, choose one by number in the terminal. For unattended installs, run the command from the intended workspace or append `--workspace <dir>`. Nothing is merged or deleted. For a genuinely new device, Enter accepts an unused name (for example, `gpu-node-2`); type an offline device’s name explicitly to continue it. Upgrade the server before distributing the new CLI.
+
 ### System requirements and manual offline installs
 
 **Add machine** fetches the installer from the main HTTPS server. A failed first download returns curl’s error directly. Use curl with TLS 1.2 or newer. The installer checks the OS and CPU before it writes files or runs setup. The CLI requires Linux kernel 3.2+ or macOS 12+, on x86_64 or ARM64.

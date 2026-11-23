@@ -111,9 +111,51 @@ func TestInstallToken(t *testing.T) {
 	if _, err := LoginWithInstallToken(t.TempDir(), en.url, "dev@example.com", "nonsense", "x"); err == nil {
 		t.Fatal("accepted a malformed token")
 	}
+	// Reinstalling with an existing workspace login burns the command without
+	// creating a device. Neither a foreign bearer nor a stale hint can burn it.
+	other := en.user("other@example.com", "other")
+	tok = makeToken()
+	if err := ReuseInstallToken(other.Home, other.Cfg, tok); !errors.Is(err, ErrInstallToken) {
+		t.Fatalf("other account: %v", err)
+	}
+	mismatch := *a.Cfg
+	mismatch.DeviceID = other.Cfg.DeviceID
+	if err := ReuseInstallToken(a.Home, &mismatch, tok); StatusOf(err) != 409 {
+		t.Fatalf("mismatched device: %v", err)
+	}
+	mismatch = *a.Cfg
+	mismatch.Token = "expired-device-token"
+	if err := ReuseInstallToken(a.Home, &mismatch, tok); StatusOf(err) != 401 {
+		t.Fatalf("stale device bearer: %v", err)
+	}
+	id, _, _ = bytes.Cut([]byte(tok), []byte("."))
+	if err := ReuseInstallToken(a.Home, a.Cfg, string(id)+"."+base64.RawURLEncoding.EncodeToString(crypto.RandomBytes(32))); !errors.Is(err, ErrInstallToken) {
+		t.Fatalf("wrong proof: %v", err)
+	}
+	before, err := a.API.Devices()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ReuseInstallToken(a.Home, a.Cfg, tok); err != nil {
+		t.Fatal(err)
+	}
+	if err := ReuseInstallToken(a.Home, a.Cfg, tok); !errors.Is(err, ErrInstallToken) {
+		t.Fatalf("replayed reuse: %v", err)
+	}
+	if _, err := LoginWithInstallToken(t.TempDir(), en.url, a.Cfg.Email, tok, "unexpected"); !errors.Is(err, ErrInstallToken) {
+		t.Fatalf("replayed login after reuse: %v", err)
+	}
+	after, err := a.API.Devices()
+	if err != nil || len(before) != len(after) {
+		t.Fatalf("device count: %d -> %d (%v)", len(before), len(after), err)
+	}
+
 	// Expired after 30 minutes.
 	tok = makeToken()
 	en.clock.add(31 * time.Minute)
+	if err := ReuseInstallToken(a.Home, a.Cfg, tok); !errors.Is(err, ErrInstallToken) {
+		t.Fatalf("expired reuse: %v", err)
+	}
 	if _, err := LoginWithInstallToken(t.TempDir(), en.url, "dev@example.com", tok, "late"); !errors.Is(err, ErrInstallToken) {
 		t.Fatalf("expired token: %v", err)
 	}

@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 
 	"github.com/hearth-project/hearth-cli/internal/api"
@@ -66,4 +67,34 @@ func (a *API) InstallLogin(req api.InstallLoginRequest) (api.InstallLoginRespons
 	var r api.InstallLoginResponse
 	_, err := a.do("POST", "/v1/auth/install/login", req, nil, nil, &r)
 	return r, err
+}
+
+// ReuseInstallToken verifies an existing device login and consumes the
+// install command without creating a device. Trust the caller's current
+// home, not CA/proxy settings found by workspace discovery.
+func ReuseInstallToken(trustHome string, cfg *Config, token string) error {
+	id, secret, err := ParseInstallToken(token)
+	if err != nil {
+		return err
+	}
+	hc, err := HTTPClient(trustHome)
+	if err != nil {
+		return err
+	}
+	// Neither device bearer nor one-time proof should follow redirects.
+	hc.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	var ack api.InstallReuseResponse
+	_, err = NewAPI(cfg.Server, cfg.Token, hc).do("POST", "/v1/auth/install/reuse", api.InstallReuseRequest{
+		Email: cfg.Email, ID: id, Auth: crypto.InstallAuth(secret), DeviceID: cfg.DeviceID,
+	}, nil, nil, &ack)
+	switch StatusOf(err) {
+	case http.StatusForbidden:
+		return ErrInstallToken
+	case http.StatusNotFound, http.StatusMethodNotAllowed:
+		return errors.New("this server does not support reusing an install command; upgrade the server, or run hearth setup in the existing workspace without --token")
+	}
+	if err == nil && (ack.DeviceID == "" || ack.DeviceID != cfg.DeviceID) {
+		return errors.New("server did not confirm the existing device login")
+	}
+	return err
 }

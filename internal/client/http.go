@@ -551,6 +551,20 @@ func netError(server string, err error) error {
 
 // SetDeviceAlias names a device ("self" = this one; "" clears the name).
 func (a *API) SetDeviceAlias(id, alias string) error {
-	_, err := a.do("PUT", "/v1/devices/"+url.PathEscape(id)+"/alias", map[string]string{"alias": alias}, nil, nil, nil)
+	return a.setDeviceAlias(id, alias, false)
+}
+
+// SetUnusedDeviceAlias assigns a suggested name without ever taking over an
+// offline device. Older servers reject the extra JSON field without mutating.
+func (a *API) SetUnusedDeviceAlias(id, alias string) error {
+	return a.setDeviceAlias(id, alias, true)
+}
+
+func (a *API) setDeviceAlias(id, alias string, onlyIfUnused bool) error {
+	req := struct {
+		Alias        string `json:"alias"`
+		OnlyIfUnused bool   `json:"only_if_unused,omitempty"`
+	}{alias, onlyIfUnused}
+	_, err := a.do("PUT", "/v1/devices/"+url.PathEscape(id)+"/alias", req, nil, nil, nil)
 	return err
 }

@@ -63,14 +63,21 @@ func PreviousSelf(ds []api.Device, self, name string) (api.Device, bool) {
 }
 
 // DeviceNamed finds the other machine (not self) that goes by name: the
-// name it was given, else its host name or the name made from it.
+// name it was given, else its host name or the name made from it. On a
+// collision, an online holder always wins over an offline one.
 func DeviceNamed(ds []api.Device, self, name string) (api.Device, bool) {
+	var firstOffline api.Device
 	for _, d := range ds {
 		if d.ID != self && activeDevice(d) && (NameOf(d) == name || d.Alias == "" && d.Name == name) {
-			return d, true
+			if d.Online {
+				return d, true
+			}
+			if firstOffline.ID == "" {
+				firstOffline = d
+			}
 		}
 	}
-	return api.Device{}, false
+	return firstOffline, firstOffline.ID != ""
 }
 
 // NameMachine names device id. When an offline machine goes by that name,
