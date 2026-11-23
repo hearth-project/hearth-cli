@@ -26,7 +26,7 @@ curl -fsSL https://<server>/install.sh | sh -s -- --install-only
 
 ### One-time install command (no password on the new machine)
 
-In the Hearth app on a Mac (`hearth app install`) choose **Add machine**, or run `hearth machine install-command` on any logged-in machine. The command looks like
+In the Hearth app on a Mac (`hearth app install`) choose **Add machine**, or run `hearth machine install-command` on any logged-in machine. The command downloads the script before passing the one-time login arguments, equivalent on success to
 
 ```bash
 curl -fsSL https://<server>/install.sh | sh -s -- --email you@example.com --token <id>.<secret>
@@ -34,11 +34,11 @@ curl -fsSL https://<server>/install.sh | sh -s -- --email you@example.com --toke
 
 and logs the new machine in without the master password. It works once and for 30 minutes; make a new one for each machine. Your vault key is wrapped with a key derived from a random secret that only the command holds, so the server still sees ciphertext only. Treat the command like a password until it has been used: it stays in the new machine's shell history, but it no longer works after its first use. `hearth setup --token <id>.<secret>` (or `HEARTH_INSTALL_TOKEN`) does the same without the installer.
 
-### Older machines with wget or an old TLS library
+### System requirements and manual offline installs
 
-When an old `curl` reports error 35, the operator can enable offline bundles by adding `--bootstrap-addr <internal-ip>:8788` to `hearth server` alongside its HTTPS `--public-url`. Allow the target machines to reach that TCP port on the public URL's hostname. The additional listener serves only public install archives.
+**Add machine** fetches the installer from the main HTTPS server. Use curl with TLS 1.2 or newer. The installer checks the OS and CPU before it writes files or runs setup. The CLI requires Linux kernel 3.2+ or macOS 12+, on x86_64 or ARM64.
 
-On a signed-in machine, choose **Add machine** in the Mac app or run `hearth machine install-command`. Paste the resulting command into the target user's shell. It selects the archive for the OS and CPU and tries HTTPS with `wget` or `curl`, then the bundle port. The command carries the expected SHA-256 from the signed-in machine and verifies the entire archive before unpacking it. The included client uses the normal HTTPS server for one-time login. The target needs `tar`, `sha256sum` or `shasum`, a supported OS (Linux kernel 3.2+), and network access to the HTTPS server for login and sync. The port is disabled by default.
+For a supported machine with an older TLS library, an operator can enable `--bootstrap-addr <internal-ip>:8788` and manually transfer a matching archive from `/bootstrap/hearth-<os>-<arch>.tar`. Obtain its SHA-256 from the `bundles` field of `/v1/dist` over trusted HTTPS on a signed-in machine. Verify the entire archive before extracting it and running `sh install.sh`. Login and sync use the main HTTPS server.
 
 ### Self-signed servers
 

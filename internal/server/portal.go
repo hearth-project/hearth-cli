@@ -528,10 +528,17 @@ func (s *Server) installForConsole() string {
 	if s.dist == nil {
 		return ""
 	}
-	if len(s.dist.bundles) > 0 {
-		return s.dist.bundleCommand(s.siteProxies())
+	if !strings.HasPrefix(s.dist.PublicURL, "https://") {
+		return s.InstallCommand()
 	}
-	return s.InstallCommand()
+	// TLS can fail before install.sh reaches the shell. Buffer each attempt
+	// separately so an empty or partial download never starts setup.
+	gets := s.installerDownloads(len(s.dist.bundles) != 0)
+	for i, get := range gets {
+		gets[i] = "installer=$(" + get + ")"
+	}
+	// The client appends setup arguments (including the token) after "sh".
+	return "( " + strings.Join(gets, " || ") + ` && printf '%s\n' "$installer" || echo 'echo "Check server access and curl support for TLS 1.2 or newer." >&2; exit 1' ) | sh`
 }
 
 type feedItem struct {

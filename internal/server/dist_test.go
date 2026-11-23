@@ -160,13 +160,16 @@ func TestInstallerPicksPlatformBuild(t *testing.T) {
 	}
 
 	var runArgs func(unameS, unameM, args string) (string, error)
+	release := "3.2.0-test"
+	macOS := "12.0"
 	var lastHome string
 	linkDir := t.TempDir() // never the real /usr/local/bin
 	run := func(unameS, unameM string) (string, error) { return runArgs(unameS, unameM, "--email me@example.com") }
 	runArgs = func(unameS, unameM, args string) (string, error) {
 		shim := filepath.Join(t.TempDir(), "bin")
 		os.MkdirAll(shim, 0o755)
-		os.WriteFile(filepath.Join(shim, "uname"), []byte("#!/bin/sh\ncase \"$1\" in -s) echo "+unameS+";; -m) echo "+unameM+";; esac\n"), 0o755)
+		os.WriteFile(filepath.Join(shim, "uname"), []byte("#!/bin/sh\ncase \"$1\" in -s) echo "+unameS+";; -m) echo "+unameM+";; -r) echo "+release+";; esac\n"), 0o755)
+		os.WriteFile(filepath.Join(shim, "sw_vers"), []byte("#!/bin/sh\necho "+macOS+"\n"), 0o755)
 		home := t.TempDir()
 		cmd := exec.Command("sh", "-c", "curl -fsSL "+ts.URL+"/install.sh | sh -s -- "+args)
 		cmd.Env = []string{"PATH=" + shim + ":" + os.Getenv("PATH"), "HOME=" + home, "HEARTH_PASSWORD=x", "HEARTH_LINK_DIRS=" + linkDir}
@@ -218,6 +221,19 @@ func TestInstallerPicksPlatformBuild(t *testing.T) {
 	if out, err := run("Darwin", "x86_64"); err == nil || !strings.Contains(out, "no build for darwin-amd64") {
 		t.Fatalf("missing build: %v\n%s", err, out)
 	}
+	for _, tc := range []struct{ os, release, minimum string }{
+		{"Linux", "2.6.32-754.el6", "Linux kernel 3.2"}, {"Linux", "3.1.99", "Linux kernel 3.2"}, {"Darwin", "11.7.10", "macOS 12"},
+	} {
+		release, macOS = tc.release, tc.release
+		out, err := run(tc.os, "arm64")
+		if err == nil || !strings.Contains(out, tc.release) || !strings.Contains(out, tc.minimum+" or newer is required") || strings.Contains(out, "Downloading") {
+			t.Fatalf("unsupported %s %s: %v %s", tc.os, tc.release, err, out)
+		}
+		if entries, err := os.ReadDir(lastHome); err != nil || len(entries) != 0 {
+			t.Fatalf("preflight modified home: %v %v", entries, err)
+		}
+	}
+	release = "3.10.0-test"
 	// A tampered binary fails the checksum.
 	os.WriteFile(filepath.Join(dist, "hearth-linux-arm64"), []byte("#!/bin/sh\necho evil\n"), 0o755)
 	if out, err := run("Linux", "aarch64"); err == nil || !strings.Contains(out, "checksum mismatch") {
