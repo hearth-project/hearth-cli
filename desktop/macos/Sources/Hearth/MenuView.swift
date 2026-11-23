@@ -1,4 +1,5 @@
 import SwiftUI
+import os
 
 /// The menu bar dropdown. Machines are grouped into cards (online, then
 /// recently offline); a row opens in place to show details, problems and
@@ -36,8 +37,9 @@ struct MenuView: View {
             Text("将下载 \(updates.latestVersion)，校验后替换当前 App 并重新打开。")
         }
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in
-            // Opening the menu after logging in elsewhere: pick the login up now.
-            if store.loginExpired { Task { await store.refresh() } }
+            // Opening the menu after logging in elsewhere, or after a refresh
+            // failed while the Mac slept or was offline: try again now.
+            if store.loginExpired || store.error != nil { Task { await store.refresh() } }
         }
     }
 
@@ -313,11 +315,17 @@ struct MenuRowLabel<Trailing: View>: View {
 
 /// Keeps the dropdown hanging from the menu bar. When its content grows (a
 /// row opens, the list gets longer) AppKit keeps the window's bottom edge and
-/// grows it upwards, under the menu bar; this puts the top edge back.
+/// grows it upwards, under the menu bar; this puts the top edge back. When the
+/// window is left taller than the menu (the menu sits at its bottom under an
+/// empty band of glass), it gives the extra height back, keeping the top edge.
 struct MenuWindowAnchor: NSViewRepresentable {
     final class Tracker: NSView {
+        private static let logger = Logger(subsystem: "io.github.hearth-project.menubar", category: "menu")
         private var top: CGFloat?
         private var tokens: [NSObjectProtocol] = []
+        private var pending: DispatchWorkItem?
+        private var trims = 0
+        private var trimmedFor: CGFloat = 0
 
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
@@ -327,12 +335,22 @@ struct MenuWindowAnchor: NSViewRepresentable {
             let nc = NotificationCenter.default
             tokens.append(nc.addObserver(forName: NSWindow.didBecomeKeyNotification, object: w, queue: .main) { [weak self] _ in
                 self?.top = nil
+                self?.trims = 0
                 self?.pin(w)
+                DispatchQueue.main.async { self?.fit() }
+                self?.scheduleFit()
             })
             tokens.append(nc.addObserver(forName: NSWindow.didResizeNotification, object: w, queue: .main) { [weak self] _ in
                 self?.pin(w)
+                self?.scheduleFit()
             })
             pin(w)
+            scheduleFit()
+        }
+
+        override func setFrameSize(_ newSize: NSSize) {
+            super.setFrameSize(newSize)
+            scheduleFit()
         }
 
         private func pin(_ w: NSWindow) {
@@ -344,7 +362,48 @@ struct MenuWindowAnchor: NSViewRepresentable {
             }
         }
 
-        deinit { tokens.forEach(NotificationCenter.default.removeObserver) }
+        /// Checks again once layout has settled; opening or closing a row animates.
+        private func scheduleFit() {
+            pending?.cancel()
+            let item = DispatchWorkItem { [weak self] in self?.fit() }
+            pending = item
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4, execute: item)
+        }
+
+        private func fit() {
+            guard let w = window, w.isVisible, w.attachedSheet == nil, !w.inLiveResize else { return }
+            let area = w.contentLayoutRect
+            let menu = convert(bounds, to: nil)
+            let above = area.maxY - menu.maxY
+            // Only the shape seen in the wild: the menu sits at the bottom of
+            // the window with empty glass above it.
+            guard menu.height > 1, menu.minY - area.minY < 2, above > 8 else { return }
+            // A few tries per menu height: if AppKit keeps putting the height
+            // back, leave the window alone.
+            if abs(menu.height - trimmedFor) > 0.5 { trimmedFor = menu.height; trims = 0 }
+            guard trims < 3 else { return }
+            trims += 1
+            let old = w.frame
+            var frame = old
+            frame.size.height -= above
+            frame.origin.y += above
+            let note = String(format: "menu window %.0f pt tall for %.0f pt of menu, %.0f pt empty above; trimming",
+                              Double(old.height), Double(menu.height), Double(above))
+            Self.logger.notice("\(note, privacy: .public)")
+            w.setFrame(frame, display: true)
+            if convert(bounds, to: nil).minY < area.minY - 0.5 {
+                // The menu would be cut off at the bottom: this window lays
+                // out differently, so put it back.
+                w.setFrame(old, display: true)
+                trims = 3
+                Self.logger.error("menu window trim would cut the menu off; restored")
+            }
+        }
+
+        deinit {
+            pending?.cancel()
+            tokens.forEach(NotificationCenter.default.removeObserver)
+        }
     }
 
     func makeNSView(context: Context) -> Tracker { Tracker() }
