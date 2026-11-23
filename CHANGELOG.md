@@ -3,6 +3,11 @@
 ## Unreleased
 
 - **Add machine** copies a short curl command. The installer reports the detected OS version and minimum requirement in English before downloading the client.
+- macOS app: **About** opens a submenu beside the menu, like other macOS
+  submenus, instead of a pop-up button that dropped below it. **Check for
+  updates** reports its result: it asks to update when a newer app is served,
+  and otherwise says the app is up to date, that the server has no app, or why
+  the check failed.
 
 ## 0.1.3 — 2026-11-20
 

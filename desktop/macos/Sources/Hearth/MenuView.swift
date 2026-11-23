@@ -12,7 +12,10 @@ struct MenuView: View {
     @State var note: String? = nil
     @State private var copying = false
     @State private var confirmUpdate = false
-    @State private var aboutHover = false
+    /// The 关于 menu is open beside the dropdown: its row stays highlighted.
+    @State private var aboutOpen = false
+    @State private var checkingUpdate = false
+    @State private var aboutMenu = SideMenu()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// Height of the machine list. A MenuBarExtra window sizes itself to its
     /// content's ideal size and a ScrollView has none, so the list gets this
@@ -212,7 +215,7 @@ struct MenuView: View {
                         .font(.system(size: 11)).foregroundStyle(.tertiary)
                 }
             }
-            aboutMenu
+            aboutRow
             Divider().opacity(0.5).padding(.horizontal, 8).padding(.vertical, 4)
             MenuRow(icon: "power", title: "退出 Hearth", action: { NSApp.terminate(nil) })
         }
@@ -226,40 +229,73 @@ struct MenuView: View {
         }
     }
 
-    private var aboutMenu: some View {
-        Menu {
-            Button {
-                Task {
-                    await updates.check()
-                    if updates.info?.available == true {
-                        confirmUpdate = true
-                    }
-                }
-            } label: {
-                Label("检查更新", systemImage: "arrow.clockwise")
+    /// 关于: a row like the others, with the app's version, that opens its
+    /// menu beside the dropdown the way a submenu does. (A SwiftUI Menu here
+    /// drew a pop-up button with its own indent and a ⌄, and opened below.)
+    private var aboutRow: some View {
+        MenuRow(icon: "info.circle", title: "关于", active: aboutOpen, action: openAboutMenu) {
+            if checkingUpdate || updates.updating {
+                ProgressView().controlSize(.small).scaleEffect(0.7)
+            } else if updates.info?.available == true {
+                Text("有新版本").font(.system(size: 11, weight: .medium)).foregroundStyle(Theme.accent)
+            } else if !updates.currentVersion.isEmpty {
+                Text(updates.currentVersion).font(.system(size: 11)).foregroundStyle(.tertiary).lineLimit(1)
             }
-            Button(action: Actions.showAbout) {
-                Label("关于 Hearth", systemImage: "info.circle")
-            }
-            Divider()
-            Button(action: Actions.openGitHub) {
-                Label("GitHub 开源", systemImage: "chevron.left.forwardslash.chevron.right")
-            }
-        } label: {
-            MenuRowLabel(icon: "info.circle", title: "关于", hover: aboutHover) {
-                if updates.info?.available == true {
-                    Text("有更新")
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(Theme.accent)
-                }
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(.tertiary)
-            }
+            Image(systemName: "chevron.right")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(.tertiary)
         }
-        .menuStyle(.borderlessButton)
-        .buttonStyle(RowPressStyle())
-        .onHover { aboutHover = $0 }
+        .background(SideMenuAnchor(menu: aboutMenu))
+    }
+
+    private func openAboutMenu() {
+        aboutOpen = true
+        let items = [
+            SideMenu.Item(title: updateTitle, icon: "arrow.down.circle",
+                          enabled: !updates.updating && !checkingUpdate, action: checkForUpdates),
+            SideMenu.Item(title: "关于 Hearth", icon: "info.circle", action: Actions.showAbout),
+            SideMenu.Item(title: "GitHub 开源", icon: "chevron.left.forwardslash.chevron.right",
+                          separatorBefore: true, action: Actions.openGitHub),
+        ]
+        // On the next turn, so the row is drawn highlighted first, like a menu
+        // item whose submenu is open; show returns once the menu has closed.
+        Task { @MainActor in
+            aboutMenu.show(items)
+            aboutOpen = false
+        }
+    }
+
+    private var updateTitle: String {
+        if updates.updating { return "正在更新…" }
+        if updates.info?.available == true { return "更新到 \(updates.latestVersion)…" }
+        return "检查更新"
+    }
+
+    /// Confirms a known update; otherwise asks the server and says what it
+    /// answered, so a check that finds nothing is not a click without effect.
+    private func checkForUpdates() {
+        if updates.info?.available == true {
+            confirmUpdate = true
+            return
+        }
+        checkingUpdate = true
+        Task {
+            await updates.check() // waits for the periodic check when one runs
+            checkingUpdate = false
+            if updates.info?.available == true {
+                confirmUpdate = true
+                return
+            }
+            let s: String
+            if let err = updates.error {
+                s = "检查更新失败：" + err
+            } else if (updates.info?.sha256 ?? "").isEmpty {
+                s = "服务器没有提供 Mac App"
+            } else {
+                s = "已是最新版本" + (updates.currentVersion.isEmpty ? "" : " \(updates.currentVersion)")
+            }
+            withAnimation(Theme.motion(Theme.spring, reduce: reduceMotion)) { note = s }
+        }
     }
 }
 
@@ -268,13 +304,15 @@ struct MenuView: View {
 struct MenuRow<Trailing: View>: View {
     var icon: String
     var title: String
+    /// Highlighted without the pointer, e.g. while the menu it opened shows.
+    var active = false
     var action: () -> Void
     @ViewBuilder var trailing: () -> Trailing
     @State private var hover = false
 
     var body: some View {
         Button(action: action) {
-            MenuRowLabel(icon: icon, title: title, hover: hover, trailing: trailing)
+            MenuRowLabel(icon: icon, title: title, hover: hover || active, trailing: trailing)
         }
         .buttonStyle(RowPressStyle())
         .onHover { hover = $0 }
