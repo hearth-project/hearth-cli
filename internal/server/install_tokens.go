@@ -129,3 +129,36 @@ func (s *Server) handleInstallLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, api.InstallLoginResponse{Token: lr.Token, DeviceID: lr.DeviceID, ExpiresAt: lr.ExpiresAt, EncVaultKeyInstall: wrapped})
 }
+
+// handleInstallReuse burns a command once, but never issues a new login or
+// releases even the wrapped key. Both the old device bearer and install
+// proof must belong to the intended account. The conditional delete races
+// safely with normal redemption (also a delete that checks RowsAffected).
+func (s *Server) handleInstallReuse(w http.ResponseWriter, r *http.Request) {
+	var req api.InstallReuseRequest
+	if !readJSON(w, r, &req) {
+		return
+	}
+	if req.DeviceID != deviceOf(r) {
+		writeErr(w, http.StatusConflict, "local device ID does not match the authenticated login")
+		return
+	}
+	if installIDRE.MatchString(req.ID) && len(req.Auth) == sha256.Size {
+		res, err := s.st.db.Exec(`DELETE FROM install_tokens WHERE id=? AND auth_hash=? AND expires_at>=?
+			AND user_id=(SELECT id FROM users WHERE id=? AND email=? AND status='active')`, req.ID, installAuthHash(req.Auth), s.now(), userOf(r), normEmail(req.Email))
+		if err != nil {
+			s.writeStoreErr(w, err)
+			return
+		}
+		n, err := res.RowsAffected()
+		if err != nil {
+			s.writeStoreErr(w, err)
+			return
+		}
+		if n == 1 {
+			writeJSON(w, http.StatusOK, api.InstallReuseResponse{DeviceID: deviceOf(r)})
+			return
+		}
+	}
+	writeErr(w, http.StatusForbidden, "invalid, expired or already used install command for this account")
+}

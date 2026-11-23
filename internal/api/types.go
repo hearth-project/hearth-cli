@@ -147,6 +147,20 @@ type InstallLoginRequest struct {
 	DeviceName string `json:"device_name"`
 }
 
+// InstallReuseRequest redeems the same proof from an already authenticated
+// device. A successful request consumes the command and returns no key or token.
+type InstallReuseRequest struct {
+	Email    string `json:"email"`
+	ID       string `json:"id"`
+	Auth     []byte `json:"auth"`
+	DeviceID string `json:"device_id"`
+}
+
+// InstallReuseResponse acknowledges reuse of this authenticated device.
+type InstallReuseResponse struct {
+	DeviceID string `json:"device_id"`
+}
+
 type InstallLoginResponse struct {
 	Token              string `json:"token"`
 	DeviceID           string `json:"device_id"`

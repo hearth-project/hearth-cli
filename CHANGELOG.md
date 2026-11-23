@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Add machine reuses a verified local workspace login instead of creating a
+  second device and sync daemon. If another machine owns the suggested name,
+  setup offers an unused name on the first prompt; it no longer reports ready
+  after a failed rename.
 - **Add machine** copies one download followed by the installer invocation. The installer reports the detected OS version and minimum requirement in English before downloading the client.
 - macOS app: **About** opens a submenu beside the menu, like other macOS
   submenus, instead of a pop-up button that dropped below it. **Check for

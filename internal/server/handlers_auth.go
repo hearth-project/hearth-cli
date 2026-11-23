@@ -51,6 +51,7 @@ func (s *Server) routes() {
 	m.HandleFunc("POST /v1/auth/login", s.limited(s.handleLogin))
 	m.HandleFunc("POST /v1/auth/identity/login", s.limited(s.handleIdentityLogin))
 	m.HandleFunc("POST /v1/auth/install/login", s.limited(s.handleInstallLogin))
+	m.HandleFunc("POST /v1/auth/install/reuse", s.limited(s.authed(s.handleInstallReuse)))
 	m.HandleFunc("POST /v1/auth/identity/enable", s.authed(s.handleIdentityEnable))
 	m.HandleFunc("GET /v1/auth/identity", s.authed(s.handleIdentityStatus))
 	m.HandleFunc("DELETE /v1/auth/identity", s.authed(s.handleIdentityDisable))
@@ -326,10 +327,11 @@ func (s *Server) handleListDevices(w http.ResponseWriter, r *http.Request) {
 // putDeviceAlias names one of the user's machines (body {"alias": ...};
 // "" clears it). The name of offline machines only is taken over with
 // them: the machine continues them (their conversations; they leave the
-// list).
+// list), unless only_if_unused requests a name without any takeover.
 func (s *Server) putDeviceAlias(w http.ResponseWriter, r *http.Request, uid int64) {
 	var req struct {
-		Alias string `json:"alias"`
+		Alias        string `json:"alias"`
+		OnlyIfUnused bool   `json:"only_if_unused"`
 	}
 	if !readJSON(w, r, &req) {
 		return
@@ -339,7 +341,7 @@ func (s *Server) putDeviceAlias(w http.ResponseWriter, r *http.Request, uid int6
 		id = dev // a device naming itself
 	}
 	since := s.now() - int64(onlineWindow.Seconds())
-	if err := s.st.setDeviceAlias(uid, id, strings.TrimSpace(req.Alias), since); err != nil {
+	if err := s.st.setDeviceAlias(uid, id, strings.TrimSpace(req.Alias), since, req.OnlyIfUnused); err != nil {
 		s.writeStoreErr(w, err)
 		return
 	}

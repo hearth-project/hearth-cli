@@ -103,7 +103,7 @@ func MoveHome(from, ws string) (string, error) {
 		return target, nil
 	}
 	if name := OwnState(target); name != "" {
-		return "", fmt.Errorf("%s already holds hearth state (%s); move it away first", target, name)
+		return "", fmt.Errorf("%s already holds hearth state (%s)", target, name)
 	}
 	_ = os.RemoveAll(target)
 	if err := os.MkdirAll(filepath.Dir(target), 0o700); err != nil {

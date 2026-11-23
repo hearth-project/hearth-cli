@@ -168,11 +168,23 @@ var aliasRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,62}$`)
 // errAliasTaken: another active machine of the user has the name.
 var errAliasTaken = errors.New("another of your machines has that name")
 
+// lockDeviceNames serializes name claims per account. SQLite already has a
+// single writer; on Postgres two devices could otherwise both observe a free
+// alias before either UPDATE commits. Lock before touching any device rows.
+func lockDeviceNames(tx *txx, userID int64) error {
+	if tx.d != postgresDialect {
+		return nil
+	}
+	var id int64
+	return tx.QueryRow(`SELECT id FROM users WHERE id=?`+tx.d.forUpdate(), userID).Scan(&id)
+}
+
 // setDeviceAlias names a device of the user ("" = back to its host name).
 // A name that belongs to offline machines only is taken over with them:
 // the device continues those machines (see inheritTx). A machine online
-// under that name keeps it (errAliasTaken).
-func (s *store) setDeviceAlias(userID int64, id, alias string, onlineSince int64) error {
+// under that name keeps it (errAliasTaken); with onlyIfUnused, so does an
+// offline machine.
+func (s *store) setDeviceAlias(userID int64, id, alias string, onlineSince int64, onlyIfUnused bool) error {
 	if alias != "" && !aliasRE.MatchString(alias) {
 		return fmt.Errorf("%w: a name is 1-63 letters, digits, '.', '_' or '-'", errBadRequest)
 	}
@@ -181,7 +193,10 @@ func (s *store) setDeviceAlias(userID int64, id, alias string, onlineSince int64
 		return err
 	}
 	defer tx.Rollback()
-	if err := nameTx(tx, userID, id, alias, onlineSince); err != nil {
+	if err := lockDeviceNames(tx, userID); err != nil {
+		return err
+	}
+	if err := nameTx(tx, userID, id, alias, onlineSince, onlyIfUnused); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -189,7 +204,7 @@ func (s *store) setDeviceAlias(userID int64, id, alias string, onlineSince int64
 
 // nameTx gives device id the name alias, taking over the offline machines
 // that go by it.
-func nameTx(tx *txx, userID int64, id, alias string, onlineSince int64) error {
+func nameTx(tx *txx, userID int64, id, alias string, onlineSince int64, onlyIfUnused bool) error {
 	var mine int
 	if err := tx.QueryRow(`SELECT COUNT(*) FROM devices WHERE user_id=? AND id=? AND status='active'`, userID, id).Scan(&mine); err != nil {
 		return err
@@ -218,7 +233,7 @@ func nameTx(tx *txx, userID int64, id, alias string, onlineSince int64) error {
 		if err := rows.Err(); err != nil {
 			return err
 		}
-		if online {
+		if online || (onlyIfUnused && len(olds) != 0) {
 			return errAliasTaken
 		}
 		for _, o := range olds {
@@ -281,6 +296,9 @@ func (s *store) replaceDevice(userID int64, newID, oldID, alias string, onlineSi
 		return err
 	}
 	defer tx.Rollback()
+	if err := lockDeviceNames(tx, userID); err != nil {
+		return err
+	}
 	var status string
 	var lastSeen, offlineAt int64
 	err = tx.QueryRow(`SELECT status,last_seen,offline_at FROM devices WHERE user_id=? AND id=?`, userID, oldID).Scan(&status, &lastSeen, &offlineAt)
@@ -303,7 +321,7 @@ func (s *store) replaceDevice(userID int64, newID, oldID, alias string, onlineSi
 		if mine == 0 {
 			return errNotFound
 		}
-	} else if err := nameTx(tx, userID, newID, alias, onlineSince); err != nil {
+	} else if err := nameTx(tx, userID, newID, alias, onlineSince, false); err != nil {
 		return err
 	}
 	return tx.Commit()
