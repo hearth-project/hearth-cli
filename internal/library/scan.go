@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -82,9 +83,8 @@ func ScanSecrets(root string) ([]Finding, error) {
 		rel, _ := filepath.Rel(root, p)
 		// By name, or private by intent (only the owner may read it). Mode
 		// alone is not enough: Hearth restores ordinary files as 0600, so a
-		// source file or test must not become a credential just because of
-		// the permissions it got from another machine. Binary and other
-		// non-source files still count.
+		// source file or asset must not become a credential just because
+		// of the permissions it got from another machine.
 		inSkill := skillTree || strings.HasPrefix(filepath.ToSlash(rel), "skills/")
 		// SKILL.md is the skill's own text: judged by content only (tools
 		// such as codex-mixin install theirs owner-only).
@@ -131,12 +131,11 @@ func ScanSecrets(root string) ([]Finding, error) {
 	return out, err
 }
 
-// ordinarySkillFile: source, docs, tests and SVG assets restored by Hearth can be
-// owner-only without being secrets. A script without a suffix is
-// recognised by its shebang; everything else owner-only is still private
-// by intent.
+// ordinarySkillFile recognizes source and assets that can be owner-only after
+// restoration. Media must match its filename extension.
 func ordinarySkillFile(path, name string) bool {
-	switch strings.ToLower(filepath.Ext(name)) {
+	ext := strings.ToLower(filepath.Ext(name))
+	switch ext {
 	case ".py", ".sh", ".bash", ".zsh", ".fish", ".js", ".mjs", ".cjs", ".ts",
 		".tsx", ".go", ".rs", ".java", ".kt", ".c", ".h", ".cc", ".cpp", ".hpp",
 		".cs", ".rb", ".pl", ".php", ".lua", ".r", ".swift", ".html", ".css",
@@ -149,6 +148,15 @@ func ordinarySkillFile(path, name string) bool {
 		return false
 	}
 	defer f.Close()
+	switch ext {
+	case ".png", ".webp", ".wav":
+		var header [512]byte
+		n, _ := io.ReadFull(f, header[:])
+		mime := http.DetectContentType(header[:n])
+		return ext == ".png" && mime == "image/png" ||
+			ext == ".webp" && mime == "image/webp" ||
+			ext == ".wav" && mime == "audio/wave"
+	}
 	var b [2]byte
 	n, _ := io.ReadFull(f, b[:])
 	return n == 2 && b[0] == '#' && b[1] == '!'
