@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Library: a private skill file too large for one encrypted secret (about
+  48 KiB, e.g. a tool binary installed owner-only) no longer stops the whole
+  library push with `secret value must be 1..64512 bytes` or `400 invalid
+  secret id or size`. It stays on this machine, stays out of the plaintext
+  bundle and survives pulls; `hearth lib push`, `hearth lib status` and the
+  daemon log name such files. `hearth secret set` reports the real limit
+  before uploading.
+
+## 0.1.6 — 2026-11-24
+
 - Library: restored PNG, WebP and WAV assets whose headers match their file
   extensions stay in the skill bundle. They no longer fail library sync
   by exceeding the size or count limit of credentials.

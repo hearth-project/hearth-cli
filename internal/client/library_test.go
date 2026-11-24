@@ -454,3 +454,66 @@ func TestLibraryMergeWithoutBaseTakesServer(t *testing.T) {
 		t.Fatal("this machine's copy not backed up")
 	}
 }
+
+// A private skill file too large for one encrypted secret (a tool binary,
+// a 60 KB file whose base64 no longer fits) must not stop the library from
+// syncing. It stays on this machine: not uploaded, not in the plaintext
+// bundle, and not lost when this machine pulls a newer library.
+func TestOversizedPrivateSkillFilesStayLocal(t *testing.T) {
+	en := newEnv(t)
+	a, b := en.machine("a"), en.machine("b")
+	libWrite(t, a, "skills/tool/SKILL.md", "---\nname: tool\ndescription: d\n---\nrun bin/tool\n")
+	libWrite(t, a, "skills/tool/credentials", "token=abc\n")
+	big := make([]byte, 60000) // under MaxSecretBytes, too large once encoded
+	rand.Read(big)
+	bin := filepath.Join(LibraryDir(a.Home), "skills/tool/bin/tool")
+	os.MkdirAll(filepath.Dir(bin), 0o755)
+	if err := os.WriteFile(bin, append([]byte("\x7fELF"), big...), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.LibPush(false); err != nil {
+		t.Fatalf("push with an oversized private file: %v", err)
+	}
+	if got := LibLocalOnlyFiles(a.Home); len(got) != 1 || got[0] != "skills/tool/bin/tool" {
+		t.Fatalf("local-only files: %v", got)
+	}
+	ss, _ := a.Secrets()
+	var stored []string
+	for _, s := range ss {
+		if strings.HasPrefix(s.RestoreTo, libRestorePrefix) {
+			stored = append(stored, s.RestoreTo)
+		}
+	}
+	if len(stored) != 1 || stored[0] != libRestorePrefix+"skills/tool/credentials" {
+		t.Fatalf("library secrets: %v", stored)
+	}
+	data, _, _, err := a.API.GetLibrary(-1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(t.TempDir(), "x")
+	if _, err := library.Extract(data, dir); err != nil {
+		t.Fatal(err)
+	}
+	if fileExists(filepath.Join(dir, "skills/tool/bin/tool")) {
+		t.Fatal("oversized private file in the plaintext bundle")
+	}
+	// Another machine changes the skill; a pulls the new library.
+	if _, err := b.LibPull(false); err != nil {
+		t.Fatal(err)
+	}
+	libWrite(t, b, "skills/tool/SKILL.md", "---\nname: tool\ndescription: d2\n---\nrun bin/tool\n")
+	if _, err := b.LibPush(false); err != nil {
+		t.Fatal(err)
+	}
+	if r, err := a.LibPull(false); err != nil || r.Op != "pulled" {
+		t.Fatalf("pull: %+v %v", r, err)
+	}
+	got, err := os.ReadFile(bin)
+	if err != nil || len(got) != len(big)+4 {
+		t.Fatalf("oversized file lost on pull: %v", err)
+	}
+	if s, _ := os.ReadFile(filepath.Join(LibraryDir(a.Home), "skills/tool/SKILL.md")); !strings.Contains(string(s), "d2") {
+		t.Fatalf("pull did not bring b's change: %s", s)
+	}
+}

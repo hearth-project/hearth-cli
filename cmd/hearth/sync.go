@@ -321,7 +321,7 @@ func daemonCmd() *cobra.Command {
 			}
 			var lastLib, lastUsage, lastMemory, lastRepos, lastPrune time.Time
 			var lastTeamRevision string
-			var lastLibMsg, lastMemoryMsg string
+			var lastLibMsg, lastMemoryMsg, lastLocalOnly string
 			// This device's SSH key, so the user's machines accept it.
 			if _, err := e.PublishDeviceKey(); err != nil {
 				log.Printf("ssh key: %v", err)
@@ -520,6 +520,14 @@ func daemonCmd() *cobra.Command {
 					} else if err == nil && (r.Op == "pushed" || r.Op == "pulled") {
 						log.Printf("library %s (version %d)", r.Op, r.Version)
 						lastLibMsg = ""
+					}
+					if err == nil {
+						if fs := client.LibLocalOnlyFiles(e.Home); strings.Join(fs, "\n") != lastLocalOnly {
+							lastLocalOnly = strings.Join(fs, "\n")
+							if len(fs) > 0 {
+								log.Printf("library: %d private skill file(s) too large to store encrypted stay on this machine: %s", len(fs), strings.Join(fs, ", "))
+							}
+						}
 					}
 					// Each team's most used skills and agents are kept in every
 					// agent here, so they get invoked like the user's own.

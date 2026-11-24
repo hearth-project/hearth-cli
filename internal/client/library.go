@@ -199,6 +199,10 @@ func (e *Engine) libPull(force bool) (LibResult, error) {
 		os.RemoveAll(tmp)
 		return LibResult{}, fmt.Errorf("library bundle hash mismatch")
 	}
+	if err := e.keepLocalOnlyLibFiles(tmp); err != nil {
+		os.RemoveAll(tmp)
+		return LibResult{}, fmt.Errorf("keep local-only skill files: %w", err)
+	}
 	if err := e.installLibrary(tmp); err != nil {
 		return LibResult{}, err
 	}
