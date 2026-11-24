@@ -33,6 +33,27 @@ var envNameRE = regexp.MustCompile(`^[A-Z_][A-Z0-9_]*$`)
 // IsEnvName reports whether a secret can be injected as an env variable.
 func IsEnvName(n string) bool { return envNameRE.MatchString(n) }
 
+// sealOverhead is what SealSecret adds to a payload (XChaCha20-Poly1305
+// nonce and tag).
+const sealOverhead = 24 + 16
+
+// maxSealedSecret is the largest ciphertext the server accepts.
+const maxSealedSecret = api.MaxSecretBytes + 1024
+
+// secretFits reports whether s can be stored as one secret. The value is
+// base64 inside the encrypted JSON payload, so the largest value is about
+// 48 KiB, below the raw MaxSecretBytes limit.
+func secretFits(s Secret) bool {
+	if len(s.Value) == 0 || len(s.Value) > api.MaxSecretBytes-1024 {
+		return false
+	}
+	if s.UpdatedAt == 0 {
+		s.UpdatedAt = time.Now().Unix()
+	}
+	p, err := json.Marshal(s)
+	return err == nil && len(p)+sealOverhead <= maxSealedSecret
+}
+
 func (a *API) Secrets() ([]api.Secret, error) {
 	var r []api.Secret
 	_, err := a.do("GET", "/v1/secrets", nil, nil, nil, &r)
@@ -69,6 +90,9 @@ func (e *Engine) SetSecret(s Secret) error {
 	ct, err := e.Vault.SealSecret(id, payload)
 	if err != nil {
 		return err
+	}
+	if len(ct) > maxSealedSecret {
+		return fmt.Errorf("secret %s is too large: %d bytes encrypted, the server accepts at most %d (values up to about 48 KiB fit)", s.Name, len(ct), maxSealedSecret)
 	}
 	err = e.API.PutSecret(id, ct)
 	if StatusOf(err) == http.StatusInsufficientStorage {

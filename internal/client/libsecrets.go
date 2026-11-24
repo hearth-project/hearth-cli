@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hearth-project/hearth-cli/internal/api"
 	"github.com/hearth-project/hearth-cli/internal/library"
 )
 
@@ -124,6 +125,7 @@ func (e *Engine) pushLibSecrets(files map[string]string, prev map[string]string)
 		}
 	}
 	n := 0
+	localOnly := map[string]bool{}
 	for bp, p := range files {
 		b, err := os.ReadFile(p)
 		if err != nil || len(b) == 0 {
@@ -132,13 +134,21 @@ func (e *Engine) pushLibSecrets(files map[string]string, prev map[string]string)
 		if s, ok := have[bp]; ok && bytes.Equal(s.Value, b) {
 			continue
 		}
-		if err := e.SetSecret(Secret{Name: libSecretName(bp), Value: b, RestoreTo: libRestorePrefix + bp}); err != nil {
+		s := Secret{Name: libSecretName(bp), Value: b, RestoreTo: libRestorePrefix + bp}
+		if !secretFits(s) {
+			// Too large to store encrypted, and it may hold a credential, so
+			// it does not go into the plaintext bundle either: it stays on
+			// this machine and the rest of the library still syncs.
+			localOnly[bp] = true
+			continue
+		}
+		if err := e.SetSecret(s); err != nil {
 			return n, err
 		}
 		n++
 	}
 	for bp, s := range have {
-		if _, ok := files[bp]; ok || had[bp] == "" {
+		if _, ok := files[bp]; ok || had[bp] == "" || localOnly[bp] {
 			continue // still here, or never here (another machine's upload)
 		}
 		// Gone from this library since the last sync (deleted, or no
@@ -146,6 +156,59 @@ func (e *Engine) pushLibSecrets(files map[string]string, prev map[string]string)
 		_ = e.DeleteSecret(s.Name)
 	}
 	return n, nil
+}
+
+// LibLocalOnlyFiles lists the library's credential files that are too
+// large to store as a secret (bundle paths). They are neither uploaded
+// nor put into the bundle: they stay on this machine.
+func LibLocalOnlyFiles(home string) []string {
+	return localOnlyLibFiles(libSecretFiles(library.Library{Root: LibraryDir(home)}))
+}
+
+func localOnlyLibFiles(files map[string]string) []string {
+	var out []string
+	for bp, p := range files {
+		fi, err := os.Stat(p)
+		if err != nil || fi.Size() == 0 {
+			continue
+		}
+		if fi.Size() > api.MaxSecretBytes {
+			out = append(out, bp)
+			continue
+		}
+		b, err := os.ReadFile(p)
+		if err == nil && !secretFits(Secret{Name: libSecretName(bp), Value: b, RestoreTo: libRestorePrefix + bp}) {
+			out = append(out, bp)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// keepLocalOnlyLibFiles copies this library's local-only credential files
+// into the extracted tree dir (bundle layout) before it replaces the
+// library, so a pull does not move them to the backup. Files of skills the
+// incoming library no longer has are left out.
+func (e *Engine) keepLocalOnlyLibFiles(dir string) error {
+	files := libSecretFiles(library.Library{Root: LibraryDir(e.Home)})
+	for _, bp := range localOnlyLibFiles(files) {
+		rest, ok := strings.CutPrefix(bp, "skills/")
+		skill, _, _ := strings.Cut(rest, "/")
+		if !ok || skill == "" || strings.Contains(bp, "..") {
+			continue
+		}
+		if _, err := os.Stat(filepath.Join(dir, "skills", skill)); err != nil {
+			continue
+		}
+		dst := filepath.Join(dir, filepath.FromSlash(bp))
+		if _, err := os.Lstat(dst); err == nil {
+			continue
+		}
+		if _, err := copyHome(files[bp], dst, "", ""); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // LibSecretTTL is how long the credential files of a skill that is no

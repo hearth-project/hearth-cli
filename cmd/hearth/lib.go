@@ -86,6 +86,7 @@ func libCmd() *cobra.Command {
 				return err
 			}
 			fmt.Printf("library %s (version %d)\n", r.Op, r.Version)
+			printLocalOnlyLibFiles(e.Home)
 			return nil
 		},
 	}
@@ -146,6 +147,7 @@ func libCmd() *cobra.Command {
 			if fs := client.LibSecretFiles(home); len(fs) > 0 {
 				fmt.Printf("credential files in skills, synced end-to-end encrypted (not in the shared library): %s\n", joinMax(fs, 4))
 			}
+			printLocalOnlyLibFiles(home)
 			if msg, _, ok := client.LibraryError(home); ok {
 				fmt.Println("last sync:", msg)
 			}
@@ -161,6 +163,14 @@ func libCmd() *cobra.Command {
 
 func pullAndRender(e *client.Engine, force bool) error {
 	return pullAndRenderThen(e, force, nil)
+}
+
+// printLocalOnlyLibFiles names the skill files that stay on this machine:
+// private files too large to store as an encrypted secret.
+func printLocalOnlyLibFiles(home string) {
+	if fs := client.LibLocalOnlyFiles(home); len(fs) > 0 {
+		fmt.Printf("kept on this machine only (%d private file(s) too large to store encrypted, about 48 KiB max): %s\n", len(fs), joinMax(fs, 4))
+	}
 }
 
 // pullAndRenderThen runs beforeRender between the pull (which brings the
