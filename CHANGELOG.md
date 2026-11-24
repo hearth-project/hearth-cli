@@ -3,6 +3,18 @@
 ## Unreleased
 
 - The macOS menu bar app's 「更新」 now installs and reopens the new app. `hearth app update` left a running app alone when the app itself had started the update (pkill skips its own ancestors), so the old app kept running and offered the same update again; it now stops the app, waits for it to exit and then opens the new one. The server also reports the version stamped in the served app (`app_versions` in `/v1/dist`) and `hearth app update` compares with it, so an app built with another version, such as a CI build, is no longer offered again after every update.
+- Library: restored PNG, WebP and WAV assets whose headers match their file
+  extensions stay in the skill bundle. They no longer fail library sync
+  by exceeding the size or count limit of credentials.
+
+## 0.1.5 — 2026-11-24
+
+- Library: ordinary SVG assets restored with mode `0600` stay in the skill
+  bundle and no longer consume secret slots. Credential names and contents
+  are still checked.
+
+## 0.1.4 — 2026-11-24
+
 - Publishing a device key deletes the SSH keys and endpoints of revoked or
   removed devices. They were never used again but counted toward the
   500-secret account limit, so long-used accounts could no longer publish a
