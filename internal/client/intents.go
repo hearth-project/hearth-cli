@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"strconv"
 
+	"github.com/hearth-project/hearth-cli/internal/api"
 	"github.com/hearth-project/hearth-cli/internal/library"
 )
 
@@ -21,11 +22,16 @@ type Intent struct {
 // HeartbeatIntents sends the heartbeat and returns how many console changes
 // wait (0 from servers without intents).
 func (a *API) HeartbeatIntents() (int, error) {
-	var r struct {
-		Intents int `json:"intents"`
-	}
-	_, err := a.do("POST", "/v1/devices/self/heartbeat", struct{}{}, nil, nil, &r)
+	r, err := a.HeartbeatState()
 	return r.Intents, err
+}
+
+// HeartbeatState sends the heartbeat and returns the server's changes:
+// console intents and the team package revision.
+func (a *API) HeartbeatState() (api.HeartbeatResponse, error) {
+	var r api.HeartbeatResponse
+	_, err := a.do("POST", "/v1/devices/self/heartbeat", struct{}{}, nil, nil, &r)
+	return r, err
 }
 
 // ApplyIntents carries out the waiting console changes; it returns one line

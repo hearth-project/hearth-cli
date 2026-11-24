@@ -32,7 +32,7 @@ func ShareTopN(home string) (int, map[string]bool) {
 // AutoShared is one item handled by ShareTop.
 type AutoShared struct {
 	Team, Type, Name string
-	Op               string // shared | updated | unchanged | blocked (secret scan) | failed
+	Op               string // shared | updated | unchanged | refreshed | would-refresh | would-share | blocked | failed
 	Version          int64
 	Detail           string
 }
@@ -44,6 +44,9 @@ func (e *Engine) ShareTop(dryRun bool) ([]AutoShared, error) {
 	if n <= 0 {
 		return nil, nil
 	}
+	state := loadShareState(e.Home)
+	stateChanged := false
+	refreshed := false
 	teams, err := e.API.Teams()
 	if err != nil {
 		return nil, err
@@ -104,27 +107,68 @@ func (e *Engine) ShareTop(dryRun bool) ([]AutoShared, error) {
 			res := AutoShared{Team: team, Type: it.typ, Name: it.name}
 			data, sum, desc, err := e.bundleItem(it.typ, it.name, false)
 			var se *SecretsError
+			teamSum := latest[it.typ+"/"+it.name]
+			last := state.get(team, it.typ, it.name)
 			switch {
 			case errors.As(err, &se):
 				res.Op, res.Detail = "blocked", "secret scan: "+se.Error()
 			case err != nil:
 				res.Op, res.Detail = "failed", err.Error()
-			case latest[it.typ+"/"+it.name] == sum:
+			case teamSum == sum:
 				res.Op = "unchanged"
+				stateChanged = state.set(team, it.typ, it.name, sum) || stateChanged
+			case teamSum != "" && (last == "" || last == sum):
+				// This machine has not edited the copy since it last
+				// published (or never had a baseline). The team's version
+				// is newer: discard the old local copy and take it.
+				if dryRun {
+					res.Op = "would-refresh"
+					res.Detail = "local copy is unchanged; the team's newest version would replace it"
+					break
+				}
+				v, err := e.adoptTeamPackage(team, it.typ, it.name, teamSum)
+				if err != nil {
+					res.Op, res.Detail = "failed", err.Error()
+					break
+				}
+				res.Op, res.Version = "refreshed", v
+				stateChanged = state.set(team, it.typ, it.name, teamSum) || stateChanged
+				refreshed = true
+			case teamSum == "" && last != "":
+				// The package was deliberately removed from the team.
+				// Do not recreate it from this machine automatically.
+				res.Op = "removed"
+				res.Detail = "the team no longer has this package; not shared again"
 			case dryRun:
 				res.Op = "would-share"
 			default:
+				// The local copy changed since this machine last published
+				// or adopted it: the newest edit becomes the newest version.
 				r, err := e.API.Publish(team, it.typ, it.name, desc, sum, data)
 				if err != nil {
 					res.Op, res.Detail = "failed", err.Error()
 				} else {
 					res.Op, res.Version = "shared", r.Version
-					if latest[it.typ+"/"+it.name] != "" {
+					if teamSum != "" {
 						res.Op = "updated"
 					}
+					stateChanged = state.set(team, it.typ, it.name, sum) || stateChanged
 				}
 			}
 			out = append(out, res)
+		}
+	}
+	if !dryRun && stateChanged {
+		if err := state.save(e.Home); err != nil {
+			return out, err
+		}
+	}
+	if refreshed {
+		if _, err := e.LibPush(false); err != nil {
+			return out, err
+		}
+		if _, err := e.Render(false); err != nil {
+			return out, err
 		}
 	}
 	return out, nil

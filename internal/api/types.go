@@ -223,6 +223,16 @@ type DeviceHeartbeat struct {
 	Health  map[string]any `json:"health,omitempty"`
 }
 
+// HeartbeatResponse tells a reporting device what changed on the server:
+// queued console intents, and a hash of the latest team packages it can
+// read. The daemon syncs its library when the hash changes, so a new team
+// version reaches connected machines without waiting for the next library
+// poll.
+type HeartbeatResponse struct {
+	Intents      int    `json:"intents"`
+	TeamRevision string `json:"team_revision,omitempty"`
+}
+
 type PutSessionRequest struct {
 	EncMeta []byte `json:"enc_meta"`
 }
