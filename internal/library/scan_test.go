@@ -26,18 +26,19 @@ func TestScanSecrets(t *testing.T) {
 	}
 }
 
-// Hearth restores ordinary skill files as 0600. A source file, test or
-// script must not turn into a credential merely because of that mode; a
-// credential name or a binary still does.
+// Hearth restores ordinary skill files as 0600. Source files and SVG assets
+// should keep their type unless a name or content rule recognizes a credential.
 func TestOwnerOnlySkillFiles(t *testing.T) {
 	d := t.TempDir()
 	write(t, filepath.Join(d, "skills/a/run.py"), "print('ok')\n")
 	write(t, filepath.Join(d, "skills/a/tests/test_run.py"), "def test_ok():\n    assert True\n")
 	write(t, filepath.Join(d, "skills/a/doc.md"), "# Notes\n")
 	write(t, filepath.Join(d, "skills/a/bin/tool"), "#!/bin/sh\necho ok\n")
+	write(t, filepath.Join(d, "skills/a/icons/check.svg"), `<svg xmlns="http://www.w3.org/2000/svg"><path d="M1 5l3 3 5-6"/></svg>`)
+	write(t, filepath.Join(d, "skills/a/icons/private.svg"), `<svg xmlns="http://www.w3.org/2000/svg"><metadata token="9Btwc3eYzqV7hGs1L8uP"/></svg>`)
 	write(t, filepath.Join(d, "skills/a/credentials"), "token=abc\n")
 	write(t, filepath.Join(d, "skills/a/blob.bin"), "\x00\x01\x02")
-	for _, rel := range []string{"run.py", "tests/test_run.py", "doc.md", "bin/tool", "credentials", "blob.bin"} {
+	for _, rel := range []string{"run.py", "tests/test_run.py", "doc.md", "bin/tool", "icons/check.svg", "icons/private.svg", "credentials", "blob.bin"} {
 		if err := os.Chmod(filepath.Join(d, "skills/a", rel), 0o600); err != nil {
 			t.Fatal(err)
 		}
@@ -50,7 +51,8 @@ func TestOwnerOnlySkillFiles(t *testing.T) {
 	for _, f := range fs {
 		got[f.File] = f.Rule
 	}
-	if len(fs) != 2 || got["skills/a/credentials"] != "credential file" || got["skills/a/blob.bin"] != "credential file" {
+	if len(fs) != 3 || got["skills/a/credentials"] != "credential file" || got["skills/a/blob.bin"] != "credential file" ||
+		got["skills/a/icons/private.svg"] != "credential assignment" {
 		t.Fatalf("findings: %v", fs)
 	}
 }

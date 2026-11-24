@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Library: ordinary SVG assets restored with mode `0600` stay in the skill
+  bundle and no longer consume secret slots. Credential names and contents
+  are still checked.
+
+## 0.1.4 — 2026-11-24
+
 - Publishing a device key deletes the SSH keys and endpoints of revoked or
   removed devices. They were never used again but counted toward the
   500-secret account limit, so long-used accounts could no longer publish a
