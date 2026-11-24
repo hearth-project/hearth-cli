@@ -8,10 +8,13 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -169,7 +172,7 @@ func appCmd() *cobra.Command {
 		return exec.Command("open", appDir()).Run()
 	}}
 	uninstall := &cobra.Command{Use: "uninstall", Short: "Quit and remove the menu bar app", RunE: func(*cobra.Command, []string) error {
-		_ = exec.Command("pkill", "-x", "Hearth").Run()
+		stopMenuBarApp()
 		if err := os.RemoveAll(appDir()); err != nil {
 			return err
 		}
@@ -186,9 +189,22 @@ func fileSHA256(p string) (string, error) { return client.FileSHA256(p) }
 var errAppNotServed = errors.New("this server does not serve the menu bar app")
 
 type menuBarManifest struct {
-	Apps       map[string]string `json:"apps"`
-	Version    string            `json:"version"`
-	AutoUpdate *bool             `json:"auto_update,omitempty"`
+	Apps        map[string]string `json:"apps"`
+	AppVersions map[string]string `json:"app_versions,omitempty"` // version stamped in each app (newer servers)
+	Version     string            `json:"version"`
+	AutoUpdate  *bool             `json:"auto_update,omitempty"`
+}
+
+// appVersion is the version of the served menu bar app: the one stamped in
+// the app itself when the server reports it, else the release version
+// (older servers). The two differ when the app was built with another
+// version (CI stamps 0.1.0-ci.<run>); comparing with the release version
+// would then offer the same app again after every update.
+func (m menuBarManifest) appVersion() string {
+	if v := strings.TrimSpace(m.AppVersions[menubarZip]); v != "" {
+		return v
+	}
+	return m.Version
 }
 
 type menuBarUpdateInfo struct {
@@ -251,13 +267,13 @@ func menuBarUpdate(e *client.Engine, current string) (menuBarUpdateInfo, error) 
 	info := menuBarUpdateInfo{
 		Installed:      installedMenuBarVersion() != "" || appPathExists(appDir()),
 		CurrentVersion: current,
-		LatestVersion:  m.Version,
+		LatestVersion:  m.appVersion(),
 		SHA256:         want,
 	}
 	if want == "" {
 		return info, nil
 	}
-	info.Available = client.VersionNewer(current, m.Version)
+	info.Available = client.VersionNewer(current, info.LatestVersion)
 	return info, nil
 }
 
@@ -268,7 +284,8 @@ func appPathExists(path string) bool {
 
 // installMenuBar downloads the menu bar app from the logged-in server into
 // ~/Applications (replacing an older copy), removes the download quarantine
-// and starts it. It returns where the app is.
+// and starts it. A running copy is stopped first and started again when the
+// swap fails. It returns where the app is.
 func installMenuBar(e *client.Engine) (string, error) {
 	if runtime.GOOS != "darwin" {
 		return "", errors.New("the menu bar app runs on macOS")
@@ -315,16 +332,23 @@ func installMenuBar(e *client.Engine) (string, error) {
 	if _, err := os.Stat(src); err != nil {
 		return "", fmt.Errorf("the archive has no Hearth.app")
 	}
-	_ = exec.Command("pkill", "-x", "Hearth").Run() // stop the running copy, if any
+	stopped := stopMenuBarApp()
+	restart := func() { // put the stopped app back when the swap fails
+		if stopped {
+			_ = exec.Command("open", dst).Run()
+		}
+	}
 	backup := dst + ".old"
 	_ = os.RemoveAll(backup)
 	if _, err := os.Stat(dst); err == nil {
 		if err := os.Rename(dst, backup); err != nil {
+			restart()
 			return "", fmt.Errorf("stage old app: %w", err)
 		}
 	}
 	if err := os.Rename(src, dst); err != nil {
 		_ = os.Rename(backup, dst)
+		restart()
 		return "", err
 	}
 	_ = os.RemoveAll(stage)
@@ -334,6 +358,68 @@ func installMenuBar(e *client.Engine) (string, error) {
 		return dst, fmt.Errorf("installed in %s, but it did not start: %v", dst, err)
 	}
 	return dst, nil
+}
+
+// stopMenuBarApp quits this user's running menu bar app, if any, and waits
+// until it has exited, so that `open` starts the new bundle instead of
+// bringing the old process to the front. When the update was started from
+// the app itself, the app is an ancestor of this process, which pkill and
+// pgrep skip unless given -a. The app also reads our stdout and stderr:
+// SIGPIPE is ignored so that writing there after it is gone does not stop
+// the update half way, and this process leaves the app's session so that
+// nothing cleaning up after the app takes it along. It reports whether an
+// app was running.
+func stopMenuBarApp() bool {
+	if runtime.GOOS != "darwin" {
+		return false
+	}
+	signal.Ignore(syscall.SIGPIPE)
+	out, _ := exec.Command("pgrep", "-a", "-x", "-U", strconv.Itoa(os.Getuid()), "Hearth").Output()
+	var pids []int
+	for _, f := range strings.Fields(string(out)) {
+		if p, err := strconv.Atoi(f); err == nil && p > 0 && p != os.Getpid() {
+			pids = append(pids, p)
+		}
+	}
+	if len(pids) == 0 {
+		return false
+	}
+	for _, p := range pids {
+		if p == os.Getppid() {
+			_, _ = syscall.Setsid()
+		}
+	}
+	for _, p := range pids {
+		_ = syscall.Kill(p, syscall.SIGTERM)
+	}
+	if !waitExited(pids, 10*time.Second) {
+		for _, p := range pids {
+			_ = syscall.Kill(p, syscall.SIGKILL)
+		}
+		waitExited(pids, 3*time.Second)
+	}
+	return true
+}
+
+// waitExited polls until none of pids is running or d has passed.
+func waitExited(pids []int, d time.Duration) bool {
+	deadline := time.Now().Add(d)
+	for {
+		running := false
+		for _, p := range pids {
+			if syscall.Kill(p, 0) == nil {
+				running = true
+				break
+			}
+		}
+		if !running {
+			return true
+		}
+		if time.Now().After(deadline) {
+			return false
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
 }
 
 // wantMenuBarApp: `hearth setup` on a Mac that has no menu bar app yet

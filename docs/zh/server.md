@@ -153,7 +153,7 @@ scripts/build-dist.sh $D/dist <版本号>
 hearth server restart --data $D
 ```
 
-之后在线客户端的后台同步进程会在 30 分钟内自动更新（同时更新本机 agent 中的 `hearth` skill）；想立即更新就执行 `hearth self-update`。不希望客户端自动更新时，服务器加 `--no-client-auto-update`。Mac 菜单栏小程序会在后台检查同一个版本号，发现新版本后在菜单中提示「更新 Hearth」，用户确认后下载、校验并替换旧 App，再自动打开新版本。
+之后在线客户端的后台同步进程会在 30 分钟内自动更新（同时更新本机 agent 中的 `hearth` skill）；想立即更新就执行 `hearth self-update`。不希望客户端自动更新时，服务器加 `--no-client-auto-update`。Mac 菜单栏小程序会在后台把自己的版本和服务器上 App 包里标记的版本比较（`/v1/dist` 的 `app_versions`；旧服务器上用发布版本号），服务器上的 App 更新时在菜单中提示「更新 Hearth」，用户确认后下载、校验并替换旧 App，再自动打开新版本。
 
 要提供 Mac 菜单栏小程序（`hearth app install`），在 Mac 上构建，把 zip 放到二进制文件旁边；服务器下次重启时生效：
 

@@ -3,6 +3,7 @@ package server
 import (
 	"github.com/hearth-project/hearth-cli/skills"
 
+	"archive/zip"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -48,10 +49,13 @@ type distBinary struct {
 
 type distState struct {
 	Distribution
-	bins    map[string]distBinary // hearth-<os>-<arch>
-	apps    map[string]distBinary // desktop apps, e.g. hearth-menubar-darwin.zip (hearth app install)
-	bundles map[string]offlineBundle
-	pin     string
+	bins map[string]distBinary // hearth-<os>-<arch>
+	apps map[string]distBinary // desktop apps, e.g. hearth-menubar-darwin.zip (hearth app install)
+	// appVersions: the version stamped in each app, when its archive has a
+	// readable one; `hearth app update` compares the installed app with it.
+	appVersions map[string]string
+	bundles     map[string]offlineBundle
+	pin         string
 }
 
 // distNameRE limits served names to the platforms the client supports.
@@ -60,6 +64,41 @@ var distNameRE = regexp.MustCompile(`^hearth-(linux|darwin)-(amd64|arm64)$`)
 // distAppRE: desktop apps in the dist dir (the macOS menu bar app, built on
 // macOS by CI: desktop/macos), served next to the binaries.
 var distAppRE = regexp.MustCompile(`^hearth-menubar-darwin\.zip$`)
+
+// appVersionRE finds the version in a macOS app's Info.plist.
+var appVersionRE = regexp.MustCompile(`(?s)<key>CFBundleShortVersionString</key>\s*<string>([^<]+)</string>`)
+
+// zipAppVersion reads the version stamped in the app inside a desktop app
+// archive (Hearth.app/Contents/Info.plist of hearth-menubar-darwin.zip). It
+// need not be the release's VERSION: a CI build stamps 0.1.0-ci.<run>, and
+// an app compared with the release version would be offered again after
+// every update. "" when the archive has no readable version.
+func zipAppVersion(p string) string {
+	z, err := zip.OpenReader(p)
+	if err != nil {
+		return ""
+	}
+	defer z.Close()
+	for _, f := range z.File {
+		if f.Name != "Hearth.app/Contents/Info.plist" {
+			continue
+		}
+		r, err := f.Open()
+		if err != nil {
+			return ""
+		}
+		defer r.Close()
+		b, err := io.ReadAll(io.LimitReader(r, 1<<20))
+		if err != nil {
+			return ""
+		}
+		if m := appVersionRE.FindSubmatch(b); m != nil {
+			return strings.TrimSpace(string(m[1]))
+		}
+		return ""
+	}
+	return ""
+}
 
 func fileSHA256(p string) (string, error) {
 	f, err := os.Open(p)
@@ -91,7 +130,7 @@ func newDist(d *Distribution) (*distState, error) {
 	if strings.ContainsAny(d.PublicURL, "'\"`$\\ \n") {
 		return nil, fmt.Errorf("invalid public URL %q", d.PublicURL)
 	}
-	ds := &distState{Distribution: *d, bins: map[string]distBinary{}, apps: map[string]distBinary{}}
+	ds := &distState{Distribution: *d, bins: map[string]distBinary{}, apps: map[string]distBinary{}, appVersions: map[string]string{}}
 	own := fmt.Sprintf("hearth-%s-%s", runtime.GOOS, runtime.GOARCH)
 	sum, err := fileSHA256(d.BinaryPath)
 	if err != nil {
@@ -115,6 +154,9 @@ func newDist(d *Distribution) (*distState, error) {
 			}
 			if isApp {
 				ds.apps[e.Name()] = distBinary{p, sum}
+				if v := zipAppVersion(p); v != "" {
+					ds.appVersions[e.Name()] = v
+				}
 				continue
 			}
 			ds.bins[e.Name()] = distBinary{p, sum}
@@ -397,6 +439,9 @@ func (s *Server) handleDistManifest(w http.ResponseWriter, _ *http.Request) {
 		apps[n] = b.sha256
 	}
 	manifest := map[string]any{"binaries": out, "apps": apps, "version": d.Version, "auto_update": s.Settings().ClientAutoUpdate}
+	if len(d.appVersions) != 0 {
+		manifest["app_versions"] = d.appVersions
+	}
 	if len(d.bundles) != 0 {
 		sums := make(map[string]string, len(d.bundles))
 		for name, b := range d.bundles {
