@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/hearth-project/hearth-cli/internal/paths"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -69,7 +70,11 @@ func (e *Engine) SetSecret(s Secret) error {
 	if err != nil {
 		return err
 	}
-	return e.API.PutSecret(id, ct)
+	err = e.API.PutSecret(id, ct)
+	if StatusOf(err) == http.StatusInsufficientStorage {
+		return fmt.Errorf("the account holds the maximum of %d secrets; list them with hearth secret list and delete unused ones with hearth secret rm <name> (%w)", api.MaxSecretsPerUser, err)
+	}
+	return err
 }
 
 // Secrets downloads and decrypts every secret, sorted by name.

@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/hearth-project/hearth-cli/internal/library"
 )
@@ -143,6 +144,48 @@ func (e *Engine) pushLibSecrets(files map[string]string, prev map[string]string)
 		// Gone from this library since the last sync (deleted, or no
 		// longer a credential).
 		_ = e.DeleteSecret(s.Name)
+	}
+	return n, nil
+}
+
+// LibSecretTTL is how long the credential files of a skill that is no
+// longer in the library are kept before they are deleted. The wait covers
+// another machine that uploaded a new skill's credentials just before its
+// library push, which this machine has not pulled yet.
+const LibSecretTTL = 7 * 24 * time.Hour
+
+// libSecretNow is the clock of PruneLibSecrets (tests move it).
+var libSecretNow = time.Now
+
+// PruneLibSecrets deletes the credential files of skills this library no
+// longer has, once they were not updated for LibSecretTTL. Call it right
+// after a library sync, so the local library is the account's.
+func (e *Engine) PruneLibSecrets() (int, error) {
+	lib := library.Library{Root: LibraryDir(e.Home)}
+	if _, err := os.Stat(lib.SkillsDir()); err != nil {
+		return 0, nil // no library here: nothing to compare with
+	}
+	all, err := e.Secrets()
+	if err != nil {
+		return 0, err
+	}
+	cut := libSecretNow().Add(-LibSecretTTL).Unix()
+	n := 0
+	for _, s := range all {
+		rest, ok := strings.CutPrefix(s.RestoreTo, libRestorePrefix+"skills/")
+		if !ok || s.UpdatedAt == 0 || s.UpdatedAt > cut {
+			continue
+		}
+		skill, _, _ := strings.Cut(rest, "/")
+		if skill == "" || skill == "." || skill == ".." {
+			continue
+		}
+		if _, err := os.Lstat(filepath.Join(lib.SkillsDir(), skill)); err == nil || !os.IsNotExist(err) {
+			continue // still in the library (or cannot tell)
+		}
+		if e.DeleteSecret(s.Name) == nil {
+			n++
+		}
 	}
 	return n, nil
 }
