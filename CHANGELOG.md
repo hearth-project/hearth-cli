@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Publishing a device key deletes the SSH keys and endpoints of revoked or
+  removed devices. They were never used again but counted toward the
+  500-secret account limit, so long-used accounts could no longer publish a
+  new machine's key (`server: 507 too many secrets`). That error now says
+  which limit was reached and how to free space.
 - Automatic sharing keeps one shared latest copy: a new local edit becomes the newest version (last writer wins), while an unchanged stale copy is replaced by the team's newest version automatically. A package removed from the team is not recreated automatically. Each machine remembers what it last published (`<home>/share-state.json`), and the heartbeat carries a team package revision so connected daemons sync and render the new version immediately instead of waiting for the 20-minute library poll.
 - Library: an owner-only file inside a skill is no longer a credential just because of its mode (Hearth restores ordinary files as 0600). Credential names and content, explicit `metadata.hearth.credentials` declarations, and other owner-only binary files still are. Previously such files were removed from the bundle and kept as secrets, leaving skills with only `SKILL.md` on on-demand machines.
 - Add machine reuses a verified local workspace login instead of creating a

@@ -177,6 +177,10 @@ func (e *Engine) PublishDeviceKey() (string, error) {
 	if err != nil {
 		return "", err
 	}
+	// Keys and endpoints of removed devices are never used again but count
+	// toward the account's secret limit; without pruning, a long-used
+	// account eventually cannot publish a new machine's key (507).
+	e.pruneDeadSSHSecrets(all)
 	have := map[string]SSHKey{}
 	for _, s := range all {
 		if s.Name == sshKeyPrefix+id || strings.HasPrefix(s.Name, sshKeyPrefix+id+".u") {
@@ -201,6 +205,47 @@ func (e *Engine) PublishDeviceKey() (string, error) {
 		}
 	}
 	return line, nil
+}
+
+// pruneDeadSSHSecrets deletes the SSH keys and endpoints of devices that
+// are no longer active (revoked, or gone from the device list). The device
+// list is read after the secrets, so a device that registers meanwhile is
+// in it. Keys added by hand (no device) are kept. Errors are ignored: the
+// next publish tries again.
+func (e *Engine) pruneDeadSSHSecrets(all []Secret) int {
+	devs, err := e.API.Devices()
+	if err != nil || len(devs) == 0 {
+		return 0
+	}
+	active := map[string]bool{e.Cfg.DeviceID: true}
+	for _, d := range devs {
+		if activeDevice(d) {
+			active[d.ID] = true
+		}
+	}
+	n := 0
+	for _, s := range all {
+		owner := ""
+		switch {
+		case strings.HasPrefix(s.Name, sshHostPrefix):
+			owner = strings.TrimPrefix(s.Name, sshHostPrefix)
+		case strings.HasPrefix(s.Name, sshKeyPrefix):
+			var k SSHKey
+			if json.Unmarshal(s.Value, &k) != nil || !k.Device {
+				continue
+			}
+			owner = k.owner()
+		default:
+			continue
+		}
+		if owner == "" || active[owner] {
+			continue
+		}
+		if e.DeleteSecret(s.Name) == nil {
+			n++
+		}
+	}
+	return n
 }
 
 func shareUserKeys(home string) bool {
