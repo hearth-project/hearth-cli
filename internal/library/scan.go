@@ -131,7 +131,7 @@ func ScanSecrets(root string) ([]Finding, error) {
 	return out, err
 }
 
-// ordinarySkillFile: source, docs and tests restored by Hearth can be
+// ordinarySkillFile: source, docs, tests and SVG assets restored by Hearth can be
 // owner-only without being secrets. A script without a suffix is
 // recognised by its shebang; everything else owner-only is still private
 // by intent.
@@ -140,7 +140,7 @@ func ordinarySkillFile(path, name string) bool {
 	case ".py", ".sh", ".bash", ".zsh", ".fish", ".js", ".mjs", ".cjs", ".ts",
 		".tsx", ".go", ".rs", ".java", ".kt", ".c", ".h", ".cc", ".cpp", ".hpp",
 		".cs", ".rb", ".pl", ".php", ".lua", ".r", ".swift", ".html", ".css",
-		".scss", ".xml", ".sql", ".md", ".mdx", ".txt", ".yaml", ".yml", ".json",
+		".scss", ".xml", ".svg", ".sql", ".md", ".mdx", ".txt", ".yaml", ".yml", ".json",
 		".jsonl", ".pyc", ".pyo", ".ipynb":
 		return true
 	}
