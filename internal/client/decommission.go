@@ -33,6 +33,7 @@ var decommissionFiles = []string{
 	"learn-snooze.json", "env", "agents.local.json", "lib-imported.json",
 	"agent-homes.json", "agent-homes", "temp-credentials.json",
 	"library", "library-base.bundle", "library-state.json", "library-error.json", "library.lock",
+	"share-state.json",
 	"render.json", "mcp-state.json", "memory", "shell", "shell-off-here", "shell-state.json",
 	"ssh", "site", "site-state.json", "recipe-approved.json", "recipe-done.json",
 	"daemon-status.json", "daemon.pid", "daemon.log", "daemon.lock",

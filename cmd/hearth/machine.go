@@ -377,9 +377,10 @@ func reportHealth(e *client.Engine) error { _, err := reportHealthOf(e); return 
 
 func reportHealthOf(e *client.Engine) (client.HealthReport, error) {
 	h := e.MachineHealth()
-	return h, e.API.HeartbeatReport(map[string]any{"facts": h.Machine, "profiles": h.Profiles, "workspace": h.Workspace},
+	_, err := e.API.HeartbeatReport(map[string]any{"facts": h.Machine, "profiles": h.Profiles, "workspace": h.Workspace},
 		map[string]any{"status": h.Status, "client": h.Client, "agents": h.Agents, "tools": h.Tools, "recipe_todo": h.RecipeTodo,
 			"recipe_manual": h.RecipeManual, "todo_steps": h.TodoSteps, "issues": h.Issues, "ssh": h.SSH, "checked_at": h.CheckedAt})
+	return h, err
 }
 
 // reportHealthQuiet reports after a change (a restore step done); a

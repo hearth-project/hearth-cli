@@ -103,3 +103,131 @@ func TestShareTop(t *testing.T) {
 		t.Fatalf("share_top = 0 still shared: %+v %v", res, err)
 	}
 }
+
+// Two machines keep one shared latest copy: an unchanged stale copy is
+// replaced by the team's version, while a genuine new edit is published
+// and becomes the newest version.
+func TestShareTopAdoptsTeamVersion(t *testing.T) {
+	en := newEnv(t)
+	en.clock.add(time.Until(en.clock.now())*-1 + time.Second)
+	alice := en.machine("alice")
+	alice.libTargets(t)
+	if err := alice.API.CreateTeam("infer"); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().Unix()
+	var usage []string
+	for i := 0; i < 5; i++ {
+		b, _ := json.Marshal(map[string]any{"time": now, "event": "get_skill", "skill": "s"})
+		usage = append(usage, string(b))
+	}
+	if err := os.WriteFile(filepath.Join(alice.Home, "usage.jsonl"), []byte(strings.Join(usage, "\n")+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	libWrite(t, alice, "skills/s/SKILL.md", "---\nname: s\ndescription: s\n---\nfrom alice\n")
+	if _, err := alice.LibPush(false); err != nil {
+		t.Fatal(err)
+	}
+	alice2 := en.machine("alice2")
+	alice2.libTargets(t)
+	if _, err := alice2.LibPull(false); err != nil {
+		t.Fatal(err)
+	}
+	res, err := alice.ShareTop(false)
+	if err != nil || len(res) != 1 || res[0].Op != "shared" {
+		t.Fatalf("alice first share: %+v %v", res, err)
+	}
+
+	res, err = alice2.ShareTop(false)
+	if err != nil || len(res) != 1 || res[0].Op != "unchanged" {
+		t.Fatalf("alice2 did not adopt the initial version: %+v %v", res, err)
+	}
+	skill := func(m *machine) string {
+		b, _ := os.ReadFile(filepath.Join(LibraryDir(m.Home), "skills/s/SKILL.md"))
+		return string(b)
+	}
+	if !strings.Contains(skill(alice2), "from alice\n") {
+		t.Fatalf("alice2 kept the stale copy: %q", skill(alice2))
+	}
+	pkgs, err := alice.API.Packages("infer")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pkgs) != 1 || pkgs[0].Version != 1 {
+		t.Fatalf("refresh created a version: %+v", pkgs)
+	}
+
+	// A real edit on alice becomes v2; alice2's unchanged old copy is
+	// replaced automatically.
+	libWrite(t, alice, "skills/s/SKILL.md", "---\nname: s\ndescription: s\n---\nfrom alice v2\n")
+	res, err = alice.ShareTop(false)
+	if err != nil || len(res) != 1 || res[0].Op != "updated" {
+		t.Fatalf("alice edit did not publish: %+v %v", res, err)
+	}
+	res, err = alice2.ShareTop(false)
+	if err != nil || len(res) != 1 || res[0].Op != "refreshed" || res[0].Version != 2 {
+		t.Fatalf("alice2 did not adopt v2: %+v %v", res, err)
+	}
+	if !strings.Contains(skill(alice2), "from alice v2\n") {
+		t.Fatalf("alice2 kept the old copy: %q", skill(alice2))
+	}
+	// A real edit on alice2 becomes v3, and alice adopts it.
+	libWrite(t, alice2, "skills/s/SKILL.md", "---\nname: s\ndescription: s\n---\nfrom alice2 v3\n")
+	res, err = alice2.ShareTop(false)
+	if err != nil || len(res) != 1 || res[0].Op != "updated" {
+		t.Fatalf("alice2 edit did not publish: %+v %v", res, err)
+	}
+	res, err = alice.ShareTop(false)
+	if err != nil || len(res) != 1 || res[0].Op != "refreshed" || res[0].Version != 3 {
+		t.Fatalf("alice did not adopt v3: %+v %v", res, err)
+	}
+	if !strings.Contains(skill(alice), "from alice2 v3\n") {
+		t.Fatalf("alice kept the old copy: %q", skill(alice))
+	}
+	// Removing the package from the team must not make the next auto-share
+	// recreate it from this machine.
+	if _, err := alice.API.Unpublish("infer", "skill", "s"); err != nil {
+		t.Fatal(err)
+	}
+	res, err = alice.ShareTop(false)
+	if err != nil || len(res) != 1 || res[0].Op != "removed" {
+		t.Fatalf("removed package was shared again: %+v %v", res, err)
+	}
+	if pkgs, err = alice.API.Packages("infer"); err != nil || len(pkgs) != 0 {
+		t.Fatalf("removed package came back: %+v %v", pkgs, err)
+	}
+}
+
+// The heartbeat tells a connected daemon when a team package changed, so
+// it can sync immediately instead of waiting for the 20-minute library
+// poll.
+func TestHeartbeatTeamRevision(t *testing.T) {
+	en := newEnv(t)
+	alice := en.machine("alice")
+	alice.libTargets(t)
+	if err := alice.API.CreateTeam("infer"); err != nil {
+		t.Fatal(err)
+	}
+	before, err := alice.API.HeartbeatState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	libWrite(t, alice, "skills/s/SKILL.md", "---\nname: s\ndescription: s\n---\nv1\n")
+	if _, _, err := alice.Publish("infer", "skill", "s", false); err != nil {
+		t.Fatal(err)
+	}
+	after, err := alice.API.HeartbeatState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if before.TeamRevision == "" || after.TeamRevision == "" || before.TeamRevision == after.TeamRevision {
+		t.Fatalf("team revision did not change: %q -> %q", before.TeamRevision, after.TeamRevision)
+	}
+	again, err := alice.API.HeartbeatState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again.TeamRevision != after.TeamRevision {
+		t.Fatalf("unchanged team got a new revision: %q -> %q", after.TeamRevision, again.TeamRevision)
+	}
+}

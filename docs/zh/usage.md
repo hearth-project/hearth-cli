@@ -263,6 +263,7 @@ hearth status                         # “updated in the last 7 days: bench v1 
 - **固定。** `--pin` 和 `--version N` 让链接停在原处，直到你用 `hearth lib update --yes` 移动它，或重新链接。
 - **git 源** 始终固定在某个 commit；有新 commit 时 `hearth lib update` 会列出，`--yes` 应用。不可信的源不审查就不会移动。
 - **发布。** 维护者用 `hearth lib publish skill <name> --team <team>` 发布新版本；你最常用的 5 个 skill 和 agent 在内容变化时自动重新发布（`share_top`），其他的需要手动发布。
+- **新修改、旧副本与更新。** 自动共享会在本机内容相对上次发布或采纳的版本发生变化时发布；新的修改会成为最新版本（最后写入者赢）。本机没有变化时，不会拿旧副本覆盖新版本，而是自动用团队最新版替换本机旧副本。团队里已删除的包不会被自动重新创建。每次心跳还会返回团队包版本摘要；其他机器一发布，在线 daemon 就会立即同步 library 并重新渲染 agent，不再等 20 分钟的轮询。
 
 ## 7. Agent
 

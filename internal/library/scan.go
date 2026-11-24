@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -79,12 +80,21 @@ func ScanSecrets(root string) ([]Finding, error) {
 			return nil
 		}
 		rel, _ := filepath.Rel(root, p)
-		// By name, or private by intent (only the owner may read it).
+		// By name, or private by intent (only the owner may read it). Mode
+		// alone is not enough: Hearth restores ordinary files as 0600, so a
+		// source file or test must not become a credential just because of
+		// the permissions it got from another machine. Binary and other
+		// non-source files still count.
 		inSkill := skillTree || strings.HasPrefix(filepath.ToSlash(rel), "skills/")
 		// SKILL.md is the skill's own text: judged by content only (tools
 		// such as codex-mixin install theirs owner-only).
-		private := inSkill && d.Name() != "SKILL.md"
-		if info, err := d.Info(); err == nil && (credentialName(d.Name()) || (private && info.Mode().Perm()&0o077 == 0)) {
+		private := false
+		if inSkill && d.Name() != "SKILL.md" {
+			if info, err := d.Info(); err == nil && info.Mode().Perm()&0o077 == 0 {
+				private = !ordinarySkillFile(p, d.Name())
+			}
+		}
+		if credentialName(d.Name()) || private {
 			out = append(out, Finding{File: rel, Rule: "credential file"})
 			return nil
 		}
@@ -119,6 +129,29 @@ func ScanSecrets(root string) ([]Finding, error) {
 		return nil
 	})
 	return out, err
+}
+
+// ordinarySkillFile: source, docs and tests restored by Hearth can be
+// owner-only without being secrets. A script without a suffix is
+// recognised by its shebang; everything else owner-only is still private
+// by intent.
+func ordinarySkillFile(path, name string) bool {
+	switch strings.ToLower(filepath.Ext(name)) {
+	case ".py", ".sh", ".bash", ".zsh", ".fish", ".js", ".mjs", ".cjs", ".ts",
+		".tsx", ".go", ".rs", ".java", ".kt", ".c", ".h", ".cc", ".cpp", ".hpp",
+		".cs", ".rb", ".pl", ".php", ".lua", ".r", ".swift", ".html", ".css",
+		".scss", ".xml", ".sql", ".md", ".mdx", ".txt", ".yaml", ".yml", ".json",
+		".jsonl", ".pyc", ".pyo", ".ipynb":
+		return true
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+	var b [2]byte
+	n, _ := io.ReadFull(f, b[:])
+	return n == 2 && b[0] == '#' && b[1] == '!'
 }
 
 // codeExpr reports whether the matched value is followed by a call or

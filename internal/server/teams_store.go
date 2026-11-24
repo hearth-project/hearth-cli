@@ -281,6 +281,28 @@ func (s *store) listPackages(teamID int64) ([]packageRow, error) {
 	return out, rows.Err()
 }
 
+// teamRevision hashes the latest packages of every team the user can
+// read. A daemon reports its last revision at each heartbeat and syncs its
+// library when the server has a different one, so a new version reaches
+// connected machines without waiting for the next library poll.
+func (s *store) teamRevision(uid int64) (string, error) {
+	teams, err := s.listTeams(uid)
+	if err != nil {
+		return "", err
+	}
+	h := sha256.New()
+	for _, t := range teams {
+		ps, err := s.listPackages(t.ID)
+		if err != nil {
+			return "", err
+		}
+		for _, p := range ps {
+			fmt.Fprintf(h, "%s\x00%s\x00%s\x00%d\x00%s\n", t.Name, p.Type, p.Name, p.Version, p.SHA256)
+		}
+	}
+	return hex.EncodeToString(h.Sum(nil))[:16], nil
+}
+
 // getPackage returns one version (0 = latest).
 func (s *store) getPackage(teamID int64, typ, name string, version int64) (packageRow, error) {
 	q := `SELECT ` + pkgCols + ` FROM packages p JOIN package_versions v ON v.package_id=p.id

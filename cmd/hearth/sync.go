@@ -320,6 +320,7 @@ func daemonCmd() *cobra.Command {
 				log.Printf("identity login: %v", err)
 			}
 			var lastLib, lastUsage, lastMemory, lastRepos time.Time
+			var lastTeamRevision string
 			var lastLibMsg, lastMemoryMsg string
 			// This device's SSH key, so the user's machines accept it.
 			if _, err := e.PublishDeviceKey(); err != nil {
@@ -442,7 +443,7 @@ func daemonCmd() *cobra.Command {
 					lastHealth = time.Now()
 				}
 				h := health
-				if err := e.API.HeartbeatReport(map[string]any{"facts": h.Machine, "profiles": h.Profiles, "workspace": h.Workspace}, map[string]any{"status": h.Status, "client": h.Client, "agents": h.Agents, "tools": h.Tools, "recipe_todo": h.RecipeTodo, "recipe_manual": h.RecipeManual, "todo_steps": h.TodoSteps, "issues": h.Issues, "ssh": h.SSH, "checked_at": h.CheckedAt}); err != nil {
+				if _, err := e.API.HeartbeatReport(map[string]any{"facts": h.Machine, "profiles": h.Profiles, "workspace": h.Workspace}, map[string]any{"status": h.Status, "client": h.Client, "agents": h.Agents, "tools": h.Tools, "recipe_todo": h.RecipeTodo, "recipe_manual": h.RecipeManual, "todo_steps": h.TodoSteps, "issues": h.Issues, "ssh": h.SSH, "checked_at": h.CheckedAt}); err != nil {
 					if client.IsDeviceRemoved(err) {
 						return daemonDecommission(e, lock)
 					}
@@ -453,13 +454,22 @@ func daemonCmd() *cobra.Command {
 				}
 				// Online for the other machines: their default restore leaves
 				// out the conversations this machine is working on.
-				if n, err := e.API.HeartbeatIntents(); err == nil && n > 0 {
-					// Changes asked for in the Hearth app.
-					if lines, err := e.ApplyIntents(); err != nil {
-						log.Printf("console changes: %v", err)
-					} else {
-						for _, l := range lines {
-							log.Printf("console: %s", l)
+				if hbState, herr := e.API.HeartbeatState(); herr == nil {
+					if hbState.TeamRevision != "" {
+						if lastTeamRevision != "" && hbState.TeamRevision != lastTeamRevision {
+							log.Printf("team packages changed; syncing the library now")
+							lastLib = time.Time{} // the library block below runs now
+						}
+						lastTeamRevision = hbState.TeamRevision
+					}
+					if hbState.Intents > 0 {
+						// Changes asked for in the Hearth app.
+						if lines, err := e.ApplyIntents(); err != nil {
+							log.Printf("console changes: %v", err)
+						} else {
+							for _, l := range lines {
+								log.Printf("console: %s", l)
+							}
 						}
 					}
 				}

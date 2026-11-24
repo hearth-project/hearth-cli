@@ -263,6 +263,7 @@ hearth status                         # "updated in the last 7 days: bench v1 â†
 - **Pinned.** `--pin` and `--version N` keep a link where it is until you move it with `hearth lib update --yes` or link again.
 - **Git sources** are always pinned to a commit; a newer commit shows up in `hearth lib update`, and `--yes` applies it. Untrusted sources never move without a review.
 - **Publishing.** A maintainer publishes a new version with `hearth lib publish skill <name> --team <team>`; your five most used skills and agents are republished automatically when they change (`share_top`). Others are published by hand.
+- **New edits, stale copies and updates.** Automatic sharing publishes when this machine's copy changed since it last published or adopted it; the newest edit becomes the newest version (last writer wins). An unchanged copy is not republished over a newer version: the team's newest version replaces it automatically. A package removed from the team is not recreated automatically. Each heartbeat also returns a team package revision, so when another machine publishes, connected daemons sync their library and agent renders immediately instead of waiting for the 20-minute poll.
 
 ## 7. Agents
 

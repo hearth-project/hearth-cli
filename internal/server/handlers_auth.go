@@ -84,7 +84,8 @@ func (s *Server) routes() {
 		if hb.Machine != nil || hb.Health != nil {
 			_, _ = s.st.db.Exec(`UPDATE devices SET machine_json=?, health_json=?, health_at=? WHERE id=?`, machine, health, s.now(), deviceOf(r))
 		}
-		writeJSON(w, http.StatusOK, map[string]int{"intents": s.countIntents(userOf(r))})
+		revision, _ := s.st.teamRevision(userOf(r))
+		writeJSON(w, http.StatusOK, api.HeartbeatResponse{Intents: s.countIntents(userOf(r)), TeamRevision: revision})
 	}))
 	m.HandleFunc("GET /v1/intents", s.authed(s.handleListIntents))
 	m.HandleFunc("DELETE /v1/intents/{id}", s.authed(s.handleDoneIntent))

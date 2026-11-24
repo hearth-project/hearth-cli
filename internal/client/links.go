@@ -226,6 +226,14 @@ func (e *Engine) Publish(team, typ, name string, allowSecrets bool) (int64, bool
 		return 0, false, err
 	}
 	r, err := e.API.Publish(team, typ, name, desc, sum, data)
+	if err == nil {
+		// Remember this explicit publish: later automatic sharing may
+		// replace this machine's own copy, but not another publisher's.
+		st := loadShareState(e.Home)
+		if st.set(team, typ, name, sum) {
+			_ = st.save(e.Home)
+		}
+	}
 	return r.Version, r.Created, err
 }
 
