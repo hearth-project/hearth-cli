@@ -79,6 +79,41 @@ func TestSSHKeysFollowDevices(t *testing.T) {
 	if len(keys) != 2 {
 		t.Fatalf("keys after revoke = %d, want 2", len(keys))
 	}
+	// The revoked device's keys and endpoint are deleted at the next
+	// publish, so they stop counting toward the secret limit; a key added
+	// by hand stays.
+	if err := b.SetSecret(Secret{Name: sshHostPrefix + b.Cfg.DeviceID, Value: []byte(`{"device_id":"` + b.Cfg.DeviceID + `"}`)}); err == nil {
+		t.Fatal("a revoked device still writes secrets")
+	}
+	gone := `{"device_id":"0000000000000000","address":"10.0.0.9","port":8022}`
+	if err := a.SetSecret(Secret{Name: sshHostPrefix + "0000000000000000", Value: []byte(gone)}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.AuthorizeKey(usual, "laptop"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.PublishDeviceKey(); err != nil {
+		t.Fatal(err)
+	}
+	all, err := a.Secrets()
+	if err != nil {
+		t.Fatal(err)
+	}
+	manual := 0
+	for _, s := range all {
+		if strings.Contains(s.Name, b.Cfg.DeviceID) || s.Name == sshHostPrefix+"0000000000000000" {
+			t.Fatalf("dead device secret kept: %s", s.Name)
+		}
+		if strings.HasPrefix(s.Name, sshKeyPrefix+"x-") {
+			manual++
+		}
+	}
+	if manual != 1 {
+		t.Fatalf("key added by hand pruned: %d", manual)
+	}
+	if err := a.UnauthorizeKey("laptop"); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.Remove(filepath.Join(h, ".ssh", "id_ed25519.pub")); err != nil {
 		t.Fatal(err)
 	}
