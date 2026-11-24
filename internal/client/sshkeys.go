@@ -207,6 +207,17 @@ func (e *Engine) PublishDeviceKey() (string, error) {
 	return line, nil
 }
 
+// PruneSSHSecrets deletes the SSH keys and endpoints of devices that are no
+// longer active (the daemon runs it now and then: a machine offline for the
+// server's device TTL leaves the device list, and with it its keys).
+func (e *Engine) PruneSSHSecrets() (int, error) {
+	all, err := e.Secrets()
+	if err != nil {
+		return 0, err
+	}
+	return e.pruneDeadSSHSecrets(all), nil
+}
+
 // pruneDeadSSHSecrets deletes the SSH keys and endpoints of devices that
 // are no longer active (revoked, or gone from the device list). The device
 // list is read after the secrets, so a device that registers meanwhile is

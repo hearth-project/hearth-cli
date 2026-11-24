@@ -319,7 +319,7 @@ func daemonCmd() *cobra.Command {
 			if err := client.AutoEnableIdentityLogin(e.Home); err != nil {
 				log.Printf("identity login: %v", err)
 			}
-			var lastLib, lastUsage, lastMemory, lastRepos time.Time
+			var lastLib, lastUsage, lastMemory, lastRepos, lastPrune time.Time
 			var lastTeamRevision string
 			var lastLibMsg, lastMemoryMsg string
 			// This device's SSH key, so the user's machines accept it.
@@ -523,6 +523,17 @@ func daemonCmd() *cobra.Command {
 					}
 					// Each team's most used skills and agents are kept in every
 					// agent here, so they get invoked like the user's own.
+					// Secrets of machines and skills that are gone count toward
+					// the account's limit; expire them a few times a day.
+					if err == nil && time.Since(lastPrune) >= pruneEvery {
+						lastPrune = time.Now()
+						if n, perr := e.PruneSSHSecrets(); perr == nil && n > 0 {
+							log.Printf("deleted the SSH keys of %d removed machine(s)", n)
+						}
+						if n, perr := e.PruneLibSecrets(); perr == nil && n > 0 {
+							log.Printf("deleted %d credential file(s) of skills no longer in the library", n)
+						}
+					}
 					if err == nil {
 						logTeamTop(e, shareSeen)
 						logFollow(e, shareSeen)
@@ -647,6 +658,10 @@ func startDaemon() error {
 // defaultRestoreLast is how many conversations restore and setup bring
 // back unless asked for more: the newest are what people continue.
 const defaultRestoreLast = 10
+
+// pruneEvery is how often the daemon deletes secrets of removed machines
+// and skills.
+const pruneEvery = 6 * time.Hour
 
 func restoreCmd() *cobra.Command {
 	var agent string
