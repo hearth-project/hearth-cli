@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Library: restored PNG, WebP and WAV assets whose headers match their file
+  extensions stay in the skill bundle. They no longer fail library sync
+  by exceeding the size or count limit of credentials.
+
+## 0.1.5 — 2026-11-24
+
 - Library: ordinary SVG assets restored with mode `0600` stay in the skill
   bundle and no longer consume secret slots. Credential names and contents
   are still checked.

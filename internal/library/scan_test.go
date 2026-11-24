@@ -56,3 +56,41 @@ func TestOwnerOnlySkillFiles(t *testing.T) {
 		t.Fatalf("findings: %v", fs)
 	}
 }
+
+func TestOwnerOnlyMediaUsesFileSignature(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "skills")
+	want := make(map[string]bool)
+	for _, tc := range []struct {
+		name, content string
+		private       bool
+	}{
+		{"image.PNG", "\x89PNG\r\n\x1a\n\x00", false},
+		{"image.webp", "RIFF\x04\x00\x00\x00WEBPVP8 ", false},
+		{"sound.wav", "RIFF\x04\x00\x00\x00WAVE", false},
+		{"renamed.wav", "\x89PNG\r\n\x1a\n\x00", true},
+		{"unknown.png", "\x01\x02\x03\x04", true},
+		{"id_ed25519.png", "\x89PNG\r\n\x1a\n\x00", true},
+	} {
+		path := filepath.Join(dir, "example", tc.name)
+		write(t, path, tc.content)
+		if err := os.Chmod(path, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if tc.private {
+			want[filepath.Join("example", tc.name)] = true
+		}
+	}
+	findings, err := ScanSecrets(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, finding := range findings {
+		if !want[finding.File] {
+			t.Errorf("unexpected finding: %v", finding)
+		}
+		delete(want, finding.File)
+	}
+	if len(want) > 0 {
+		t.Errorf("files that should remain private: %v", want)
+	}
+}
