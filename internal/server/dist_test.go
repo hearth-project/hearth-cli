@@ -1,6 +1,8 @@
 package server
 
 import (
+	"archive/zip"
+	"bytes"
 	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
@@ -104,6 +106,54 @@ func TestInstallerDisabledWithoutPublicURL(t *testing.T) {
 
 // The installer picks the build for the host (uname), verifies its checksum
 // and runs setup; hosts without a build get a clear error.
+// The menu bar app compares its own version with the one stamped in the
+// served app, which a CI build sets apart from the release's VERSION.
+func TestDistServesAppVersion(t *testing.T) {
+	dir := t.TempDir()
+	dist := filepath.Join(dir, "dist")
+	os.MkdirAll(dist, 0o755)
+	own := filepath.Join(dist, "hearth-"+runtime.GOOS+"-"+runtime.GOARCH)
+	os.WriteFile(own, []byte("#!/bin/sh\n"), 0o755)
+	os.WriteFile(filepath.Join(dist, "VERSION"), []byte("0.1.3-20261124.1357\n"), 0o644)
+	var zb bytes.Buffer
+	zw := zip.NewWriter(&zb)
+	f, _ := zw.Create("Hearth.app/Contents/Info.plist")
+	f.Write([]byte("<plist><dict>\n\t<key>CFBundleShortVersionString</key>\n\t<string>0.1.0-ci.66</string>\n</dict></plist>\n"))
+	zw.Close()
+	app := filepath.Join(dist, "hearth-menubar-darwin.zip")
+	os.WriteFile(app, zb.Bytes(), 0o644)
+	var h http.Handler
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { h.ServeHTTP(w, r) }))
+	defer ts.Close()
+	srv, err := New(Config{DataDir: filepath.Join(dir, "data"), Logger: log.New(io.Discard, "", 0),
+		Dist: &Distribution{PublicURL: ts.URL, BinaryPath: own, Dir: dist}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer srv.Close()
+	h = srv
+	resp, err := http.Get(ts.URL + "/v1/dist")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var m struct {
+		Version     string
+		Apps        map[string]string
+		AppVersions map[string]string `json:"app_versions"`
+	}
+	json.NewDecoder(resp.Body).Decode(&m)
+	resp.Body.Close()
+	if m.Version != "0.1.3-20261124.1357" || m.Apps["hearth-menubar-darwin.zip"] == "" || m.AppVersions["hearth-menubar-darwin.zip"] != "0.1.0-ci.66" {
+		t.Fatalf("manifest %+v", m)
+	}
+	// An archive without a readable version is still served, without one.
+	os.WriteFile(app, []byte("app"), 0o644)
+	ds, err := newDist(&Distribution{PublicURL: ts.URL, BinaryPath: own, Dir: dist})
+	if err != nil || ds.apps["hearth-menubar-darwin.zip"].sha256 == "" || len(ds.appVersions) != 0 {
+		t.Fatalf("dist %+v %v", ds, err)
+	}
+}
+
 func TestInstallerPicksPlatformBuild(t *testing.T) {
 	if _, err := exec.LookPath("curl"); err != nil {
 		t.Skip("curl not installed")

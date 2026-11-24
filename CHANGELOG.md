@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The macOS menu bar app's 「更新」 now installs and reopens the new app. `hearth app update` left a running app alone when the app itself had started the update (pkill skips its own ancestors), so the old app kept running and offered the same update again; it now stops the app, waits for it to exit and then opens the new one. The server also reports the version stamped in the served app (`app_versions` in `/v1/dist`) and `hearth app update` compares with it, so an app built with another version, such as a CI build, is no longer offered again after every update.
 - Automatic sharing keeps one shared latest copy: a new local edit becomes the newest version (last writer wins), while an unchanged stale copy is replaced by the team's newest version automatically. A package removed from the team is not recreated automatically. Each machine remembers what it last published (`<home>/share-state.json`), and the heartbeat carries a team package revision so connected daemons sync and render the new version immediately instead of waiting for the 20-minute library poll.
 - Library: an owner-only file inside a skill is no longer a credential just because of its mode (Hearth restores ordinary files as 0600). Credential names and content, explicit `metadata.hearth.credentials` declarations, and other owner-only binary files still are. Previously such files were removed from the bundle and kept as secrets, leaving skills with only `SKILL.md` on on-demand machines.
 - Add machine reuses a verified local workspace login instead of creating a
