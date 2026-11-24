@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The macOS menu bar app's 「更新」 now installs and reopens the new app. `hearth app update` left a running app alone when the app itself had started the update (pkill skips its own ancestors), so the old app kept running and offered the same update again; it now stops the app, waits for it to exit and then opens the new one. The server also reports the version stamped in the served app (`app_versions` in `/v1/dist`) and `hearth app update` compares with it, so an app built with another version, such as a CI build, is no longer offered again after every update.
 - Library: restored PNG, WebP and WAV assets whose headers match their file
   extensions stay in the skill bundle. They no longer fail library sync
   by exceeding the size or count limit of credentials.
