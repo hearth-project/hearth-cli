@@ -98,7 +98,10 @@ func MoveHome(from, ws string) (string, error) {
 	if err := os.MkdirAll(abs, 0o755); err != nil {
 		return "", err
 	}
-	target := WorkspaceHome(abs)
+	target := WorkspaceHomeHere(abs)
+	if owner := homeOwner(from); owner != "" {
+		target = WorkspaceHomeFor(abs, owner) // another person may use the directory too
+	}
 	if filepath.Clean(target) == filepath.Clean(from) {
 		return target, nil
 	}
@@ -137,7 +140,7 @@ func MoveHome(from, ws string) (string, error) {
 			return "", err
 		}
 	}
-	if _, err := InitWorkspace(abs); err != nil {
+	if _, err := InitWorkspaceHome(abs, target); err != nil {
 		return "", err
 	}
 	rehomeRC(from, target)

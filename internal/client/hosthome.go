@@ -116,3 +116,97 @@ func OtherHostHome(ws string) (string, bool) {
 	}
 	return "", true
 }
+
+// Several people in one workspace (a directory everyone on a shared Unix
+// account uses): <ws>/.hearth and its hosts/<host> belong to the person
+// who logged in there first; every other person's homes are under
+// <ws>/.hearth/users/<email>, in the same layout (the first machine of that
+// person there, then hosts/<host>). Nothing in the directory says who is
+// asking, so the home is HEARTH_USER's when it is set (Hearth's sshd marks
+// each person's sessions with it), else the first person's.
+
+// workspaceUserKey is a person's directory name under users/.
+func workspaceUserKey(email string) string {
+	k := strings.Map(func(r rune) rune {
+		if r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '.' || r == '-' || r == '_' || r == '@' || r == '+' {
+			return r
+		}
+		return '_'
+	}, strings.ToLower(strings.TrimSpace(email)))
+	if k == "" || k == "." || k == ".." {
+		return "_"
+	}
+	return k
+}
+
+// homeIn is this machine's home in a person's base directory (<ws>/.hearth
+// or <ws>/.hearth/users/<email>).
+func homeIn(base string) string {
+	if homeOfThisHost(base) {
+		return base
+	}
+	return filepath.Join(base, "hosts", hostKey())
+}
+
+// WorkspaceHomes are the logged-in homes of this machine in ws, one per
+// person, the first person's first.
+func WorkspaceHomes(ws string) []string {
+	base := filepath.Join(ws, ".hearth")
+	bases := []string{base}
+	users, _ := os.ReadDir(filepath.Join(base, "users"))
+	for _, u := range users {
+		if u.IsDir() {
+			bases = append(bases, filepath.Join(base, "users", u.Name()))
+		}
+	}
+	var out []string
+	for _, b := range bases {
+		if h := homeIn(b); fileExists(filepath.Join(h, "config.json")) {
+			out = append(out, h)
+		}
+	}
+	return out
+}
+
+// WorkspaceHomeFor is email's home in ws on this machine: the one logged in
+// as email, else where a new login of email goes (the first person's place
+// when nobody else is logged in there).
+func WorkspaceHomeFor(ws, email string) string {
+	for _, h := range WorkspaceHomes(ws) {
+		if cfg, err := LoadConfig(h); err == nil && strings.EqualFold(cfg.Email, email) {
+			return h
+		}
+	}
+	if h := WorkspaceHome(ws); !fileExists(filepath.Join(h, "config.json")) {
+		return h
+	}
+	return homeIn(filepath.Join(ws, ".hearth", "users", workspaceUserKey(email)))
+}
+
+// WorkspaceHomeHere is the home in ws of whoever asks: HEARTH_USER's when
+// it is set, else the first person's.
+func WorkspaceHomeHere(ws string) string {
+	if u := strings.TrimSpace(os.Getenv("HEARTH_USER")); u != "" {
+		return WorkspaceHomeFor(ws, u)
+	}
+	return WorkspaceHome(ws)
+}
+
+// InWorkspaceState reports whether home is one of the homes kept in ws
+// (anyone's, any machine's).
+func InWorkspaceState(ws, home string) bool {
+	base := filepath.Clean(filepath.Join(ws, ".hearth"))
+	h := filepath.Clean(home)
+	return h == base || strings.HasPrefix(h, base+string(filepath.Separator))
+}
+
+// WorkspacePeople are the accounts logged in to ws on this machine.
+func WorkspacePeople(ws string) []string {
+	var out []string
+	for _, h := range WorkspaceHomes(ws) {
+		if cfg, err := LoadConfig(h); err == nil {
+			out = append(out, cfg.Email)
+		}
+	}
+	return out
+}

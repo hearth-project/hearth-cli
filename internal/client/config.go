@@ -24,7 +24,7 @@ func Home() string {
 		return h
 	}
 	if ws := FindWorkspace("."); ws != "" {
-		return WorkspaceHome(ws)
+		return WorkspaceHomeHere(ws)
 	}
 	h, err := os.UserHomeDir()
 	if err != nil {
@@ -58,8 +58,15 @@ func FindWorkspace(dir string) string {
 	}
 }
 
-// InitWorkspace makes dir a workspace and returns its hearth home.
+// InitWorkspace makes dir a workspace and returns its hearth home (the one
+// of whoever asks, WorkspaceHomeHere).
 func InitWorkspace(dir string) (string, error) {
+	return InitWorkspaceHome(dir, "")
+}
+
+// InitWorkspaceHome makes dir a workspace with home as one of its homes
+// ("" = WorkspaceHomeHere), and returns that home.
+func InitWorkspaceHome(dir, home string) (string, error) {
 	abs, err := filepath.Abs(dir)
 	if err != nil {
 		return "", err
@@ -78,7 +85,11 @@ func InitWorkspace(dir string) (string, error) {
 			return "", err
 		}
 	}
-	home := WorkspaceHome(abs)
+	if home == "" {
+		home = WorkspaceHomeHere(abs)
+	} else if !InWorkspaceState(abs, home) {
+		return "", fmt.Errorf("%s is not a home of workspace %s", home, abs)
+	}
 	if err := os.MkdirAll(home, 0o700); err != nil {
 		return "", err
 	}

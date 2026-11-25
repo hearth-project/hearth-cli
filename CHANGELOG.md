@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Several people can use one workspace directory on a shared Unix account.
+  The first person keeps `<dir>/.hearth`, and everyone else gets
+  `<dir>/.hearth/users/<email>` (with `hosts/<host>` for other machines of a
+  shared disk). `hearth setup` (in the directory or with `--workspace`) puts a
+  new login there instead of stopping at a colleague's, and `hearth init
+  --move-login` and setup's workspace prompt do the same. Commands in the
+  directory use the login of `HEARTH_USER`, which Hearth's sshd sets for each
+  person's sessions, and otherwise the first person's, saying so in a
+  terminal. Sessions of everyone's homes there count as theirs (session scope),
+  and memory hooks and skill search answer for `HEARTH_USER`.
 - Setup on a Unix account several people share: when `~/.hearth` holds another
   person's login, the install command no longer stops with `... is logged in
   as <someone else>; to replace that login pass --switch`. It leaves that login

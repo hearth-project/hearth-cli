@@ -33,8 +33,9 @@ func main() {
 	var workspace string
 	root.PersistentFlags().StringVar(&workspace, "workspace", "", "your working directory (state goes to <dir>/.hearth; default: found from the current directory)")
 	root.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error {
+		chosen := os.Getenv("HEARTH_HOME") != "" || os.Getenv("HEARTH_USER") != ""
 		if workspace != "" {
-			home := client.WorkspaceHome(workspace)
+			home := client.WorkspaceHomeHere(workspace)
 			if client.WorkspaceOf(home) == "" {
 				var err error
 				if home, err = client.InitWorkspace(workspace); err != nil {
@@ -44,7 +45,10 @@ func main() {
 			os.Setenv("HEARTH_HOME", home)
 		}
 		if cmd.Name() != "server" && (cmd.Parent() == nil || cmd.Parent().Name() != "server") {
-			client.Activate()
+			home := client.Activate()
+			if !chosen && cmd.Name() != "setup" {
+				warnSharedWorkspace(home)
+			}
 		}
 		return nil
 	}
@@ -121,9 +125,14 @@ func initCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			target := client.WorkspaceHome(abs)
+			target := client.WorkspaceHomeHere(abs)
 			def := client.DefaultHome()
-			_, defErr := client.LoadConfig(def)
+			defCfg, defErr := client.LoadConfig(def)
+			if defErr == nil {
+				// The login to move: its own place in the directory, which
+				// another person may use too.
+				target = client.WorkspaceHomeFor(abs, defCfg.Email)
+			}
 			_, tgtErr := client.LoadConfig(target)
 			movable := defErr == nil && tgtErr != nil && filepath.Clean(def) != filepath.Clean(target)
 			restart := false
@@ -151,7 +160,11 @@ func initCmd() *cobra.Command {
 				fmt.Printf("moved the login and state of %s to %s\n", def, target)
 				restart = wasRunning
 			}
-			home, err := client.InitWorkspace(dir)
+			initHome := ""
+			if moveLogin {
+				initHome = target
+			}
+			home, err := client.InitWorkspaceHome(abs, initHome)
 			if err != nil {
 				return err
 			}
@@ -546,4 +559,24 @@ func groupCommands(root *cobra.Command) {
 	}
 	root.SetHelpCommandGroupID("account")
 	root.SetCompletionCommandGroupID("account")
+}
+
+// warnSharedWorkspace says, in a terminal, whose login a command uses when
+// several people are logged in to this workspace on this machine and
+// nothing (HEARTH_USER, HEARTH_HOME) said who is asking.
+func warnSharedWorkspace(home string) {
+	ws := client.WorkspaceOf(home)
+	if ws == "" || !term.IsTerminal(int(os.Stderr.Fd())) {
+		return
+	}
+	people := client.WorkspacePeople(ws)
+	if len(people) < 2 {
+		return
+	}
+	who := "the first of them"
+	if cfg, err := client.LoadConfig(home); err == nil {
+		who = cfg.Email
+	}
+	fmt.Fprintf(os.Stderr, "hearth: %s is used by %s; acting as %s. Someone else: export HEARTH_USER=<email> (sessions through hearth ssh set it)\n",
+		ws, strings.Join(people, ", "), who)
 }

@@ -97,3 +97,66 @@ func TestLeaveHome(t *testing.T) {
 		t.Fatal("the user's own setting removed")
 	}
 }
+
+// One workspace directory several people use on one machine: the first
+// keeps <ws>/.hearth, each other person gets <ws>/.hearth/users/<email>,
+// and HEARTH_USER picks whose home a command uses.
+func TestWorkspaceHomesPerPerson(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("HEARTH_USER", "")
+	ws := t.TempDir()
+	base, err := InitWorkspace(ws)
+	if err != nil {
+		t.Fatal(err)
+	}
+	login := func(home, email string) {
+		t.Helper()
+		if err := SaveConfig(home, &Config{Server: "https://h.example.org", Email: email, DeviceID: email, DeviceName: hostname()}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	login(base, "a@example.org")
+	if got := WorkspaceHomeFor(ws, "A@example.org"); got != base {
+		t.Fatalf("a's home: %s", got)
+	}
+	bHome := WorkspaceHomeFor(ws, "b@example.org")
+	if bHome != filepath.Join(ws, ".hearth", "users", "b@example.org") {
+		t.Fatalf("b's new home: %s", bHome)
+	}
+	if h, err := InitWorkspaceHome(ws, bHome); err != nil || h != bHome || WorkspaceOf(bHome) != ws {
+		t.Fatalf("init b: %s %v", h, err)
+	}
+	login(bHome, "b@example.org")
+	if _, err := InitWorkspaceHome(ws, t.TempDir()); err == nil {
+		t.Fatal("a home outside the workspace accepted")
+	}
+	if got := WorkspacePeople(ws); len(got) != 2 || got[0] != "a@example.org" || got[1] != "b@example.org" {
+		t.Fatalf("people: %v", got)
+	}
+	if WorkspaceHomeHere(ws) != base {
+		t.Fatal("without HEARTH_USER the first person's home")
+	}
+	t.Setenv("HEARTH_USER", "b@example.org")
+	if WorkspaceHomeHere(ws) != bHome {
+		t.Fatal("HEARTH_USER not honoured")
+	}
+	t.Setenv("HEARTH_USER", "")
+	// A third person's login moved in (setup's workspace prompt).
+	from := filepath.Join(t.TempDir(), ".hearth")
+	login(from, "c@example.org")
+	cHome, err := MoveHome(from, ws)
+	if err != nil || cHome != filepath.Join(ws, ".hearth", "users", "c@example.org") || WorkspaceOf(cHome) != ws {
+		t.Fatalf("move c: %s %v", cHome, err)
+	}
+	if cfg, err := LoadConfig(base); err != nil || cfg.Email != "a@example.org" {
+		t.Fatal("a's login touched")
+	}
+	for _, h := range []string{base, bHome, cHome} {
+		if !InWorkspaceState(ws, h) {
+			t.Fatalf("%s not in the workspace state", h)
+		}
+	}
+	if InWorkspaceState(ws, filepath.Join(ws, ".hearthx")) || otherWorkspace(ws, bHome) {
+		t.Fatal("InWorkspaceState / otherWorkspace")
+	}
+}

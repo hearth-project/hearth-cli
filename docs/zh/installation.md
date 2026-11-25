@@ -87,6 +87,8 @@ hearth setup --server https://<server> --email you@example.com
 
 之后在该目录下运行的 hearth 命令都使用 `<工作目录>/.hearth`，只上传你自己的会话。
 
+多人也可以共用同一个目录。`~/.hearth` 或这个目录里已经有同事的登录时，`hearth setup` 不动它，你的登录放在 `<工作目录>/.hearth/users/<邮箱>`（共享盘的其他机器上是 `.../users/<邮箱>/hosts/<主机名>`）。目录本身分不出是谁在操作，所以在这里运行的命令按 `HEARTH_USER` 选登录；Hearth 的 sshd 会给每个人的会话设置它（`hearth ssh`、`~/.ssh/config` 里的主机）。没有设置时用第一个人的登录，在终端里会提示；在其他 shell（比如平台的网页终端）里请先 `export HEARTH_USER=<你的邮箱>`。
+
 如果之前已经在没有工作目录的情况下登录过（`~/.hearth`），请把这份登录移进工作目录，而不是再登录一次（那样会多出一台设备，两边的后台同步互相抢同一批会话）：`hearth init --move-login <目录> && cd <目录> && hearth daemon start`。`~/.hearth` 的账号与工作目录的身份一致时，`hearth onboard status` 会给出这一步；`hearth setup` 不会在同一台机器上把同一账号再登录一次。
 
 大家的配置都在同一个 `~/.bashrc` 里，同事的一行 `export CODEX_HOME=…` 就会决定你的会话用哪份 Codex 配置。有工作目录时，同一账号上所有从工作目录使用 Hearth 的人共用一个 sshd（这种情况下不接管手动启动的 sshd）。每个人的设备公钥会给自己的会话打上标记（该 sshd 公钥文件里的 `environment="HEARTH_USER=…"`，由 `PermitUserEnvironment HEARTH_USER,HEARTH_HOME` 放行；OpenSSH 低于 7.8 时仍是每人一个 sshd，用 `SetEnv HEARTH_USER` 标记）；rc 文件最末尾有一段由 Hearth 维护的配置，只对这些会话重新设置你的 `HEARTH_HOME`、`CODEX_HOME` 等 agent 目录，同事的会话不受影响。请通过它连接：`hearth ssh <机器>`，或 Hearth 写进 `~/.ssh/config` 的主机（Codex Desktop、VS Code、Cursor）。Codex 没走你的 codex-mixin 网关时，环境检查会报出来，并指出是哪个文件哪一行设置了 `CODEX_HOME`。
