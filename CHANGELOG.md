@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Setup on a Unix account several people share: when `~/.hearth` holds another
+  person's login, the install command no longer stops with `... is logged in
+  as <someone else>; to replace that login pass --switch`. It leaves that login
+  alone, signs in to a temporary home and asks for this person's own
+  directory (the home itself is refused, since its state would be
+  `~/.hearth`), then moves the login there. An existing workspace login of the
+  same account is reused as before. Without a terminal it says to pass
+  `--workspace <dir>` and adds no device.
 - SSH on a Unix account several people share: everyone who uses Hearth there
   from a workspace now shares one sshd (default port 8022) instead of each
   starting one (8022, 8023, ...). Its key file

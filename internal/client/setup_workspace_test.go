@@ -66,3 +66,34 @@ func TestSetupWorkspaces(t *testing.T) {
 		t.Fatal("stale hint matched")
 	}
 }
+
+// Switching away from another person's ~/.hearth drops the agent homes
+// Activate exported from it, and keeps the ones the user set.
+func TestLeaveHome(t *testing.T) {
+	h := t.TempDir()
+	t.Setenv("HOME", h)
+	other := DefaultHome()
+	if err := SetAgentHome(other, "codex", filepath.Join(h, "colleague-codex")); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("CODEX_HOME", "")
+	t.Setenv("CLAUDE_CONFIG_DIR", "/mine/claude")
+	t.Setenv("HEARTH_WORKSPACE", "/colleague/ws")
+	t.Setenv("HEARTH_WORKSPACE_FROM_PROFILE", "1")
+	os.Unsetenv("CODEX_HOME")
+	t.Setenv("HEARTH_HOME", other)
+	Activate()
+	if os.Getenv("CODEX_HOME") != filepath.Join(h, "colleague-codex") {
+		t.Fatalf("Activate did not export the colleague's codex home: %q", os.Getenv("CODEX_HOME"))
+	}
+	LeaveHome(other)
+	if v := os.Getenv("CODEX_HOME"); v != "" {
+		t.Fatalf("CODEX_HOME kept: %q", v)
+	}
+	if os.Getenv("HEARTH_WORKSPACE") != "" || os.Getenv("HEARTH_WORKSPACE_FROM_PROFILE") != "" {
+		t.Fatal("profile workspace kept")
+	}
+	if os.Getenv("CLAUDE_CONFIG_DIR") != "/mine/claude" {
+		t.Fatal("the user's own setting removed")
+	}
+}

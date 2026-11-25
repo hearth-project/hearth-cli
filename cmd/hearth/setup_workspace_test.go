@@ -82,3 +82,33 @@ func TestMoveSetupHomeRefusesOccupiedWorkspace(t *testing.T) {
 		t.Fatal("existing login changed")
 	}
 }
+
+// On a shared Unix account ~/.hearth may be another person's login. A new
+// login made in a temporary home must move into a directory of its own;
+// without a terminal to ask, setup says to pass --workspace.
+func TestSetupWorkspaceMustMoveOutOfSharedHome(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	t.Setenv("HEARTH_WORKSPACE", "")
+	staging, err := client.NewSetupHome()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if filepath.Dir(staging) != filepath.Dir(client.DefaultHome()) || staging == client.DefaultHome() {
+		t.Fatalf("setup home %s", staging)
+	}
+	out := newSetupOut()
+	defer out.close()
+	cfg := &client.Config{Email: "a.b+c@example.org"}
+	if _, err := chooseSetupWorkspace(out, staging, cfg, nil, true); err == nil || !strings.Contains(err.Error(), "--workspace") {
+		t.Fatalf("no terminal: %v", err)
+	}
+	if got, err := chooseSetupWorkspace(out, staging, cfg, nil, false); err != nil || got != staging {
+		t.Fatalf("ordinary login without a terminal stays: %q %v", got, err)
+	}
+	for in, want := range map[string]string{"a.b+c@example.org": "a.b-c", "@x": "hearth-workspace", "..@x": "hearth-workspace"} {
+		if got := setupUserName(in); got != want {
+			t.Errorf("setupUserName(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
