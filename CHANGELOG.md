@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.8 — 2026-11-25
+
 - Restoring a forked Codex thread no longer adds its fork parents to the
   sidebar. They are still restored, since the fork reads its history from
   them, but archived in Codex, so only the thread you asked for is listed.
