@@ -256,13 +256,7 @@ func (a *API) do(method, path string, in any, raw []byte, hdr map[string]string,
 		return nil, netError(a.Base, err)
 	}
 	defer resp.Body.Close()
-	limit := int64(api.MaxChunkBytes + (1 << 20))
-	switch p := strings.SplitN(path, "?", 2)[0]; {
-	case strings.HasSuffix(p, "/content"):
-		limit = 4 << 30 // whole-session stream
-	case p == "/v1/library":
-		limit = api.MaxLibraryBytes + (1 << 20) // a library bundle is larger than a chunk
-	}
+	limit := responseLimit(method, path)
 	data, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))
 	if err != nil {
 		return nil, err
@@ -289,6 +283,24 @@ func (a *API) do(method, path string, in any, raw []byte, hdr map[string]string,
 		}
 	}
 	return resp.Header, nil
+}
+
+// responseLimit bounds a response body. Session chunks, library bundles and
+// team package bundles have different natural sizes.
+func responseLimit(method, path string) int64 {
+	p := strings.SplitN(path, "?", 2)[0]
+	switch {
+	case strings.HasSuffix(p, "/content"):
+		return 4 << 30 // whole-session stream
+	case p == "/v1/library":
+		return api.MaxLibraryBytes + (1 << 20)
+	case method == "GET" && strings.HasPrefix(p, "/v1/teams/") && strings.Contains(p, "/packages/"):
+		// A team skill/agent is packed like a library bundle; a CLI binary
+		// or a large presentation can exceed one session chunk.
+		return api.MaxLibraryBytes + (1 << 20)
+	default:
+		return api.MaxChunkBytes + (1 << 20)
+	}
 }
 
 // getCounted is a GET whose body is read with onRead called as bytes

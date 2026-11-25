@@ -4,6 +4,7 @@
 
 ## 0.1.8 — 2026-11-25
 
+- Team package downloads may be up to the library bundle limit (32 MiB), not the 9 MiB session-chunk limit. A skill or agent larger than one chunk, such as `ppt-master` (18.6 MB), no longer fails to download during team sync.
 - Restoring a forked Codex thread no longer adds its fork parents to the
   sidebar. They are still restored, since the fork reads its history from
   them, but archived in Codex, so only the thread you asked for is listed.
