@@ -338,7 +338,7 @@ func SSHServerStatus(home string) SSHStatus {
 	}
 	if p, err := authorizedKeysPath(); err == nil {
 		if b, err := os.ReadFile(p); err == nil {
-			st.Keys = len(managedKeys(string(b)))
+			st.Keys = len(managedKeys(string(b), homeOwner(home)))
 		}
 	}
 	return st
@@ -355,7 +355,9 @@ func StopSSHD(home string) error {
 	}
 	if p, err := authorizedKeysPath(); err == nil {
 		if b, err := os.ReadFile(p); err == nil {
-			if out := setManagedKeys(string(b), nil); out != string(b) {
+			owner := homeOwner(home)
+			mine := append(managedKeys(string(b), owner), deviceKeyLine(home))
+			if out := setManagedKeys(string(b), owner, nil, mine); out != string(b) {
 				_ = writeFileAtomic(p, []byte(out), 0o600)
 			}
 		}
@@ -399,7 +401,7 @@ func (e *Engine) EnsureSSHD() (SSHStatus, error) {
 		return fail(err)
 	}
 	cur, _ := os.ReadFile(authPath)
-	if out := setManagedKeys(string(cur), lines); out != string(cur) {
+	if out := setManagedKeys(string(cur), e.Cfg.Email, lines, []string{deviceKeyLine(home)}); out != string(cur) {
 		if err := writeFileAtomic(authPath, []byte(out), 0o600); err != nil {
 			return fail(err)
 		}
@@ -656,32 +658,93 @@ func authorizedKeysPath() (string, error) {
 	return p, nil
 }
 
+// Hearth's blocks in authorized_keys. A Unix account several people share
+// holds one block per Hearth account, each kept by that person's daemon;
+// akBegin/akEnd is the block of older clients, which had no owner.
 const (
 	akBegin = "# >>> hearth: keys of your Hearth devices (managed; hearth ssh keys) >>>"
 	akEnd   = "# <<< hearth <<<"
 )
 
-// managedKeys returns the key lines inside Hearth's block.
-func managedKeys(text string) []string {
-	i, j := strings.Index(text, akBegin), strings.Index(text, akEnd)
-	if i < 0 || j < i {
-		return nil
-	}
-	var out []string
-	for _, l := range strings.Split(text[i+len(akBegin):j], "\n") {
-		if l = strings.TrimSpace(l); l != "" && !strings.HasPrefix(l, "#") {
-			out = append(out, l)
+// akMarkers are the lines around owner's block ("" = the old block).
+func akMarkers(owner string) (begin, end string) {
+	owner = strings.Map(func(r rune) rune {
+		if r < ' ' || r == '>' || r == '<' {
+			return '_'
 		}
+		return r
+	}, strings.ToLower(strings.TrimSpace(owner)))
+	if owner == "" {
+		return akBegin, akEnd
 	}
-	return out
+	return "# >>> hearth: keys of " + owner + "'s Hearth devices (managed; hearth ssh keys) >>>", "# <<< hearth: " + owner + " <<<"
 }
 
-// setManagedKeys replaces Hearth's block in an authorized_keys text (no
-// keys: removes it), leaving the other lines as they are.
-func setManagedKeys(text string, keys []string) string {
-	i, j := strings.Index(text, akBegin), strings.Index(text, akEnd)
-	if i >= 0 && j > i {
-		text = text[:i] + strings.TrimPrefix(text[j+len(akEnd):], "\n")
+// cutBlock removes the block between begin and end (the lines included)
+// and returns the rest and the block's key lines; ok: there was one.
+func cutBlock(text, begin, end string) (rest string, keys []string, ok bool) {
+	i := strings.Index(text, begin+"\n")
+	if i < 0 {
+		return text, nil, false
+	}
+	j := strings.Index(text[i:], end)
+	if j < 0 {
+		return text, nil, false
+	}
+	j += i
+	for _, l := range strings.Split(text[i+len(begin):j], "\n") {
+		if l = strings.TrimSpace(l); l != "" && !strings.HasPrefix(l, "#") {
+			keys = append(keys, l)
+		}
+	}
+	return text[:i] + strings.TrimPrefix(text[j+len(end):], "\n"), keys, true
+}
+
+// keyBlob is the key of an authorized_keys line, without options and
+// comment ("" when the line is not a key).
+func keyBlob(line string) string {
+	pk, _, _, _, err := ssh.ParseAuthorizedKey([]byte(line))
+	if err != nil {
+		return ""
+	}
+	return string(pk.Marshal())
+}
+
+// anyKeyOf reports whether a key of lines is one of mine.
+func anyKeyOf(lines, mine []string) bool {
+	set := map[string]bool{}
+	for _, l := range mine {
+		if b := keyBlob(l); b != "" {
+			set[b] = true
+		}
+	}
+	for _, l := range lines {
+		if set[keyBlob(l)] {
+			return true
+		}
+	}
+	return false
+}
+
+// managedKeys returns the key lines of owner's block.
+func managedKeys(text, owner string) []string {
+	b, e := akMarkers(owner)
+	_, keys, _ := cutBlock(text, b, e)
+	return keys
+}
+
+// setManagedKeys replaces owner's block in an authorized_keys text with
+// keys (none: removes it), leaving the other lines and other people's
+// blocks as they are. The old block without an owner is taken out when it
+// holds a key of mine (this person's keys, as written by an older client);
+// otherwise it is another person's and stays.
+func setManagedKeys(text, owner string, keys, mine []string) string {
+	b, e := akMarkers(owner)
+	text, _, _ = cutBlock(text, b, e)
+	if owner != "" {
+		if rest, old, ok := cutBlock(text, akBegin, akEnd); ok && anyKeyOf(old, append(append([]string{}, mine...), keys...)) {
+			text = rest
+		}
 	}
 	if len(keys) == 0 {
 		return text
@@ -689,7 +752,25 @@ func setManagedKeys(text string, keys []string) string {
 	if text != "" && !strings.HasSuffix(text, "\n") {
 		text += "\n"
 	}
-	return text + akBegin + "\n" + strings.Join(keys, "\n") + "\n" + akEnd + "\n"
+	return text + b + "\n" + strings.Join(keys, "\n") + "\n" + e + "\n"
+}
+
+// deviceKeyLine is this device's own Hearth public key ("" if none yet).
+func deviceKeyLine(home string) string {
+	b, err := os.ReadFile(SSHKeyPath(home) + ".pub")
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(b))
+}
+
+// homeOwner is the account logged in at home ("" if none).
+func homeOwner(home string) string {
+	cfg, err := LoadConfig(home)
+	if err != nil {
+		return ""
+	}
+	return cfg.Email
 }
 
 // privateAuthorizedKeys writes the keys of this person's devices to a file
