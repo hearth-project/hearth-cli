@@ -27,6 +27,7 @@ type fakeState struct {
 	Threads  map[string]appThread `json:"threads"`
 	Sections map[string]string    `json:"sections"` // id -> name
 	Calls    []string             `json:"calls"`
+	Archived map[string]bool      `json:"archived,omitempty"`
 }
 
 func fakeAppServer(path string) {
@@ -80,6 +81,11 @@ func fakeAppServer(path string) {
 				Name string `json:"name"`
 			}{sid, st.Sections[sid]}
 			st.Threads[t.ID] = t
+		case "thread/archive", "thread/unarchive":
+			if st.Archived == nil {
+				st.Archived = map[string]bool{}
+			}
+			st.Archived[p["threadId"].(string)] = req.Method == "thread/archive"
 		}
 		out.Encode(map[string]any{"jsonrpc": "2.0", "method": "noise/notification"}) // must be skipped
 		out.Encode(map[string]any{"jsonrpc": "2.0", "id": *req.ID, "result": res})
@@ -360,5 +366,79 @@ func TestRestoredElsewhereIsNotDeleted(t *testing.T) {
 	c.Close()
 	if st := b.push(t); st.Deleted != 0 {
 		t.Fatalf("expired %d sessions restored elsewhere", st.Deleted)
+	}
+}
+
+// A restored fork brings its parent along for the history, but only the
+// thread the user asked for is listed; asking for the parent lists it too.
+func TestRestoredForkParentIsArchived(t *testing.T) {
+	en := newEnv(t)
+	a, b := en.machine("a"), en.machine("b")
+	parentRel := "sessions/2026/10/22/rollout-2026-10-22T16-52-30-" + thread1 + ".jsonl"
+	childRel := "sessions/2026/10/22/rollout-2026-10-22T20-46-03-" + thread2 + ".jsonl"
+	for rel, meta := range map[string]string{
+		parentRel: `{"id":"` + thread1 + `"}`,
+		childRel:  `{"id":"` + thread2 + `","forked_from_id":"` + thread1 + `"}`,
+	} {
+		p := filepath.Join(a.codex, filepath.FromSlash(rel))
+		os.MkdirAll(filepath.Dir(p), 0o700)
+		os.WriteFile(p, []byte(`{"timestamp":"2026-10-22T08:00:00Z","type":"session_meta","payload":`+meta+"}\n"), 0o600)
+	}
+	a.push(t)
+
+	state := filepath.Join(t.TempDir(), "codex-state.json")
+	os.WriteFile(state, []byte(`{"threads":{},"sections":{}}`), 0o600)
+	t.Setenv("HEARTH_FAKE_CODEX_STATE", state)
+	old := CodexBinary
+	CodexBinary = os.Args[0]
+	defer func() { CodexBinary = old }()
+
+	all, err := b.List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	restore := func(rel string) {
+		t.Helper()
+		for _, rs := range all {
+			if rs.Meta.RelPath != rel {
+				continue
+			}
+			r, err := b.Restore(rs, false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			opts := RestoreOptions{Explicit: true, Say: func(f string, a ...any) { t.Logf(f, a...) }}
+			if err := (codexIntegration{}).AfterRestore(b.Engine, all, []RestoredSession{{Remote: rs, Result: r}}, opts); err != nil {
+				t.Fatal(err)
+			}
+			return
+		}
+		t.Fatalf("%s is not on the server", rel)
+	}
+	archived := func() map[string]bool {
+		var st fakeState
+		raw, _ := os.ReadFile(state)
+		json.Unmarshal(raw, &st)
+		return st.Archived
+	}
+
+	restore(childRel)
+	if !CodexRolloutExists(b.codex, thread1) {
+		t.Fatal("fork parent was not restored")
+	}
+	if got := archived(); !got[thread1] || got[thread2] {
+		t.Fatalf("archived %v, want only the fork parent", got)
+	}
+
+	// Codex moved the archived parent; asking for it by id lists it again.
+	from := filepath.Join(b.codex, filepath.FromSlash(parentRel))
+	to := filepath.Join(b.codex, "archived_sessions", filepath.Base(parentRel))
+	os.MkdirAll(filepath.Dir(to), 0o700)
+	if err := os.Rename(from, to); err != nil {
+		t.Fatal(err)
+	}
+	restore(parentRel)
+	if got := archived(); got[thread1] {
+		t.Fatalf("archived %v after restoring the parent by id", got)
 	}
 }

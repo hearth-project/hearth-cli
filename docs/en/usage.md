@@ -39,7 +39,7 @@ hearth restore --all                        # everything (use with care)
 ```
 
 - The default restore takes the 10 most recently active conversations of machines that are **offline**: conversations last written on a machine that is still online (its background sync heartbeats every minute; about 15 minutes of silence, or a graceful stop, makes it offline) stay there, since that machine is working on them; lists mark such machines with `●`. Naming the id, picking it by number in the list, or `--include-online` restores them anyway. `hearth setup` in a terminal lists them and asks once whether to bring them too (Enter = yes).
-- A Codex conversation can span several files (continuations, subagents); they are restored together, and a forked thread brings its parent along.
+- A Codex conversation can span several files (continuations, subagents); they are restored together, and a forked thread brings its parent along. The parent is archived in Codex (the fork still reads its history), so only the thread you restored is listed; restore the parent by id to list it as well.
 - When home or workspace differ between machines, absolute paths inside the session are rewritten for this machine.
 - With Codex Desktop running, restored threads appear in the open window at once (as a copy; the original is archived so a restart does not show it twice). Without Desktop running, Codex lists them on its next start. If you cannot find one, search for its title in Desktop.
 - `expired`: deleted in the agent, or not accessed for 30 days (server setting). Bulk restore skips these; restoring by id revives them.
