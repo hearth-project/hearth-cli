@@ -1,6 +1,8 @@
 package client
 
 import (
+	"crypto/ed25519"
+	"crypto/rand"
 	"net"
 	"os"
 	"path/filepath"
@@ -8,25 +10,75 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/crypto/ssh"
+
 	"github.com/hearth-project/hearth-cli/internal/api"
 )
 
 func TestManagedKeysBlock(t *testing.T) {
 	own := "ssh-ed25519 AAAAown laptop\n"
-	got := setManagedKeys(own, []string{"ssh-ed25519 AAAA1 a", "ssh-ed25519 AAAA2 b"})
-	if !strings.HasPrefix(got, own) || len(managedKeys(got)) != 2 {
+	k1, k2 := testKeyLine(t, "a"), testKeyLine(t, "b")
+	const me = "me@example.org"
+	got := setManagedKeys(own, me, []string{k1, k2}, nil)
+	if !strings.HasPrefix(got, own) || len(managedKeys(got, me)) != 2 {
 		t.Fatalf("block not added:\n%s", got)
 	}
-	if again := setManagedKeys(got, []string{"ssh-ed25519 AAAA1 a", "ssh-ed25519 AAAA2 b"}); again != got {
+	if again := setManagedKeys(got, me, []string{k1, k2}, nil); again != got {
 		t.Fatalf("not idempotent:\n%s", again)
 	}
-	one := setManagedKeys(got, []string{"ssh-ed25519 AAAA1 a"})
-	if k := managedKeys(one); len(k) != 1 || !strings.HasPrefix(one, own) {
+	one := setManagedKeys(got, me, []string{k1}, nil)
+	if k := managedKeys(one, me); len(k) != 1 || !strings.HasPrefix(one, own) {
 		t.Fatalf("replace: %q\n%s", k, one)
 	}
-	if none := setManagedKeys(one, nil); none != own {
+	if none := setManagedKeys(one, me, nil, nil); none != own {
 		t.Fatalf("remove left %q", none)
 	}
+}
+
+// Two Hearth accounts on one Unix account (a shared root in a GPU
+// container) keep a block each; neither daemon takes out the other's keys.
+// The old block without an owner is converted by the person whose keys it
+// holds and left alone by everyone else.
+func TestManagedKeysBlockPerAccount(t *testing.T) {
+	a1, a2, b1 := testKeyLine(t, "a1"), testKeyLine(t, "a2"), testKeyLine(t, "b1")
+	const a, b = "a@example.org", "b@example.org"
+	text := setManagedKeys("", a, []string{a1}, nil)
+	text = setManagedKeys(text, b, []string{b1}, nil)
+	text = setManagedKeys(text, a, []string{a1, a2}, nil)
+	if len(managedKeys(text, a)) != 2 || len(managedKeys(text, b)) != 1 {
+		t.Fatalf("one account replaced the other's block:\n%s", text)
+	}
+	if out := setManagedKeys(text, a, nil, nil); len(managedKeys(out, b)) != 1 || len(managedKeys(out, a)) != 0 {
+		t.Fatalf("removing a's block touched b's:\n%s", out)
+	}
+	// An older client of b wrote the old block; a's daemon leaves it alone.
+	legacy := akBegin + "\n" + b1 + "\n" + akEnd + "\n"
+	text = setManagedKeys(legacy, a, []string{a1}, nil)
+	if !strings.Contains(text, akBegin) || len(managedKeys(text, a)) != 1 {
+		t.Fatalf("another person's old block removed:\n%s", text)
+	}
+	// b's new client converts its own old block, with an option prefix.
+	text = setManagedKeys(text, b, []string{`expiry-time="20990101" ` + b1}, nil)
+	if strings.Contains(text, akBegin) || len(managedKeys(text, b)) != 1 || len(managedKeys(text, a)) != 1 {
+		t.Fatalf("own old block not converted:\n%s", text)
+	}
+	// Stopping identifies the old block by this device's key alone.
+	if out := setManagedKeys(legacy, b, nil, []string{b1}); strings.Contains(out, akBegin) {
+		t.Fatalf("own old block kept on stop:\n%s", out)
+	}
+}
+
+func testKeyLine(t *testing.T, comment string) string {
+	t.Helper()
+	pub, _, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pk, err := ssh.NewPublicKey(pub)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return strings.TrimSpace(string(ssh.MarshalAuthorizedKey(pk))) + " " + comment
 }
 
 func TestStrictOK(t *testing.T) {
@@ -202,5 +254,28 @@ func TestReachableAddress(t *testing.T) {
 	}
 	if got := (SSHEndpoint{Address: "10.0.0.1"}).Addrs(); len(got) != 1 || got[0] != "10.0.0.1" {
 		t.Fatalf("old endpoint: %v", got)
+	}
+}
+
+// The shared sshd's keys say whose session it is; sshd reads the options
+// before the key, comma separated, expiry included.
+func TestSharedKeyLines(t *testing.T) {
+	k := testKeyLine(t, "dev")
+	got := sharedKeyLines([]string{k, `expiry-time="20990101" ` + k}, "a@example.org", "/ws/a/.hearth")
+	want0 := `environment="HEARTH_USER=a@example.org",environment="HEARTH_HOME=/ws/a/.hearth" ` + k
+	want1 := `environment="HEARTH_USER=a@example.org",environment="HEARTH_HOME=/ws/a/.hearth",expiry-time="20990101" ` + k
+	if len(got) != 2 || got[0] != want0 || got[1] != want1 {
+		t.Fatalf("lines:\n%s", strings.Join(got, "\n"))
+	}
+	for _, l := range got {
+		if _, _, opts, _, err := ssh.ParseAuthorizedKey([]byte(l)); err != nil || len(opts) < 2 {
+			t.Fatalf("not an authorized_keys line: %q (%v)", l, err)
+		}
+	}
+	if l := sharedKeyLines([]string{k}, "a@example.org", "/my ws/.hearth")[0]; strings.Contains(l, "HEARTH_HOME") {
+		t.Fatalf("a home sshd cannot quote kept: %q", l)
+	}
+	if sharedHasKeys(setManagedKeys("", "a@example.org", nil, nil)) || !sharedHasKeys(setManagedKeys("", "a@example.org", got, nil)) {
+		t.Fatal("sharedHasKeys")
 	}
 }

@@ -49,6 +49,7 @@ type sshState struct {
 	External  bool     `json:"external,omitempty"` // an sshd Hearth did not start (left running when SSH is turned off)
 	HostKey   string   `json:"host_key,omitempty"`
 	Shared    bool     `json:"shared,omitempty"` // Hearth's own sshd for a workspace on a shared account
+	Joint     bool     `json:"joint,omitempty"`  // the account's one shared sshd (sshd_shared.go), not this person's own
 	Flags     int      `json:"flags,omitempty"`  // sshdFlags the running sshd was started with
 	KeysHash  string   `json:"keys_hash,omitempty"`
 	Endpoint  string   `json:"endpoint,omitempty"` // published value, to skip unchanged uploads
@@ -326,6 +327,7 @@ type SSHStatus struct {
 	Port     int
 	PID      int
 	Keys     int
+	Shared   bool // the account's one sshd, shared with the other people on it
 	Err      string
 }
 
@@ -333,12 +335,18 @@ type SSHStatus struct {
 func SSHServerStatus(home string) SSHStatus {
 	s := loadSSHState(home)
 	st := SSHStatus{On: SSHOn(home), Address: s.Address, Port: s.Port, PID: s.PID, External: s.External, Err: s.LastErr}
+	if s.Joint {
+		sh, ok := sharedSSHDRunning()
+		st.Running, st.PID, st.Shared = ok && sh.Port == s.Port, sh.PID, true
+		st.Keys = sharedKeysOf(homeOwner(home))
+		return st
+	}
 	if s.Port > 0 {
 		st.Running = (s.External || alive(s.PID)) && listening(s.Address, s.Port)
 	}
 	if p, err := authorizedKeysPath(); err == nil {
 		if b, err := os.ReadFile(p); err == nil {
-			st.Keys = len(managedKeys(string(b)))
+			st.Keys = len(managedKeys(string(b), homeOwner(home)))
 		}
 	}
 	return st
@@ -348,19 +356,23 @@ func SSHServerStatus(home string) SSHStatus {
 // removes the device keys from authorized_keys.
 func StopSSHD(home string) error {
 	s := loadSSHState(home)
-	if !s.External && alive(s.PID) {
+	if s.Joint {
+		leaveSharedSSHD(homeOwner(home), []string{deviceKeyLine(home)})
+	} else if !s.External && alive(s.PID) {
 		if err := syscall.Kill(s.PID, syscall.SIGTERM); err != nil {
 			return err
 		}
 	}
 	if p, err := authorizedKeysPath(); err == nil {
 		if b, err := os.ReadFile(p); err == nil {
-			if out := setManagedKeys(string(b), nil); out != string(b) {
+			owner := homeOwner(home)
+			mine := append(managedKeys(string(b), owner), deviceKeyLine(home))
+			if out := setManagedKeys(string(b), owner, nil, mine); out != string(b) {
 				_ = writeFileAtomic(p, []byte(out), 0o600)
 			}
 		}
 	}
-	s.PID, s.External, s.Port = 0, false, 0
+	s.PID, s.External, s.Port, s.Joint = 0, false, 0, false
 	return saveSSHState(home, s)
 }
 
@@ -399,7 +411,7 @@ func (e *Engine) EnsureSSHD() (SSHStatus, error) {
 		return fail(err)
 	}
 	cur, _ := os.ReadFile(authPath)
-	if out := setManagedKeys(string(cur), lines); out != string(cur) {
+	if out := setManagedKeys(string(cur), e.Cfg.Email, lines, []string{deviceKeyLine(home)}); out != string(cur) {
 		if err := writeFileAtomic(authPath, []byte(out), 0o600); err != nil {
 			return fail(err)
 		}
@@ -426,46 +438,63 @@ func (e *Engine) EnsureSSHD() (SSHStatus, error) {
 			setEnv += " HEARTH_HOME=" + home
 		}
 	}
-	want := sshPortWanted(home)
-	ours := !s.External && alive(s.PID) && s.Flags == sshdFlags && s.Shared == shared && slices.Equal(s.addrs(), addrs) && s.Port >= want && s.Port < want+20 && listening(addr, s.Port)
-	adopted := !shared && s.External && s.Address == addr && s.Port == want && listening(addr, s.Port)
 	hostKey := s.HostKey
-	if !ours && !adopted {
-		hostKey = ""
-		if alive(s.PID) && !s.External {
-			_ = syscall.Kill(s.PID, syscall.SIGTERM)
-			for i := 0; i < 30 && listening(s.Address, s.Port); i++ {
-				time.Sleep(100 * time.Millisecond) // not taken for an sshd started by hand
-			}
+	if shared && sshdUserEnvPatterns() {
+		// One sshd for everyone on this account who uses a workspace: each
+		// person's keys carry their HEARTH_USER / HEARTH_HOME.
+		if hostKey, err = e.joinSharedSSHD(&s, lines, addrs); err != nil {
+			return fail(err)
 		}
-		s.PID, s.External, s.Port = 0, false, 0
-		if hk, err := probeHostKey(addr, want); err == nil && !shared {
-			// An sshd is already there (started by hand): use it.
-			s.External, s.Address, s.Addresses, s.Port, hostKey = true, addr, nil, want, hk
-		} else {
-			port := 0
-			for p := want; p < want+20; p++ {
-				if allFree(addrs, p) {
-					port = p
-					break
+	} else {
+		if s.Joint {
+			// Back to an sshd of its own (no workspace, or an old OpenSSH).
+			leaveSharedSSHD(e.Cfg.Email, []string{deviceKeyLine(home)})
+			s.Joint, s.Port = false, 0
+		}
+		want := sshPortWanted(home)
+		ours := !s.External && alive(s.PID) && s.Flags == sshdFlags && s.Shared == shared && slices.Equal(s.addrs(), addrs) && s.Port >= want && s.Port < want+20 && listening(addr, s.Port)
+		adopted := !shared && s.External && s.Address == addr && s.Port == want && listening(addr, s.Port)
+		if !ours && !adopted {
+			hostKey = ""
+			if alive(s.PID) && !s.External {
+				_ = syscall.Kill(s.PID, syscall.SIGTERM)
+				for i := 0; i < 30 && listening(s.Address, s.Port); i++ {
+					time.Sleep(100 * time.Millisecond) // not taken for an sshd started by hand
 				}
 			}
-			if port == 0 {
-				return fail(fmt.Errorf("no free port from %d on %s", want, strings.Join(addrs, ", ")))
+			s.PID, s.External, s.Port = 0, false, 0
+			if hk, err := probeHostKey(addr, want); err == nil && !shared {
+				// An sshd is already there (started by hand): use it.
+				s.External, s.Address, s.Addresses, s.Port, hostKey = true, addr, nil, want, hk
+			} else {
+				port := 0
+				for p := want; p < want+20; p++ {
+					if allFree(addrs, p) {
+						port = p
+						break
+					}
+				}
+				if port == 0 {
+					return fail(fmt.Errorf("no free port from %d on %s", want, strings.Join(addrs, ", ")))
+				}
+				var extra []string
+				if setEnv != "" {
+					extra = []string{"-o", "SetEnv=" + setEnv} // whose sessions these are (shared accounts)
+				}
+				pid, err := startSSHD(sshDir(home), sshdAuth, addrs, port, extra)
+				if err != nil {
+					return fail(err)
+				}
+				s.PID, s.Address, s.Addresses, s.Port, s.Flags, s.Shared = pid, addr, addrs, port, sshdFlags, shared
 			}
-			pid, err := startSSHD(home, sshdAuth, addrs, port, setEnv)
-			if err != nil {
-				return fail(err)
-			}
-			s.PID, s.Address, s.Addresses, s.Port, s.Flags, s.Shared = pid, addr, addrs, port, sshdFlags, shared
 		}
-	}
-	if s.External {
-		// An sshd started by hand: publish the addresses it answers on.
-		s.Addresses = nil
-		for _, a := range addrs {
-			if a == s.Address || listening(a, s.Port) {
-				s.Addresses = append(s.Addresses, a)
+		if s.External {
+			// An sshd started by hand: publish the addresses it answers on.
+			s.Addresses = nil
+			for _, a := range addrs {
+				if a == s.Address || listening(a, s.Port) {
+					s.Addresses = append(s.Addresses, a)
+				}
 			}
 		}
 	}
@@ -503,7 +532,7 @@ func (e *Engine) EnsureSSHD() (SSHStatus, error) {
 // startSSHD runs the system sshd detached, with the flags of the usual
 // manual setup: the system config and host keys when running as root,
 // else a config of its own with Hearth's host key.
-func startSSHD(home, authPath string, addrs []string, port int, setEnv string) (int, error) {
+func startSSHD(dir, authPath string, addrs []string, port int, extra []string) (int, error) {
 	bin, err := exec.LookPath("sshd")
 	if err != nil {
 		if _, err2 := os.Stat("/usr/sbin/sshd"); err2 != nil {
@@ -511,7 +540,6 @@ func startSSHD(home, authPath string, addrs []string, port int, setEnv string) (
 		}
 		bin = "/usr/sbin/sshd"
 	}
-	dir := sshDir(home)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return 0, err
 	}
@@ -541,9 +569,7 @@ func startSSHD(home, authPath string, addrs []string, port int, setEnv string) (
 		// Some images set LogLevel DEBUG; with -e the session's debug
 		// lines would end up in the user's terminal.
 		"-o", "LogLevel=INFO")
-	if setEnv != "" {
-		args = append(args, "-o", "SetEnv="+setEnv) // whose sessions these are (shared accounts)
-	}
+	args = append(args, extra...)
 	if authPath != filepath.Join(u.HomeDir, ".ssh", "authorized_keys") {
 		args = append(args, "-o", "AuthorizedKeysFile="+authPath) // $HOME is not the account's home
 	}
@@ -656,32 +682,93 @@ func authorizedKeysPath() (string, error) {
 	return p, nil
 }
 
+// Hearth's blocks in authorized_keys. A Unix account several people share
+// holds one block per Hearth account, each kept by that person's daemon;
+// akBegin/akEnd is the block of older clients, which had no owner.
 const (
 	akBegin = "# >>> hearth: keys of your Hearth devices (managed; hearth ssh keys) >>>"
 	akEnd   = "# <<< hearth <<<"
 )
 
-// managedKeys returns the key lines inside Hearth's block.
-func managedKeys(text string) []string {
-	i, j := strings.Index(text, akBegin), strings.Index(text, akEnd)
-	if i < 0 || j < i {
-		return nil
-	}
-	var out []string
-	for _, l := range strings.Split(text[i+len(akBegin):j], "\n") {
-		if l = strings.TrimSpace(l); l != "" && !strings.HasPrefix(l, "#") {
-			out = append(out, l)
+// akMarkers are the lines around owner's block ("" = the old block).
+func akMarkers(owner string) (begin, end string) {
+	owner = strings.Map(func(r rune) rune {
+		if r < ' ' || r == '>' || r == '<' {
+			return '_'
 		}
+		return r
+	}, strings.ToLower(strings.TrimSpace(owner)))
+	if owner == "" {
+		return akBegin, akEnd
 	}
-	return out
+	return "# >>> hearth: keys of " + owner + "'s Hearth devices (managed; hearth ssh keys) >>>", "# <<< hearth: " + owner + " <<<"
 }
 
-// setManagedKeys replaces Hearth's block in an authorized_keys text (no
-// keys: removes it), leaving the other lines as they are.
-func setManagedKeys(text string, keys []string) string {
-	i, j := strings.Index(text, akBegin), strings.Index(text, akEnd)
-	if i >= 0 && j > i {
-		text = text[:i] + strings.TrimPrefix(text[j+len(akEnd):], "\n")
+// cutBlock removes the block between begin and end (the lines included)
+// and returns the rest and the block's key lines; ok: there was one.
+func cutBlock(text, begin, end string) (rest string, keys []string, ok bool) {
+	i := strings.Index(text, begin+"\n")
+	if i < 0 {
+		return text, nil, false
+	}
+	j := strings.Index(text[i:], end)
+	if j < 0 {
+		return text, nil, false
+	}
+	j += i
+	for _, l := range strings.Split(text[i+len(begin):j], "\n") {
+		if l = strings.TrimSpace(l); l != "" && !strings.HasPrefix(l, "#") {
+			keys = append(keys, l)
+		}
+	}
+	return text[:i] + strings.TrimPrefix(text[j+len(end):], "\n"), keys, true
+}
+
+// keyBlob is the key of an authorized_keys line, without options and
+// comment ("" when the line is not a key).
+func keyBlob(line string) string {
+	pk, _, _, _, err := ssh.ParseAuthorizedKey([]byte(line))
+	if err != nil {
+		return ""
+	}
+	return string(pk.Marshal())
+}
+
+// anyKeyOf reports whether a key of lines is one of mine.
+func anyKeyOf(lines, mine []string) bool {
+	set := map[string]bool{}
+	for _, l := range mine {
+		if b := keyBlob(l); b != "" {
+			set[b] = true
+		}
+	}
+	for _, l := range lines {
+		if set[keyBlob(l)] {
+			return true
+		}
+	}
+	return false
+}
+
+// managedKeys returns the key lines of owner's block.
+func managedKeys(text, owner string) []string {
+	b, e := akMarkers(owner)
+	_, keys, _ := cutBlock(text, b, e)
+	return keys
+}
+
+// setManagedKeys replaces owner's block in an authorized_keys text with
+// keys (none: removes it), leaving the other lines and other people's
+// blocks as they are. The old block without an owner is taken out when it
+// holds a key of mine (this person's keys, as written by an older client);
+// otherwise it is another person's and stays.
+func setManagedKeys(text, owner string, keys, mine []string) string {
+	b, e := akMarkers(owner)
+	text, _, _ = cutBlock(text, b, e)
+	if owner != "" {
+		if rest, old, ok := cutBlock(text, akBegin, akEnd); ok && anyKeyOf(old, append(append([]string{}, mine...), keys...)) {
+			text = rest
+		}
 	}
 	if len(keys) == 0 {
 		return text
@@ -689,7 +776,25 @@ func setManagedKeys(text string, keys []string) string {
 	if text != "" && !strings.HasSuffix(text, "\n") {
 		text += "\n"
 	}
-	return text + akBegin + "\n" + strings.Join(keys, "\n") + "\n" + akEnd + "\n"
+	return text + b + "\n" + strings.Join(keys, "\n") + "\n" + e + "\n"
+}
+
+// deviceKeyLine is this device's own Hearth public key ("" if none yet).
+func deviceKeyLine(home string) string {
+	b, err := os.ReadFile(SSHKeyPath(home) + ".pub")
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(b))
+}
+
+// homeOwner is the account logged in at home ("" if none).
+func homeOwner(home string) string {
+	cfg, err := LoadConfig(home)
+	if err != nil {
+		return ""
+	}
+	return cfg.Email
 }
 
 // privateAuthorizedKeys writes the keys of this person's devices to a file

@@ -10,6 +10,22 @@
   `~/.hearth`), then moves the login there. An existing workspace login of the
   same account is reused as before. Without a terminal it says to pass
   `--workspace <dir>` and adds no device.
+- SSH on a Unix account several people share: everyone who uses Hearth there
+  from a workspace now shares one sshd (default port 8022) instead of each
+  starting one (8022, 8023, ...). Its key file
+  (`~/.ssh/hearth/shared/authorized_keys`) holds one block per account, and
+  every key carries `environment="HEARTH_USER=…"` and `HEARTH_HOME`, which
+  that sshd allows with `PermitUserEnvironment HEARTH_USER,HEARTH_HOME`, so a
+  session still knows whose agent homes to use. Whichever daemon finds it
+  missing starts it; it stops when the last account turns SSH off. Each
+  person's own sshd of an older version is replaced on the next loop (open
+  sessions stay); with OpenSSH older than 7.8 it stays as before.
+- SSH on a Unix account several people share: each Hearth account now keeps
+  a block of its own in `~/.ssh/authorized_keys`, marked with its email.
+  Before, every account wrote the same block, so two people's daemons on one
+  machine replaced each other's device keys and plain `ssh` to that account
+  worked for whoever synced last. The unmarked block of older clients is
+  converted by the account whose keys it holds and left alone by the others.
 
 ## 0.1.7 — 2026-11-24
 
