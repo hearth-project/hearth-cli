@@ -47,20 +47,41 @@ func (codexIntegration) IsPart(relPath string) bool {
 
 // AfterRestore restores fork parents, registers restored threads in Codex's
 // index (names/sections) and, when Desktop is running, shows them in the
-// open window.
+// open window. Fork parents the user did not ask for are archived: Codex
+// still reads their history for the fork, but they do not crowd the sidebar.
 func (in codexIntegration) AfterRestore(e *Engine, all []RemoteSession, restored []RestoredSession, opts RestoreOptions) error {
-	var changed []string
+	var changed, parents []string
+	requested := map[string]bool{}
+	var unarchive []string
+	for _, r := range restored {
+		id := adapter.CodexThreadID(r.Result.Path)
+		if id != "" && !requested[id] {
+			requested[id] = true
+			// Asking for an archived thread by id (e.g. a fork parent an
+			// earlier restore archived) lists it again, unless a Desktop copy
+			// of it is what the sidebar shows.
+			if prev := e.DesktopForkOf(id); opts.Explicit && codexArchivedPath(r.Result.Path) &&
+				(prev == "" || !CodexRolloutExists(e.CodexHome(), prev)) {
+				unarchive = append(unarchive, id)
+			}
+		}
+	}
+	if n, err := SetCodexThreadsArchived(e.CodexHome(), unarchive, false); err != nil {
+		opts.printf("codex threads: %v\n", err)
+	} else if n > 0 {
+		opts.printf("codex threads: unarchived %d\n", n)
+	}
 	for _, r := range restored {
 		if r.Result.Action == "up-to-date" || r.Result.Action == "skipped" || r.Result.Path == "" {
 			continue
 		}
-		in.restoreParents(e, r.Result.Path, opts)
+		parents = append(parents, in.restoreParents(e, r.Result.Path, opts)...)
 		changed = append(changed, r.Result.Path)
 	}
 	if len(changed) == 0 {
 		return nil
 	}
-	st, err := e.ApplyAgentState(all, changed...)
+	st, err := e.ApplyAgentState(all, append(changed, parents...)...)
 	if st.Indexed+st.Named+st.Sectioned+st.Missing > 0 {
 		opts.printf("codex threads: indexed=%d renamed=%d moved-to-section=%d unchanged=%d not-found=%d\n", st.Indexed, st.Named, st.Sectioned, st.Unchanged, st.Missing)
 	}
@@ -84,24 +105,50 @@ func (in codexIntegration) AfterRestore(e *Engine, all []RemoteSession, restored
 	if shown > 0 && !opts.Explicit {
 		opts.printf("codex desktop: %d restored conversations shown in the open window (the restored originals are archived)\n", shown)
 	}
+	in.archiveParents(e, parents, requested, opts)
 	return err
 }
 
-// restoreParents restores the threads a Codex fork builds on: a fork
-// rollout references its parent's history instead of copying it.
-func (codexIntegration) restoreParents(e *Engine, path string, opts RestoreOptions) {
+// archiveParents archives the fork parents restored only for their history.
+func (codexIntegration) archiveParents(e *Engine, parents []string, requested map[string]bool, opts RestoreOptions) {
+	seen := map[string]bool{}
+	var ids []string
+	for _, p := range parents {
+		if id := adapter.CodexThreadID(p); id != "" && !requested[id] && !seen[id] {
+			seen[id] = true
+			ids = append(ids, id)
+		}
+	}
+	n, err := SetCodexThreadsArchived(e.CodexHome(), ids, true)
+	if n > 0 {
+		opts.printf("codex threads: archived %d fork parent(s) restored for their history; restore one by id to list it again\n", n)
+	}
+	if err != nil {
+		opts.printf("codex threads: archiving fork parents: %v\n", err)
+	}
+}
+
+func codexArchivedPath(path string) bool {
+	return strings.Contains(filepath.ToSlash(path), "/archived_sessions/")
+}
+
+// restoreParents restores the threads a Codex fork builds on (a fork
+// rollout references its parent's history instead of copying it) and
+// returns the paths it wrote.
+func (codexIntegration) restoreParents(e *Engine, path string, opts RestoreOptions) []string {
 	home := e.CodexHome()
 	var all []RemoteSession
+	var restored []string
 	for depth := 0; depth < 32; depth++ {
 		parent := CodexForkParent(path)
 		if parent == "" || CodexRolloutExists(home, parent) {
-			return
+			return restored
 		}
 		if all == nil {
 			var err error
 			if all, err = e.List(); err != nil {
 				opts.printf("fork parent: %v\n", err)
-				return
+				return restored
 			}
 		}
 		found := false
@@ -110,18 +157,20 @@ func (codexIntegration) restoreParents(e *Engine, path string, opts RestoreOptio
 				r, err := e.Restore(p, false)
 				if err != nil {
 					opts.printf("fork parent %s: %v\n", parent, err)
-					return
+					return restored
 				}
 				opts.printf("%s  %s %s (fork parent)\n", shortID(p.ID), r.Action, r.Path)
 				path, found = r.Path, true
+				restored = append(restored, r.Path)
 				break
 			}
 		}
 		if !found {
 			opts.printf("fork parent %s is not on the server; Codex shows this thread without the forked history\n", parent)
-			return
+			return restored
 		}
 	}
+	return restored
 }
 
 // showInDesktop reports whether it added the conversation to the open

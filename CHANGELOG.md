@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Restoring a forked Codex thread no longer adds its fork parents to the
+  sidebar. They are still restored, since the fork reads its history from
+  them, but archived in Codex, so only the thread you asked for is listed.
+  Restoring an archived thread by id (`hearth session restore <id>`) lists it
+  again.
 - Several people can use one workspace directory on a shared Unix account.
   The first person keeps `<dir>/.hearth`, and everyone else gets
   `<dir>/.hearth/users/<email>` (with `hosts/<host>` for other machines of a

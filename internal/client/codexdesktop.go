@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -67,6 +68,41 @@ func ShowInDesktop(codexHome, threadID, prevFork string, info *adapter.ThreadInf
 		}
 	}
 	return out, errors.Join(errs...)
+}
+
+// SetCodexThreadsArchived archives (or unarchives) threads through the open
+// Desktop backend when one is running, so its sidebar follows at once, and
+// otherwise through a private app-server. It returns how many changed; a
+// thread already in the wanted state is not an error.
+func SetCodexThreadsArchived(codexHome string, ids []string, archived bool) (int, error) {
+	if len(ids) == 0 || codexHome == "" {
+		return 0, nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	s, err := dialDesktop(ctx, codexHome)
+	if err != nil {
+		if s, err = startAppServer(ctx, codexHome); err != nil {
+			return 0, err
+		}
+	}
+	defer s.close()
+	method := "thread/unarchive"
+	if archived {
+		method = "thread/archive"
+	}
+	n := 0
+	var errs []error
+	for _, id := range ids {
+		if err := s.call(method, map[string]any{"threadId": id}, nil); err != nil {
+			if !strings.Contains(err.Error(), "archived") {
+				errs = append(errs, fmt.Errorf("%s %s: %w", method, id, err))
+			}
+			continue
+		}
+		n++
+	}
+	return n, errors.Join(errs...)
 }
 
 // CodexForkParent returns the thread a Codex rollout was forked from.
