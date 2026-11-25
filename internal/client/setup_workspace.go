@@ -55,7 +55,7 @@ func SetupWorkspaces(server, email string) []WorkspaceLogin {
 				continue
 			}
 			if b, err := os.ReadFile(filepath.Join(dir, f.Name())); err == nil && filepath.IsAbs(string(b)) {
-				candidates[WorkspaceHome(string(b))] = true
+				candidates[WorkspaceHomeFor(string(b), email)] = true
 			}
 		}
 	}
@@ -75,7 +75,7 @@ func SetupWorkspaces(server, email string) []WorkspaceLogin {
 	var matches []WorkspaceLogin
 	for home := range candidates {
 		ws := WorkspaceOf(home)
-		if !filepath.IsAbs(ws) || WorkspaceHome(ws) != home || home == DefaultHome() {
+		if !filepath.IsAbs(ws) || !InWorkspaceState(ws, home) || home == DefaultHome() {
 			continue
 		}
 		cfg, err := LoadConfig(home)

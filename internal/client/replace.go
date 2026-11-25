@@ -148,7 +148,10 @@ func MoveHomeOver(from, ws, replaced string) (string, bool, error) {
 	if err != nil {
 		return "", false, err
 	}
-	target := WorkspaceHome(abs)
+	target := WorkspaceHomeHere(abs)
+	if owner := homeOwner(from); owner != "" {
+		target = WorkspaceHomeFor(abs, owner)
+	}
 	if replaced == "" || filepath.Clean(target) == filepath.Clean(from) || OwnState(target) == "" {
 		nh, err := MoveHome(from, ws)
 		return nh, false, err
@@ -184,7 +187,7 @@ func MoveHomeOver(from, ws, replaced string) (string, bool, error) {
 	if rest, _ := os.ReadDir(from); len(rest) == 0 {
 		_ = os.Remove(from)
 	}
-	if _, err := InitWorkspace(abs); err != nil {
+	if _, err := InitWorkspaceHome(abs, target); err != nil {
 		return "", false, err
 	}
 	rehomeRC(from, target)

@@ -66,7 +66,7 @@ func FoundHome(home string) bool {
 func HomeFor(cwd string) string {
 	if cwd != "" {
 		if ws := FindWorkspace(cwd); ws != "" {
-			return WorkspaceHome(ws)
+			return WorkspaceHomeHere(ws)
 		}
 	}
 	return DefaultHome()

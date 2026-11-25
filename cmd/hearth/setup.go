@@ -71,6 +71,24 @@ func setupCmd() *cobra.Command {
 			if installToken == "" {
 				installToken = os.Getenv("HEARTH_INSTALL_TOKEN")
 			}
+			// A workspace directory another person uses too (a shared Unix
+			// account): their login there is left alone, this person gets a
+			// home of their own in it (<ws>/.hearth/users/<email>).
+			if ws := client.WorkspaceOf(home); ws != "" && implicitHome && !switchLogin && err == nil && !strings.EqualFold(cfg.Email, email) {
+				if own := client.WorkspaceHomeFor(ws, email); filepath.Clean(own) != filepath.Clean(home) {
+					other := cfg.Email
+					if own, err = client.InitWorkspaceHome(ws, own); err != nil {
+						return err
+					}
+					client.LeaveHome(home)
+					os.Setenv("HEARTH_HOME", own)
+					os.Setenv("HEARTH_WORKSPACE", ws)
+					os.Unsetenv("HEARTH_WORKSPACE_FROM_PROFILE")
+					home = own
+					cfg, err = client.LoadConfig(home)
+					out.fact("workspace", fmt.Sprintf("%s is also used by %s; your state is kept apart in %s", ws, other, home))
+				}
+			}
 			// Don't redirect an explicit home, a different account, or an intentional new login.
 			sameLogin := err == nil && sameServer(cfg.Server, server) && strings.EqualFold(cfg.Email, email)
 			// A Unix account several people share: ~/.hearth may hold another
