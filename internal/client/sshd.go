@@ -49,6 +49,7 @@ type sshState struct {
 	External  bool     `json:"external,omitempty"` // an sshd Hearth did not start (left running when SSH is turned off)
 	HostKey   string   `json:"host_key,omitempty"`
 	Shared    bool     `json:"shared,omitempty"` // Hearth's own sshd for a workspace on a shared account
+	Joint     bool     `json:"joint,omitempty"`  // the account's one shared sshd (sshd_shared.go), not this person's own
 	Flags     int      `json:"flags,omitempty"`  // sshdFlags the running sshd was started with
 	KeysHash  string   `json:"keys_hash,omitempty"`
 	Endpoint  string   `json:"endpoint,omitempty"` // published value, to skip unchanged uploads
@@ -326,6 +327,7 @@ type SSHStatus struct {
 	Port     int
 	PID      int
 	Keys     int
+	Shared   bool // the account's one sshd, shared with the other people on it
 	Err      string
 }
 
@@ -333,6 +335,12 @@ type SSHStatus struct {
 func SSHServerStatus(home string) SSHStatus {
 	s := loadSSHState(home)
 	st := SSHStatus{On: SSHOn(home), Address: s.Address, Port: s.Port, PID: s.PID, External: s.External, Err: s.LastErr}
+	if s.Joint {
+		sh, ok := sharedSSHDRunning()
+		st.Running, st.PID, st.Shared = ok && sh.Port == s.Port, sh.PID, true
+		st.Keys = sharedKeysOf(homeOwner(home))
+		return st
+	}
 	if s.Port > 0 {
 		st.Running = (s.External || alive(s.PID)) && listening(s.Address, s.Port)
 	}
@@ -348,7 +356,9 @@ func SSHServerStatus(home string) SSHStatus {
 // removes the device keys from authorized_keys.
 func StopSSHD(home string) error {
 	s := loadSSHState(home)
-	if !s.External && alive(s.PID) {
+	if s.Joint {
+		leaveSharedSSHD(homeOwner(home), []string{deviceKeyLine(home)})
+	} else if !s.External && alive(s.PID) {
 		if err := syscall.Kill(s.PID, syscall.SIGTERM); err != nil {
 			return err
 		}
@@ -362,7 +372,7 @@ func StopSSHD(home string) error {
 			}
 		}
 	}
-	s.PID, s.External, s.Port = 0, false, 0
+	s.PID, s.External, s.Port, s.Joint = 0, false, 0, false
 	return saveSSHState(home, s)
 }
 
@@ -428,46 +438,63 @@ func (e *Engine) EnsureSSHD() (SSHStatus, error) {
 			setEnv += " HEARTH_HOME=" + home
 		}
 	}
-	want := sshPortWanted(home)
-	ours := !s.External && alive(s.PID) && s.Flags == sshdFlags && s.Shared == shared && slices.Equal(s.addrs(), addrs) && s.Port >= want && s.Port < want+20 && listening(addr, s.Port)
-	adopted := !shared && s.External && s.Address == addr && s.Port == want && listening(addr, s.Port)
 	hostKey := s.HostKey
-	if !ours && !adopted {
-		hostKey = ""
-		if alive(s.PID) && !s.External {
-			_ = syscall.Kill(s.PID, syscall.SIGTERM)
-			for i := 0; i < 30 && listening(s.Address, s.Port); i++ {
-				time.Sleep(100 * time.Millisecond) // not taken for an sshd started by hand
-			}
+	if shared && sshdUserEnvPatterns() {
+		// One sshd for everyone on this account who uses a workspace: each
+		// person's keys carry their HEARTH_USER / HEARTH_HOME.
+		if hostKey, err = e.joinSharedSSHD(&s, lines, addrs); err != nil {
+			return fail(err)
 		}
-		s.PID, s.External, s.Port = 0, false, 0
-		if hk, err := probeHostKey(addr, want); err == nil && !shared {
-			// An sshd is already there (started by hand): use it.
-			s.External, s.Address, s.Addresses, s.Port, hostKey = true, addr, nil, want, hk
-		} else {
-			port := 0
-			for p := want; p < want+20; p++ {
-				if allFree(addrs, p) {
-					port = p
-					break
+	} else {
+		if s.Joint {
+			// Back to an sshd of its own (no workspace, or an old OpenSSH).
+			leaveSharedSSHD(e.Cfg.Email, []string{deviceKeyLine(home)})
+			s.Joint, s.Port = false, 0
+		}
+		want := sshPortWanted(home)
+		ours := !s.External && alive(s.PID) && s.Flags == sshdFlags && s.Shared == shared && slices.Equal(s.addrs(), addrs) && s.Port >= want && s.Port < want+20 && listening(addr, s.Port)
+		adopted := !shared && s.External && s.Address == addr && s.Port == want && listening(addr, s.Port)
+		if !ours && !adopted {
+			hostKey = ""
+			if alive(s.PID) && !s.External {
+				_ = syscall.Kill(s.PID, syscall.SIGTERM)
+				for i := 0; i < 30 && listening(s.Address, s.Port); i++ {
+					time.Sleep(100 * time.Millisecond) // not taken for an sshd started by hand
 				}
 			}
-			if port == 0 {
-				return fail(fmt.Errorf("no free port from %d on %s", want, strings.Join(addrs, ", ")))
+			s.PID, s.External, s.Port = 0, false, 0
+			if hk, err := probeHostKey(addr, want); err == nil && !shared {
+				// An sshd is already there (started by hand): use it.
+				s.External, s.Address, s.Addresses, s.Port, hostKey = true, addr, nil, want, hk
+			} else {
+				port := 0
+				for p := want; p < want+20; p++ {
+					if allFree(addrs, p) {
+						port = p
+						break
+					}
+				}
+				if port == 0 {
+					return fail(fmt.Errorf("no free port from %d on %s", want, strings.Join(addrs, ", ")))
+				}
+				var extra []string
+				if setEnv != "" {
+					extra = []string{"-o", "SetEnv=" + setEnv} // whose sessions these are (shared accounts)
+				}
+				pid, err := startSSHD(sshDir(home), sshdAuth, addrs, port, extra)
+				if err != nil {
+					return fail(err)
+				}
+				s.PID, s.Address, s.Addresses, s.Port, s.Flags, s.Shared = pid, addr, addrs, port, sshdFlags, shared
 			}
-			pid, err := startSSHD(home, sshdAuth, addrs, port, setEnv)
-			if err != nil {
-				return fail(err)
-			}
-			s.PID, s.Address, s.Addresses, s.Port, s.Flags, s.Shared = pid, addr, addrs, port, sshdFlags, shared
 		}
-	}
-	if s.External {
-		// An sshd started by hand: publish the addresses it answers on.
-		s.Addresses = nil
-		for _, a := range addrs {
-			if a == s.Address || listening(a, s.Port) {
-				s.Addresses = append(s.Addresses, a)
+		if s.External {
+			// An sshd started by hand: publish the addresses it answers on.
+			s.Addresses = nil
+			for _, a := range addrs {
+				if a == s.Address || listening(a, s.Port) {
+					s.Addresses = append(s.Addresses, a)
+				}
 			}
 		}
 	}
@@ -505,7 +532,7 @@ func (e *Engine) EnsureSSHD() (SSHStatus, error) {
 // startSSHD runs the system sshd detached, with the flags of the usual
 // manual setup: the system config and host keys when running as root,
 // else a config of its own with Hearth's host key.
-func startSSHD(home, authPath string, addrs []string, port int, setEnv string) (int, error) {
+func startSSHD(dir, authPath string, addrs []string, port int, extra []string) (int, error) {
 	bin, err := exec.LookPath("sshd")
 	if err != nil {
 		if _, err2 := os.Stat("/usr/sbin/sshd"); err2 != nil {
@@ -513,7 +540,6 @@ func startSSHD(home, authPath string, addrs []string, port int, setEnv string) (
 		}
 		bin = "/usr/sbin/sshd"
 	}
-	dir := sshDir(home)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return 0, err
 	}
@@ -543,9 +569,7 @@ func startSSHD(home, authPath string, addrs []string, port int, setEnv string) (
 		// Some images set LogLevel DEBUG; with -e the session's debug
 		// lines would end up in the user's terminal.
 		"-o", "LogLevel=INFO")
-	if setEnv != "" {
-		args = append(args, "-o", "SetEnv="+setEnv) // whose sessions these are (shared accounts)
-	}
+	args = append(args, extra...)
 	if authPath != filepath.Join(u.HomeDir, ".ssh", "authorized_keys") {
 		args = append(args, "-o", "AuthorizedKeysFile="+authPath) // $HOME is not the account's home
 	}

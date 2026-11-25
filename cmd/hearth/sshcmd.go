@@ -284,6 +284,8 @@ func printSSHStatus(st client.SSHStatus) {
 		fmt.Println("ssh: off on this machine (hearth ssh enable)")
 	case st.Running && st.External:
 		fmt.Printf("ssh: accepting %d key(s) of your devices at %s:%d (an sshd started outside Hearth; keys in ~/.ssh/authorized_keys)\n", st.Keys, st.Address, st.Port)
+	case st.Running && st.Shared:
+		fmt.Printf("ssh: accepting %d key(s) of your devices at %s:%d (sshd pid %d, one for everyone using Hearth on this account)\n", st.Keys, st.Address, st.Port, st.PID)
 	case st.Running:
 		fmt.Printf("ssh: accepting %d key(s) of your devices at %s:%d (sshd pid %d)\n", st.Keys, st.Address, st.Port, st.PID)
 	default:
