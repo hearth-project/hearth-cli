@@ -256,3 +256,26 @@ func TestReachableAddress(t *testing.T) {
 		t.Fatalf("old endpoint: %v", got)
 	}
 }
+
+// The shared sshd's keys say whose session it is; sshd reads the options
+// before the key, comma separated, expiry included.
+func TestSharedKeyLines(t *testing.T) {
+	k := testKeyLine(t, "dev")
+	got := sharedKeyLines([]string{k, `expiry-time="20990101" ` + k}, "a@example.org", "/ws/a/.hearth")
+	want0 := `environment="HEARTH_USER=a@example.org",environment="HEARTH_HOME=/ws/a/.hearth" ` + k
+	want1 := `environment="HEARTH_USER=a@example.org",environment="HEARTH_HOME=/ws/a/.hearth",expiry-time="20990101" ` + k
+	if len(got) != 2 || got[0] != want0 || got[1] != want1 {
+		t.Fatalf("lines:\n%s", strings.Join(got, "\n"))
+	}
+	for _, l := range got {
+		if _, _, opts, _, err := ssh.ParseAuthorizedKey([]byte(l)); err != nil || len(opts) < 2 {
+			t.Fatalf("not an authorized_keys line: %q (%v)", l, err)
+		}
+	}
+	if l := sharedKeyLines([]string{k}, "a@example.org", "/my ws/.hearth")[0]; strings.Contains(l, "HEARTH_HOME") {
+		t.Fatalf("a home sshd cannot quote kept: %q", l)
+	}
+	if sharedHasKeys(setManagedKeys("", "a@example.org", nil, nil)) || !sharedHasKeys(setManagedKeys("", "a@example.org", got, nil)) {
+		t.Fatal("sharedHasKeys")
+	}
+}
