@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/hearth-project/hearth-cli/internal/paths"
 )
 
 // setupHintsDir is local to this Unix account, host, server and Hearth user.
@@ -94,4 +96,33 @@ func SetupWorkspaces(server, email string) []WorkspaceLogin {
 	}
 	slices.SortFunc(matches, func(a, b WorkspaceLogin) int { return strings.Compare(a.Home, b.Home) })
 	return matches
+}
+
+// NewSetupHome makes an empty private Hearth home next to ~/.hearth for a
+// login that must not go into ~/.hearth: on a Unix account several people
+// share, ~/.hearth may hold another person's login. Setup logs in there
+// and then moves the home into the workspace the user picks.
+func NewSetupHome() (string, error) {
+	return os.MkdirTemp(filepath.Dir(DefaultHome()), ".hearth-setup-")
+}
+
+// LeaveHome undoes what Activate exported for home, so a process that
+// switches to another home does not keep the agent homes or profile
+// workspace of the first (another person's, on a shared account). Values
+// the user set to something else are left alone.
+func LeaveHome(home string) {
+	if os.Getenv("HEARTH_WORKSPACE_FROM_PROFILE") != "" {
+		os.Unsetenv("HEARTH_WORKSPACE")
+		os.Unsetenv("HEARTH_WORKSPACE_FROM_PROFILE")
+	}
+	for v, p := range agentHomeExports(home) {
+		if os.Getenv(v) == p {
+			os.Unsetenv(v)
+		}
+	}
+	for agent, p := range AgentHomes(home) {
+		if v, ok := agentHomeEnv[agent]; ok && os.Getenv(v) == paths.Expand(p) {
+			os.Unsetenv(v)
+		}
+	}
 }

@@ -73,8 +73,15 @@ func setupCmd() *cobra.Command {
 			}
 			// Don't redirect an explicit home, a different account, or an intentional new login.
 			sameLogin := err == nil && sameServer(cfg.Server, server) && strings.EqualFold(cfg.Email, email)
+			// A Unix account several people share: ~/.hearth may hold another
+			// person's login. It is left alone; this person's login goes into
+			// a workspace of their own (an existing one, or one they choose).
+			occupiedBy := ""
+			if implicitHome && home == client.DefaultHome() && err == nil && !sameLogin && !switchLogin {
+				occupiedBy = cfg.Email + " on " + cfg.Server
+			}
 			if implicitHome && home == client.DefaultHome() && !cmd.Flags().Changed("workspace") &&
-				!create && !switchLogin && invite == "" && device == "" && (errors.Is(err, client.ErrNotLoggedIn) || sameLogin) {
+				!create && !switchLogin && invite == "" && device == "" && (errors.Is(err, client.ErrNotLoggedIn) || sameLogin || occupiedBy != "") {
 				var pick func([]string) (string, bool)
 				if isTTY() && installToken != "" {
 					pick = func(choices []string) (string, bool) {
@@ -94,12 +101,36 @@ func setupCmd() *cobra.Command {
 						return err
 					}
 					installToken = "" // consumed against the existing device, not a new login
+					client.LeaveHome(home)
 					os.Setenv("HEARTH_HOME", m.Home)
 					os.Setenv("HEARTH_WORKSPACE", m.Workspace)
 					os.Unsetenv("HEARTH_WORKSPACE_FROM_PROFILE")
 					home, cfg, err = client.Activate(), m.Config, nil
 					out.fact("workspace", "reusing "+m.Workspace+" (existing device; no new login)")
+					occupiedBy = ""
 				}
+			}
+			staging := ""
+			if occupiedBy != "" {
+				if !isTTY() {
+					return fmt.Errorf("~/.hearth is logged in as %s (another login on this account) and is left alone; "+
+						"run setup again with --workspace <your directory> to keep your login there; no device was added", occupiedBy)
+				}
+				if staging, err = client.NewSetupHome(); err != nil {
+					return err
+				}
+				defer func() {
+					// Still here: setup stopped before the login moved into a
+					// workspace. Nothing in it is used again.
+					if staging != "" {
+						_ = os.RemoveAll(staging)
+					}
+				}()
+				client.LeaveHome(home)
+				os.Setenv("HEARTH_HOME", staging)
+				home = staging
+				cfg, err = client.LoadConfig(home)
+				out.fact("login", fmt.Sprintf("~/.hearth is logged in as %s; that login is left alone, yours goes into your own directory", occupiedBy))
 			}
 			if def, ok := client.MovableLogin(home); ok && sameServer(def.Server, server) && strings.EqualFold(def.Email, email) {
 				// A second login of the same account on this machine is a
@@ -210,10 +241,11 @@ func setupCmd() *cobra.Command {
 				}
 				// Where this person works on this machine: proposed from their
 				// machines of the same kind, confirmed (or changed) by them.
-				home, err = chooseSetupWorkspace(out, home, cfg, continued)
+				home, err = chooseSetupWorkspace(out, home, cfg, continued, staging != "")
 				if err != nil {
 					return err
 				}
+				staging = ""
 				if continued != nil {
 					// A surviving workspace may have kept its old restore policy.
 					if err := client.SetOnDemand(home, !full); err != nil {
@@ -681,8 +713,10 @@ func factsMap() map[string]any {
 // new login there (<dir>/.hearth, or <dir>/.hearth/hosts/<host> when the
 // directory is on a disk another machine logged in to). Returns the home
 // to continue with.
-func chooseSetupWorkspace(out *setupOut, home string, cfg *client.Config, prev *takenOver) (string, error) {
-	if client.WorkspaceOf(home) != "" || (os.Getenv("HEARTH_WORKSPACE") != "" && os.Getenv("HEARTH_WORKSPACE_FROM_PROFILE") == "") {
+// mustMove: the login is in a temporary home (~/.hearth holds another
+// person's login), so it has to move into a directory other than the home.
+func chooseSetupWorkspace(out *setupOut, home string, cfg *client.Config, prev *takenOver, mustMove bool) (string, error) {
+	if client.WorkspaceOf(home) != "" || (!mustMove && os.Getenv("HEARTH_WORKSPACE") != "" && os.Getenv("HEARTH_WORKSPACE_FROM_PROFILE") == "") {
 		return home, nil // chosen already (hearth init, --workspace)
 	}
 	h, _ := os.UserHomeDir()
@@ -694,9 +728,14 @@ func chooseSetupWorkspace(out *setupOut, home string, cfg *client.Config, prev *
 	}
 	def := h
 	about := []string{"Hearth keeps this machine's state and your agents' homes there."}
-	if sug.Path != "" {
+	if mustMove {
+		about = append(about, "~/.hearth holds another login on this account, so pick a directory of your own (not the home).")
+	}
+	if sug.Path != "" && (!mustMove || filepath.Clean(sug.Path) != filepath.Clean(h)) {
 		def = sug.Path
 		about = append(about, fmt.Sprintf("The directory below is where %s (%s) works.", shortHost(sug.Machine), sug.Kind))
+	} else if mustMove {
+		def = filepath.Join(h, setupUserName(cfg.Email))
 	} else {
 		about = append(about, "None of your machines is like this one; the directory below is your home.")
 	}
@@ -709,26 +748,55 @@ func chooseSetupWorkspace(out *setupOut, home string, cfg *client.Config, prev *
 		replacedID = prev.old.ID
 		// The machine this one continues worked there: same place again,
 		// without asking.
-		if ws := client.WorkspaceOfDevice(prev.old); ws != "" && client.WorkspaceUsable(ws) {
+		if ws := client.WorkspaceOfDevice(prev.old); ws != "" && client.WorkspaceUsable(ws) && (!mustMove || filepath.Clean(ws) != filepath.Clean(h)) {
 			return moveSetupHome(out, home, h, ws, replacedID)
 		}
 	}
 	if !isTTY() {
+		if mustMove {
+			return "", errors.New("~/.hearth holds another login: run setup again with --workspace <your directory>")
+		}
 		if sug.Path != "" {
 			out.line("workspace", fmt.Sprintf("your home for now; %s works in %s: hearth init --move-login %s", shortHost(sug.Machine), sug.Path, sug.Path))
 		}
 		return home, nil
 	}
-	ans, ok := out.ask("Where do you work on this machine?", about,
-		[]string{"Press ENTER to use the directory below", "Or type another directory"}, def)
-	if !ok {
-		return home, nil
-	}
-	choice := def
-	if ans != "" {
-		choice = client.ExpandUserDir(ans)
+	choice := ""
+	for choice == "" {
+		ans, ok := out.ask("Where do you work on this machine?", about,
+			[]string{"Press ENTER to use the directory below", "Or type another directory"}, def)
+		if !ok {
+			if mustMove {
+				return "", errors.New("no directory chosen: run setup again (or pass --workspace <your directory>)")
+			}
+			return home, nil
+		}
+		choice = def
+		if ans != "" {
+			choice = client.ExpandUserDir(ans)
+		}
+		if mustMove && filepath.Clean(choice) == filepath.Clean(h) {
+			about = []string{"Your home keeps its state in ~/.hearth, which holds another login here. Type another directory."}
+			choice = ""
+		}
 	}
 	return moveSetupHome(out, home, h, choice, replacedID)
+}
+
+// setupUserName is the directory name proposed for a person's own
+// workspace on a shared account: the local part of their email.
+func setupUserName(email string) string {
+	name, _, _ := strings.Cut(email, "@")
+	name = strings.Map(func(r rune) rune {
+		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '.' || r == '_' || r == '-' {
+			return r
+		}
+		return '-'
+	}, name)
+	if name == "" || name == "." || name == ".." {
+		return "hearth-workspace"
+	}
+	return name
 }
 
 // moveSetupHome moves the new login from home (~/.hearth) into workspace
